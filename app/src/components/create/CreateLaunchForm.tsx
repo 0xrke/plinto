@@ -23,7 +23,7 @@ import type { LaunchResume } from "@/lib/data/types";
 import { useCluster, useData, useQuoteMarkets, useRefreshChainData, useTokenBalance, useTxFlow } from "@/lib/data/context";
 import { parseUiNumber } from "@/lib/estimates";
 import { formatPercent, formatTokenAmount, formatUsd } from "@/lib/format";
-import { validateLaunchForm, type LaunchFormValues } from "@/lib/launchForm";
+import { launchPriceError, validateLaunchForm, type LaunchFormValues } from "@/lib/launchForm";
 import { useActionGate } from "@/components/token/useActionGate";
 import { VolatilityTag } from "@/components/ui/QuoteChip";
 import { TxProgress } from "@/components/ui/TxProgress";
@@ -86,11 +86,8 @@ export function CreateLaunchForm() {
       firstBuyError = `Amount exceeds your ${market.asset.symbol} balance.`;
     }
   }
-  // A launch prices its threshold with the live quote price; outside a local cluster a stale reference price is refused.
-  const priceError =
-    dataSource.kind === "chain" && market && market.priceSource !== "jupiter" && !IS_LOCAL_RPC
-      ? "The live quote price is unavailable (Jupiter). Launching needs it to set the graduation threshold."
-      : null;
+  // A launch prices its threshold with the live quote price; outside a local cluster stale or reference prices are refused.
+  const priceError = market ? launchPriceError(dataSource.kind, market.priceSource, IS_LOCAL_RPC) : null;
 
   const input: LaunchInput | null = market
     ? {

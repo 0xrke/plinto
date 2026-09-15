@@ -15,6 +15,13 @@ function Row({ label, value, sub }: { label: string; value: ReactNode; sub?: Rea
   );
 }
 
+const PRICE_SOURCE_LABEL: Record<LaunchSummary["quote"]["priceSource"], string> = {
+  jupiter: "Jupiter · ",
+  stale: "Last Jupiter price, over 5 minutes old (Jupiter unavailable) · ",
+  reference: "Reference price (Jupiter unavailable) · ",
+  mock: "",
+};
+
 function formatFloorQuote(value: number): string {
   if (!(value > 0)) return "0";
   return new Intl.NumberFormat("en-US", { maximumSignificantDigits: 4 }).format(value);
@@ -58,7 +65,7 @@ export function VaultStats({ launch }: { launch: LaunchSummary }) {
         <Row
           label={`${quote.asset.symbol} price`}
           value={formatUsd(quote.priceUsd)}
-          sub={`${quote.priceSource === "reference" ? "Reference price (Jupiter unavailable) · " : quote.priceSource === "jupiter" ? "Jupiter · " : ""}Dividend multiplier ${quote.multiplier.toFixed(4)}`}
+          sub={`${PRICE_SOURCE_LABEL[quote.priceSource]}Dividend multiplier ${quote.multiplier.toFixed(4)}`}
         />
         <Row
           label="Vault account"

@@ -1,7 +1,10 @@
 import { QUOTE_ALLOWLIST, USDC_MINT, WSOL_MINT, getJupiterPrices, type FetchFn } from "@stockfloor/sdk";
 
-/** Where a USD price came from. */
-export type PriceSource = "jupiter" | "reference" | "mock";
+/**
+ * Where a USD price came from: jupiter (live), stale (the last Jupiter read, older than
+ * STALE_AFTER_MS, served because Jupiter is unreachable), reference (dated table) or mock.
+ */
+export type PriceSource = "jupiter" | "stale" | "reference" | "mock";
 
 export interface UsdPrice {
   usd: number;
@@ -16,23 +19,26 @@ export interface PriceProvider {
 }
 
 /**
- * Reference prices (Jupiter Price V3, 2026-09-15) used only when Jupiter is unreachable, so a local
- * fork demo keeps working offline. They are labelled as reference prices in the UI, and launch
- * creation outside a local cluster refuses them.
+ * Reference prices from one Jupiter Price V3 read (lite-api, 2026-09-15 22:45 UTC), used only when
+ * Jupiter is unreachable and nothing was read yet, so a local fork demo keeps working offline. They
+ * are labelled as reference prices in the UI, and launch creation outside a local cluster refuses them.
  */
 export const REFERENCE_PRICES_USD: Record<string, number> = {
-  XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W: 757.02, // SPYx
-  Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ: 684.3, // QQQx
-  Xsv9hRk1z5ystj9MhnA7Lq4vjSsLwzL2nxrwmwtD3re: 352.8, // GLDx
-  Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh: 186.4, // NVDAx
-  XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp: 245.1, // AAPLx
-  XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX: 512.6, // MSFTx
-  XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN: 251.3, // GOOGLx
-  XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB: 428.9, // TSLAx
+  XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W: 758.0, // SPYx
+  Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ: 705.46, // QQQx
+  Xsv9hRk1z5ystj9MhnA7Lq4vjSsLwzL2nxrwmwtD3re: 393.35, // GLDx
+  Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh: 212.43, // NVDAx
+  XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp: 330.79, // AAPLx
+  XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX: 499.69, // MSFTx
+  XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN: 343.92, // GOOGLx
+  XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB: 355.99, // TSLAx
   [USDC_MINT]: 1,
-  [WSOL_MINT]: 212.4,
+  [WSOL_MINT]: 96.87,
 };
-const REFERENCE_AT = Date.UTC(2026, 8, 15, 14, 0, 0);
+const REFERENCE_AT = Date.UTC(2026, 8, 15, 22, 45, 0);
+
+/** After a failed refresh, Jupiter prices older than this are served as "stale". */
+export const STALE_AFTER_MS = 5 * 60_000;
 
 /** Every mint the app prices: the quote allowlist plus the pay tokens. */
 export const PRICED_MINTS: string[] = [...QUOTE_ALLOWLIST.map((a) => a.mint), USDC_MINT, WSOL_MINT];
@@ -41,12 +47,15 @@ export interface JupiterPriceProviderOptions {
   fetch?: FetchFn;
   /** Cache lifetime in ms (default 30 s). */
   ttlMs?: number;
+  /** Age after which the last Jupiter read is labelled stale when a refresh fails (default 5 min). */
+  staleAfterMs?: number;
   now?: () => number;
 }
 
 /**
  * Jupiter Price V3 (lite-api, read-only, no key) with a short cache. Always requests the full priced
- * set in one call. When Jupiter fails and nothing is cached, reference prices are returned.
+ * set in one call. When Jupiter fails, the last read is served (labelled stale once older than
+ * `staleAfterMs`); with nothing read yet, reference prices are returned.
  */
 export class JupiterPriceProvider implements PriceProvider {
   private cached: { at: number; prices: Record<string, UsdPrice> } | null = null;
@@ -71,7 +80,13 @@ export class JupiterPriceProvider implements PriceProvider {
       this.cached = { at, prices };
       return prices;
     } catch {
-      if (this.cached) return this.cached.prices;
+      if (this.cached) {
+        const cached = this.cached;
+        if (at - cached.at <= (this.opts.staleAfterMs ?? STALE_AFTER_MS)) return cached.prices;
+        const stale: Record<string, UsdPrice> = {};
+        for (const [mint, p] of Object.entries(cached.prices)) stale[mint] = p.source === "jupiter" ? { ...p, source: "stale" } : p;
+        return stale;
+      }
       const prices: Record<string, UsdPrice> = {};
       for (const [mint, usd] of Object.entries(REFERENCE_PRICES_USD)) prices[mint] = { usd, source: "reference", at: REFERENCE_AT };
       return prices;

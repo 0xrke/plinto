@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateLaunchForm, type LaunchFormValues } from "./launchForm";
+import { launchPriceError, validateLaunchForm, type LaunchFormValues } from "./launchForm";
 
 const valid: LaunchFormValues = {
   name: "Harbor Coffee Co-op",
@@ -44,5 +44,17 @@ describe("validateLaunchForm", () => {
     expect(validateLaunchForm({ ...valid, vaultSharePct: 71 }).vaultSharePct).toBeDefined();
     expect(validateLaunchForm({ ...valid, vaultSharePct: 30 }).vaultSharePct).toBeUndefined();
     expect(validateLaunchForm({ ...valid, vaultSharePct: 70 }).vaultSharePct).toBeUndefined();
+  });
+});
+
+describe("launchPriceError", () => {
+  it("accepts only a live Jupiter price on chain data outside a local cluster", () => {
+    expect(launchPriceError("chain", "jupiter", false)).toBeNull();
+    expect(launchPriceError("chain", "stale", false)).toMatch(/more than 5 minutes old/);
+    expect(launchPriceError("chain", "reference", false)).toMatch(/live quote price is unavailable/);
+    // Local forks may use any price (offline demos); mock data never launches on chain.
+    expect(launchPriceError("chain", "stale", true)).toBeNull();
+    expect(launchPriceError("chain", "reference", true)).toBeNull();
+    expect(launchPriceError("mock", "mock", false)).toBeNull();
   });
 });

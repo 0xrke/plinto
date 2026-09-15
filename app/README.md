@@ -67,8 +67,9 @@ Environment:
   image come from the Metaplex metadata account (cached; metadata is immutable).
 - Launches quoted in a mint outside the allowlist, or without a DBC pool yet, are not shown.
 - Prices: Jupiter Price V3 (lite-api, one request for the allowlist plus USDC and SOL, 30 s cache). If
-  Jupiter is unreachable, dated reference prices are used and labelled; creating a launch outside a local
-  cluster refuses them.
+  Jupiter is unreachable, the last read is served, labelled "stale" once it is older than 5 minutes;
+  with nothing read yet, a dated reference table (one Jupiter read, 2026-09-15 22:45 UTC) is used and
+  labelled. Creating a launch outside a local cluster refuses stale and reference prices.
 - React Query polls chain data (launch page 6 s, list 15 s, balances 10 s, markets 60 s) and refetches
   right after a confirmed transaction. Mock data is never polled.
 

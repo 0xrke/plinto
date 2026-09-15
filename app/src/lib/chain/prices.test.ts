@@ -8,6 +8,15 @@ function jupiterFetch(body: Record<string, unknown>, ok = true) {
   return vi.fn(async (_url: string) => ({ ok, status: ok ? 200 : 503, json: async () => body, text: async () => "" }));
 }
 
+describe("REFERENCE_PRICES_USD", () => {
+  it("prices every mint the app prices, with plausible values", () => {
+    for (const mint of PRICED_MINTS) expect(REFERENCE_PRICES_USD[mint]).toBeGreaterThan(0);
+    // Spot checks against the dated Jupiter Price V3 read (2026-09-15 22:45 UTC).
+    expect(REFERENCE_PRICES_USD[SPYX]).toBeCloseTo(758.0, 0);
+    expect(REFERENCE_PRICES_USD[WSOL_MINT]).toBeCloseTo(96.87, 1);
+  });
+});
+
 describe("JupiterPriceProvider", () => {
   it("requests every priced mint in one Price V3 call and caches the result", async () => {
     const fetch = jupiterFetch({ [SPYX]: { usdPrice: 760.5 }, [USDC_MINT]: { usdPrice: 0.9999 }, [WSOL_MINT]: { usdPrice: 215 } });
@@ -44,6 +53,17 @@ describe("JupiterPriceProvider", () => {
     fail = true;
     now = 100;
     expect((await provider.getUsdPrices([SPYX]))[SPYX]).toMatchObject({ usd: 761, source: "jupiter" });
+
+    // Older than five minutes, the last good prices are labelled stale (the create form refuses them
+    // outside local clusters); reference entries keep their label.
+    now = 5 * 60_000 + 1;
+    const gldx = "Xsv9hRk1z5ystj9MhnA7Lq4vjSsLwzL2nxrwmwtD3re";
+    const stale = await provider.getUsdPrices([SPYX, gldx]);
+    expect(stale[SPYX]).toEqual({ usd: 761, source: "stale", at: 0 });
+    expect(stale[gldx]).toMatchObject({ source: "reference" });
+    // Jupiter recovers: live again.
+    fail = false;
+    expect((await provider.getUsdPrices([SPYX]))[SPYX]).toEqual({ usd: 761, source: "jupiter", at: now });
 
     const cold = new JupiterPriceProvider({ fetch: jupiterFetch({}, false) });
     expect((await cold.getUsdPrices([SPYX]))[SPYX]).toMatchObject({ usd: REFERENCE_PRICES_USD[SPYX], source: "reference" });

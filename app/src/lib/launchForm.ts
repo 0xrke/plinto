@@ -1,4 +1,5 @@
 import type { CurvePreset } from "@stockfloor/sdk";
+import type { PriceSource } from "./chain/prices";
 import { VAULT_SHARE_MAX, VAULT_SHARE_MIN } from "./config";
 
 export interface LaunchFormValues {
@@ -48,4 +49,15 @@ export function validateLaunchForm(values: LaunchFormValues): LaunchFormErrors {
     errors.vaultSharePct = `Choose a vault share between ${VAULT_SHARE_MIN}% and ${VAULT_SHARE_MAX}%.`;
   }
   return errors;
+}
+
+/**
+ * A launch prices its graduation threshold with the quote price. On chain data outside a local cluster
+ * only a live Jupiter price is accepted: stale Jupiter reads and the dated reference table are refused.
+ */
+export function launchPriceError(dataSource: "mock" | "chain", priceSource: PriceSource, localRpc: boolean): string | null {
+  if (dataSource !== "chain" || localRpc || priceSource === "jupiter") return null;
+  return priceSource === "stale"
+    ? "The quote price is more than 5 minutes old (Jupiter is unreachable). Launching needs a live price to set the graduation threshold."
+    : "The live quote price is unavailable (Jupiter). Launching needs it to set the graduation threshold.";
 }
