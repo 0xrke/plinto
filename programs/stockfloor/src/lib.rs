@@ -2,8 +2,14 @@
 //! of the raise) becomes a redeemable floor vault in a tokenized stock.
 //!
 //! There is no admin, withdraw or sweep instruction. Quote leaves the vault only
-//! through `redeem`. Every crank is permissionless; the per-launch Authority PDA
-//! signs CPIs whose destinations are constrained to the vault or its own base ATA.
+//! through `redeem`. Every crank is permissionless.
+//!
+//! Two PDAs per launch keep signer privileges apart:
+//! - the claimer `["authority", config]` is the DBC `fee_claimer` / `leftover_receiver` and
+//!   the DAMM v2 position NFT owner; it signs the CPIs into DBC and DAMM v2 (whose destinations
+//!   are constrained to the vault or its own base ATA) and burns its base tokens;
+//! - the vault authority `["vault_authority", config]` owns the vault and signs only the
+//!   payout transfer in `redeem`. It never signs into an external, upgradeable program.
 //!
 //! See `docs/research/program-design.md` for accounts, seeds, invariants and
 //! limitations.
@@ -58,9 +64,9 @@ pub mod stockfloor {
         instructions::harvest_dbc_quote::handle_harvest_surplus(ctx)
     }
 
-    /// Permissionless: DBC leftover base tokens (fixed supply) to the Authority, burned.
-    pub fn harvest_leftover(ctx: Context<HarvestLeftover>) -> Result<()> {
-        instructions::harvest_leftover::handle_harvest_leftover(ctx)
+    /// Permissionless: burn base tokens held by the claimer PDA (donations).
+    pub fn burn_claimer_base(ctx: Context<BurnClaimerBase>) -> Result<()> {
+        instructions::burn_claimer_base::handle_burn_claimer_base(ctx)
     }
 
     /// Permissionless: DAMM v2 LP fees; quote into the vault, base burned.

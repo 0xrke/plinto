@@ -4,7 +4,7 @@ use anchor_spl::token_interface::{
     self, Burn, Mint, TokenAccount, TokenInterface, TransferChecked,
 };
 
-use crate::constants::{AUTHORITY_SEED, LAUNCH_SEED};
+use crate::constants::{LAUNCH_SEED, VAULT_AUTHORITY_SEED};
 use crate::errors::StockfloorError;
 use crate::events::Redeemed;
 use crate::external::{is_migration_complete, load_dbc_pool};
@@ -16,10 +16,13 @@ use crate::token_utils::{assert_quote_mint_transferable, assert_vault_not_frozen
 /// fee in the quote asset. Only after the DBC pool migrated to DAMM v2 and the partner
 /// migration fee is in the vault. The migration check latches `launch.migrated`.
 ///
+/// The payout is the only transfer out of the vault in this program, and the only thing the
+/// vault authority PDA ever signs. The claimer PDA is not involved.
+///
 /// Account order:
 ///  0. `holder`                signer: owner of `holder_base_account`
 ///  1. `launch`                writable
-///  2. `authority`             PDA `["authority", config]` (vault owner)
+///  2. `vault_authority`       PDA `["vault_authority", config]` (vault owner, signs the payout)
 ///  3. `pool`                  `launch.pool` (decoded only while `launch.migrated` is false)
 ///  4. `base_mint`             writable, `launch.base_mint`
 ///  5. `holder_base_account`   writable, base token account owned by `holder`
@@ -40,9 +43,12 @@ pub struct Redeem<'info> {
     )]
     pub launch: Box<Account<'info, Launch>>,
 
-    /// CHECK: PDA signer (vault owner).
-    #[account(seeds = [AUTHORITY_SEED, launch.config.as_ref()], bump = launch.authority_bump)]
-    pub authority: UncheckedAccount<'info>,
+    /// CHECK: vault authority PDA (vault owner), signer of the payout transfer.
+    #[account(
+        seeds = [VAULT_AUTHORITY_SEED, launch.config.as_ref()],
+        bump = launch.vault_authority_bump,
+    )]
+    pub vault_authority: UncheckedAccount<'info>,
 
     /// CHECK: address-checked; decoded in the handler.
     #[account(address = launch.pool @ StockfloorError::InvalidDbcPool)]
@@ -129,10 +135,10 @@ pub fn handle_redeem(ctx: Context<Redeem>, amount: u64) -> Result<()> {
         amount,
     )?;
 
-    // 2. Pay `net` from the vault (Authority signs). The fee stays in the vault.
+    // 2. Pay `net` from the vault (the vault authority signs). The fee stays in the vault.
     let config_key = ctx.accounts.launch.config;
-    let bump = [ctx.accounts.launch.authority_bump];
-    let seeds: &[&[u8]] = &[AUTHORITY_SEED, config_key.as_ref(), &bump];
+    let bump = [ctx.accounts.launch.vault_authority_bump];
+    let seeds: &[&[u8]] = &[VAULT_AUTHORITY_SEED, config_key.as_ref(), &bump];
     token_interface::transfer_checked(
         CpiContext::new_with_signer(
             ctx.accounts.quote_token_program.key(),
@@ -140,7 +146,7 @@ pub fn handle_redeem(ctx: Context<Redeem>, amount: u64) -> Result<()> {
                 from: ctx.accounts.vault.to_account_info(),
                 mint: ctx.accounts.quote_mint.to_account_info(),
                 to: ctx.accounts.holder_quote_account.to_account_info(),
-                authority: ctx.accounts.authority.to_account_info(),
+                authority: ctx.accounts.vault_authority.to_account_info(),
             },
             &[seeds],
         ),

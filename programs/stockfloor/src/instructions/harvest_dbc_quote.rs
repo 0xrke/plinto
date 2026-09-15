@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::constants::external::{DBC_EVENT_AUTHORITY, DBC_POOL_AUTHORITY, DBC_PROGRAM_ID};
-use crate::constants::{AUTHORITY_SEED, LAUNCH_SEED};
+use crate::constants::{CLAIMER_SEED, LAUNCH_SEED};
 use crate::dynamic_bonding_curve;
 use crate::errors::StockfloorError;
 use crate::events::{MigrationFeeHarvested, SurplusHarvested};
@@ -13,11 +13,12 @@ use crate::token_utils::{
 };
 
 /// Accounts shared by `harvest_migration_fee` and `harvest_surplus` (both move quote
-/// from the DBC quote vault into the floor vault, signed by the Authority).
+/// from the DBC quote vault straight into the floor vault; the claimer PDA, DBC `fee_claimer`,
+/// signs the CPI and has no authority over the vault).
 ///
 /// Account order:
 ///  0. `launch`               writable
-///  1. `authority`            PDA `["authority", config]`
+///  1. `claimer`              PDA `["authority", config]`
 ///  2. `config`               `launch.config`
 ///  3. `pool`                 writable, `launch.pool`
 ///  4. `vault`                writable, `launch.vault` (the only destination)
@@ -37,9 +38,9 @@ pub struct HarvestQuoteFromDbc<'info> {
     )]
     pub launch: Box<Account<'info, Launch>>,
 
-    /// CHECK: PDA signer.
-    #[account(seeds = [AUTHORITY_SEED, launch.config.as_ref()], bump = launch.authority_bump)]
-    pub authority: UncheckedAccount<'info>,
+    /// CHECK: claimer PDA, signer of the DBC CPI.
+    #[account(seeds = [CLAIMER_SEED, launch.config.as_ref()], bump = launch.claimer_bump)]
+    pub claimer: UncheckedAccount<'info>,
 
     /// CHECK: address-checked; decoded in the handler and validated again by DBC.
     #[account(address = launch.config @ StockfloorError::InvalidDbcConfig)]
@@ -89,10 +90,13 @@ impl<'info> HarvestQuoteFromDbc<'info> {
         Ok(is_migration_complete(&pool))
     }
 
-    /// After the Authority-signed CPI: the vault must be unencumbered and must not have
-    /// lost quote. Returns `(delta, balance_after)`.
+    /// After the claimer-signed CPI: the vault must still be owned by the vault authority,
+    /// unencumbered, and must not have lost quote. Returns `(delta, balance_after)`.
     fn vault_delta(&mut self, before: u64) -> Result<(u64, u64)> {
-        assert_vault_unencumbered(&self.vault.to_account_info(), &self.authority.key())?;
+        assert_vault_unencumbered(
+            &self.vault.to_account_info(),
+            &self.launch.vault_authority_key()?,
+        )?;
         self.vault.reload()?;
         let after = self.vault.amount;
         let delta = after
@@ -113,8 +117,8 @@ pub fn handle_harvest_migration_fee(ctx: Context<HarvestQuoteFromDbc>) -> Result
 
     let accounts = &ctx.accounts;
     let config_key = accounts.launch.config;
-    let bump = [accounts.launch.authority_bump];
-    let seeds: &[&[u8]] = &[AUTHORITY_SEED, config_key.as_ref(), &bump];
+    let bump = [accounts.launch.claimer_bump];
+    let seeds: &[&[u8]] = &[CLAIMER_SEED, config_key.as_ref(), &bump];
     let vault_before = accounts.vault.amount;
 
     dynamic_bonding_curve::cpi::withdraw_migration_fee(
@@ -127,7 +131,7 @@ pub fn handle_harvest_migration_fee(ctx: Context<HarvestQuoteFromDbc>) -> Result
                 token_quote_account: accounts.vault.to_account_info(),
                 quote_vault: accounts.dbc_quote_vault.to_account_info(),
                 quote_mint: accounts.quote_mint.to_account_info(),
-                sender: accounts.authority.to_account_info(),
+                sender: accounts.claimer.to_account_info(),
                 token_quote_program: accounts.quote_token_program.to_account_info(),
                 event_authority: accounts.dbc_event_authority.to_account_info(),
                 program: accounts.dbc_program.to_account_info(),
@@ -163,8 +167,8 @@ pub fn handle_harvest_surplus(ctx: Context<HarvestQuoteFromDbc>) -> Result<()> {
 
     let accounts = &ctx.accounts;
     let config_key = accounts.launch.config;
-    let bump = [accounts.launch.authority_bump];
-    let seeds: &[&[u8]] = &[AUTHORITY_SEED, config_key.as_ref(), &bump];
+    let bump = [accounts.launch.claimer_bump];
+    let seeds: &[&[u8]] = &[CLAIMER_SEED, config_key.as_ref(), &bump];
     let vault_before = accounts.vault.amount;
 
     dynamic_bonding_curve::cpi::partner_withdraw_surplus(CpiContext::new_with_signer(
@@ -176,7 +180,7 @@ pub fn handle_harvest_surplus(ctx: Context<HarvestQuoteFromDbc>) -> Result<()> {
             token_quote_account: accounts.vault.to_account_info(),
             quote_vault: accounts.dbc_quote_vault.to_account_info(),
             quote_mint: accounts.quote_mint.to_account_info(),
-            fee_claimer: accounts.authority.to_account_info(),
+            fee_claimer: accounts.claimer.to_account_info(),
             token_quote_program: accounts.quote_token_program.to_account_info(),
             event_authority: accounts.dbc_event_authority.to_account_info(),
             program: accounts.dbc_program.to_account_info(),

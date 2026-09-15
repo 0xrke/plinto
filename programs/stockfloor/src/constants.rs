@@ -4,9 +4,19 @@ use anchor_lang::prelude::*;
 
 /// Seed of the per-launch registry PDA: `["launch", config]`.
 pub const LAUNCH_SEED: &[u8] = b"launch";
-/// Seed of the per-launch signer PDA: `["authority", config]`.
-/// It is the DBC `fee_claimer` and `leftover_receiver`, owns the vault and the LP position NFTs.
-pub const AUTHORITY_SEED: &[u8] = b"authority";
+/// Seed of the per-launch claimer PDA: `["authority", config]`.
+///
+/// It is the DBC `fee_claimer` and `leftover_receiver` and owns the DAMM v2 position NFTs and its
+/// own base-token ATA (a transit account that is always burned empty). It signs the CPIs into DBC
+/// and DAMM v2 and the burns of its base tokens. It has **no authority over the vault**: those
+/// external programs are upgradeable, so the key they receive a signature from must never be able
+/// to move, approve, close or re-own the floor backing.
+pub const CLAIMER_SEED: &[u8] = b"authority";
+/// Seed of the per-launch vault authority PDA: `["vault_authority", config]`.
+///
+/// It owns the vault (ATA of this PDA for the quote mint) and signs exactly one thing: the
+/// `transfer_checked` of the net payout in `redeem`. It never signs a CPI into DBC or DAMM v2.
+pub const VAULT_AUTHORITY_SEED: &[u8] = b"vault_authority";
 
 /// Maximum exit fee accepted by `create_launch` (5%).
 pub const MAX_EXIT_FEE_BPS: u16 = 500;
@@ -28,8 +38,9 @@ pub const DBC_FEE_DENOMINATOR: u64 = 1_000_000_000;
 /// 20%, the start of the brief's optional anti-snipe schedule (§4).
 pub const MAX_CURVE_FEE_NUMERATOR: u64 = 200_000_000;
 
-/// Launch account layout version.
-pub const LAUNCH_VERSION: u8 = 1;
+/// Launch account layout version. 2 = split claimer / vault authority bumps (M2). Version 1 was
+/// never deployed.
+pub const LAUNCH_VERSION: u8 = 2;
 
 /// External programs and their well-known PDAs.
 pub mod external {
@@ -77,6 +88,24 @@ mod tests {
         let (damm_event_authority, _) =
             Pubkey::find_program_address(&[b"__event_authority"], &DAMM_V2_PROGRAM_ID);
         assert_eq!(damm_event_authority, DAMM_V2_EVENT_AUTHORITY);
+    }
+
+    #[test]
+    fn claimer_and_vault_authority_are_distinct_pdas() {
+        for i in 0..64u8 {
+            let config = Pubkey::new_from_array([i; 32]);
+            let (claimer, _) =
+                Pubkey::find_program_address(&[CLAIMER_SEED, config.as_ref()], &crate::ID);
+            let (vault_authority, _) =
+                Pubkey::find_program_address(&[VAULT_AUTHORITY_SEED, config.as_ref()], &crate::ID);
+            let (launch, _) =
+                Pubkey::find_program_address(&[LAUNCH_SEED, config.as_ref()], &crate::ID);
+            assert_ne!(claimer, vault_authority);
+            assert_ne!(claimer, launch);
+            assert_ne!(vault_authority, launch);
+        }
+        assert_eq!(CLAIMER_SEED, b"authority");
+        assert_eq!(VAULT_AUTHORITY_SEED, b"vault_authority");
     }
 
     // Compile-time sanity checks of the limits.

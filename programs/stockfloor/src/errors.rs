@@ -8,10 +8,10 @@ pub enum StockfloorError {
     // ----- create_launch: DBC config validation -----
     #[msg("Config account is not a DBC PoolConfig (wrong owner, discriminator or size)")]
     InvalidDbcConfig,
-    #[msg("DBC config fee_claimer must be the launch Authority PDA")]
-    FeeClaimerNotAuthority,
-    #[msg("DBC config leftover_receiver must be the launch Authority PDA")]
-    LeftoverReceiverNotAuthority,
+    #[msg("DBC config fee_claimer must be the launch claimer PDA [\"authority\", config]")]
+    FeeClaimerMismatch,
+    #[msg("DBC config leftover_receiver must be the launch claimer PDA [\"authority\", config]")]
+    LeftoverReceiverMismatch,
     #[msg("DBC config creator_migration_fee_percentage must be 0")]
     CreatorMigrationFeeNotZero,
     #[msg("DBC config migration_fee_percentage must be within [30, 99]")]
@@ -84,11 +84,11 @@ pub enum StockfloorError {
     PositionPoolMismatch,
     #[msg("DAMM v2 pool mints must be (launch base mint, launch quote mint)")]
     DammPoolMintMismatch,
-    #[msg("Position NFT account is not owned by the launch Authority or does not hold the position NFT")]
-    PositionNftNotOwnedByAuthority,
+    #[msg("Position NFT account is not owned by the launch claimer PDA or does not hold the position NFT")]
+    PositionNftNotOwnedByClaimer,
     #[msg("Vault balance decreased during a harvest")]
     VaultDecreased,
-    #[msg("Vault token account has a delegate, close authority, foreign owner, CPI guard or required memo")]
+    #[msg("Vault token account has a delegate, close authority, an owner other than the vault authority, CPI guard or required memo")]
     VaultEncumbered,
 
     // ----- redeem -----

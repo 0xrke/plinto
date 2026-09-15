@@ -5,7 +5,10 @@ pub struct LaunchCreated {
     pub launch: Pubkey,
     pub config: Pubkey,
     pub creator: Pubkey,
-    pub authority: Pubkey,
+    /// Claimer PDA `["authority", config]`: DBC fee_claimer / leftover_receiver, LP NFT owner.
+    pub claimer: Pubkey,
+    /// Vault authority PDA `["vault_authority", config]`: owner of the vault.
+    pub vault_authority: Pubkey,
     pub quote_mint: Pubkey,
     /// Base mint committed for the launch's DBC pool.
     pub base_mint: Pubkey,
@@ -51,11 +54,10 @@ pub struct SurplusHarvested {
 }
 
 #[event]
-pub struct LeftoverHarvested {
+pub struct ClaimerBaseBurned {
     pub launch: Pubkey,
-    pub pool: Pubkey,
-    /// `true` when this call executed DBC `withdraw_leftover`.
-    pub leftover_withdrawn: bool,
+    pub base_mint: Pubkey,
+    /// Base tokens burned from the claimer's base ATA (0 when it was empty).
     pub base_burned: u64,
 }
 

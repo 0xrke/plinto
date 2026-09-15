@@ -125,7 +125,7 @@ pub fn load_damm_position(info: &AccountInfo) -> Result<Box<DammPosition>> {
 /// pool creation fee. The quote mint allowlist and a minimum raise are UI/SDK policy.
 pub fn validate_launch_config(
     config: &PoolConfig,
-    authority: &Pubkey,
+    claimer: &Pubkey,
     quote_mint: &Pubkey,
     exit_fee_bps: u16,
 ) -> std::result::Result<(), StockfloorError> {
@@ -137,11 +137,11 @@ pub fn validate_launch_config(
     if config.quote_mint != *quote_mint {
         return Err(StockfloorError::QuoteMintMismatch);
     }
-    if config.fee_claimer != *authority {
-        return Err(StockfloorError::FeeClaimerNotAuthority);
+    if config.fee_claimer != *claimer {
+        return Err(StockfloorError::FeeClaimerMismatch);
     }
-    if config.leftover_receiver != *authority {
-        return Err(StockfloorError::LeftoverReceiverNotAuthority);
+    if config.leftover_receiver != *claimer {
+        return Err(StockfloorError::LeftoverReceiverMismatch);
     }
     if config.creator_migration_fee_percentage != 0 {
         return Err(StockfloorError::CreatorMigrationFeeNotZero);
@@ -586,11 +586,11 @@ pub(crate) mod tests {
     // Config validation and decoding.
     // ------------------------------------------------------------------
 
-    pub(crate) fn valid_config(authority: Pubkey, quote_mint: Pubkey) -> PoolConfig {
+    pub(crate) fn valid_config(claimer: Pubkey, quote_mint: Pubkey) -> PoolConfig {
         let mut c: PoolConfig = bytemuck::Zeroable::zeroed();
         c.quote_mint = quote_mint;
-        c.fee_claimer = authority;
-        c.leftover_receiver = authority;
+        c.fee_claimer = claimer;
+        c.leftover_receiver = claimer;
         c.migration_fee_percentage = 50;
         c.creator_migration_fee_percentage = 0;
         c.partner_permanent_locked_liquidity_percentage = 100;
@@ -637,11 +637,11 @@ pub(crate) mod tests {
         let cases: Vec<(Mutator, StockfloorError)> = vec![
             (
                 |c, o| c.fee_claimer = o,
-                StockfloorError::FeeClaimerNotAuthority,
+                StockfloorError::FeeClaimerMismatch,
             ),
             (
                 |c, o| c.leftover_receiver = o,
-                StockfloorError::LeftoverReceiverNotAuthority,
+                StockfloorError::LeftoverReceiverMismatch,
             ),
             (
                 |c, _| c.creator_migration_fee_percentage = 1,
@@ -775,10 +775,10 @@ pub(crate) mod tests {
             validate_launch_config(&c, &a, &q, 501),
             Err(StockfloorError::ExitFeeTooHigh)
         );
-        // Authority of a different config is rejected.
+        // The claimer of a different config is rejected.
         assert_eq!(
             validate_launch_config(&c, &other, &q, 200),
-            Err(StockfloorError::FeeClaimerNotAuthority)
+            Err(StockfloorError::FeeClaimerMismatch)
         );
     }
 

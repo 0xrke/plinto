@@ -4,7 +4,7 @@ use anchor_spl::token::Token;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::constants::external::{DBC_EVENT_AUTHORITY, DBC_POOL_AUTHORITY, DBC_PROGRAM_ID};
-use crate::constants::{AUTHORITY_SEED, LAUNCH_SEED};
+use crate::constants::{CLAIMER_SEED, LAUNCH_SEED};
 use crate::dynamic_bonding_curve;
 use crate::errors::StockfloorError;
 use crate::events::CurveFeesHarvested;
@@ -15,16 +15,17 @@ use crate::token_utils::{
 };
 
 /// Permissionless: claim the partner share of DBC trading fees of the registered pool.
-/// Quote goes to the vault; any base goes to the Authority base ATA and is burned.
+/// Quote goes straight into the vault; any base goes to the claimer's base ATA and is burned.
+/// The claimer PDA (DBC `fee_claimer`) signs the CPI; it does not own the vault.
 ///
 /// Account order:
-///  0. `payer`                     signer, writable (rent for the Authority base ATA if missing)
+///  0. `payer`                     signer, writable (rent for the claimer base ATA if missing)
 ///  1. `launch`                    writable
-///  2. `authority`                 PDA `["authority", config]`
+///  2. `claimer`                   PDA `["authority", config]`
 ///  3. `config`                    `launch.config`
 ///  4. `pool`                      writable, `launch.pool`
 ///  5. `vault`                     writable, `launch.vault` (quote destination)
-///  6. `authority_base_account`    writable, ATA(authority, base_mint, SPL Token) (base destination)
+///  6. `claimer_base_account`      writable, ATA(claimer, base_mint, SPL Token) (base destination)
 ///  7. `dbc_base_vault`            writable, DBC pool base vault (validated by DBC)
 ///  8. `dbc_quote_vault`           writable, DBC pool quote vault (validated by DBC)
 ///  9. `base_mint`                 writable, `launch.base_mint`
@@ -49,9 +50,9 @@ pub struct HarvestCurveFees<'info> {
     )]
     pub launch: Box<Account<'info, Launch>>,
 
-    /// CHECK: PDA signer.
-    #[account(seeds = [AUTHORITY_SEED, launch.config.as_ref()], bump = launch.authority_bump)]
-    pub authority: UncheckedAccount<'info>,
+    /// CHECK: claimer PDA, signer of the DBC CPI and of the base burn.
+    #[account(seeds = [CLAIMER_SEED, launch.config.as_ref()], bump = launch.claimer_bump)]
+    pub claimer: UncheckedAccount<'info>,
 
     /// CHECK: address-checked; DBC validates the rest.
     #[account(address = launch.config @ StockfloorError::InvalidDbcConfig)]
@@ -68,10 +69,10 @@ pub struct HarvestCurveFees<'info> {
         init_if_needed,
         payer = payer,
         associated_token::mint = base_mint,
-        associated_token::authority = authority,
+        associated_token::authority = claimer,
         associated_token::token_program = token_program,
     )]
-    pub authority_base_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub claimer_base_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// CHECK: validated by DBC against the pool.
     #[account(mut)]
@@ -114,8 +115,8 @@ pub fn handle_harvest_curve_fees(ctx: Context<HarvestCurveFees>) -> Result<()> {
     assert_vault_not_frozen(&accounts.vault.to_account_info())?;
 
     let config_key = accounts.launch.config;
-    let bump = [accounts.launch.authority_bump];
-    let seeds: &[&[u8]] = &[AUTHORITY_SEED, config_key.as_ref(), &bump];
+    let bump = [accounts.launch.claimer_bump];
+    let seeds: &[&[u8]] = &[CLAIMER_SEED, config_key.as_ref(), &bump];
     let signer = &[seeds];
 
     let vault_before = accounts.vault.amount;
@@ -127,13 +128,13 @@ pub fn handle_harvest_curve_fees(ctx: Context<HarvestCurveFees>) -> Result<()> {
                 pool_authority: accounts.dbc_pool_authority.to_account_info(),
                 config: accounts.config.to_account_info(),
                 pool: accounts.pool.to_account_info(),
-                token_a_account: accounts.authority_base_account.to_account_info(),
+                token_a_account: accounts.claimer_base_account.to_account_info(),
                 token_b_account: accounts.vault.to_account_info(),
                 base_vault: accounts.dbc_base_vault.to_account_info(),
                 quote_vault: accounts.dbc_quote_vault.to_account_info(),
                 base_mint: accounts.base_mint.to_account_info(),
                 quote_mint: accounts.quote_mint.to_account_info(),
-                fee_claimer: accounts.authority.to_account_info(),
+                fee_claimer: accounts.claimer.to_account_info(),
                 token_base_program: accounts.token_program.to_account_info(),
                 token_quote_program: accounts.quote_token_program.to_account_info(),
                 event_authority: accounts.dbc_event_authority.to_account_info(),
@@ -148,14 +149,17 @@ pub fn handle_harvest_curve_fees(ctx: Context<HarvestCurveFees>) -> Result<()> {
     let base_burned = burn_all_signed(
         &accounts.token_program.to_account_info(),
         &accounts.base_mint.to_account_info(),
-        &accounts.authority_base_account.to_account_info(),
-        &accounts.authority.to_account_info(),
+        &accounts.claimer_base_account.to_account_info(),
+        &accounts.claimer.to_account_info(),
         signer,
     )?;
 
-    // The Authority (vault owner) signed a CPI into an upgradeable program with the vault
-    // writable: the vault must come back unencumbered.
-    assert_vault_unencumbered(&accounts.vault.to_account_info(), &accounts.authority.key())?;
+    // The vault was writable in a CPI into an upgradeable program: it must come back owned by the
+    // vault authority and unencumbered.
+    assert_vault_unencumbered(
+        &accounts.vault.to_account_info(),
+        &accounts.launch.vault_authority_key()?,
+    )?;
 
     let accounts = ctx.accounts;
     accounts.vault.reload()?;

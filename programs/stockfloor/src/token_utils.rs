@@ -1,5 +1,5 @@
-//! Token helpers: quote-mint safety checks (Token-2022) and burning base tokens
-//! held by the Authority.
+//! Token helpers: quote-mint safety checks (Token-2022), the vault integrity check and
+//! burning base tokens held by the claimer PDA.
 
 use anchor_lang::prelude::*;
 use anchor_spl::token_2022::spl_token_2022::{
@@ -57,28 +57,29 @@ pub fn assert_vault_not_frozen(vault: &AccountInfo) -> Result<()> {
     Ok(())
 }
 
-/// Defence in depth after every CPI into DBC / DAMM v2 that the Authority signs while the
-/// vault is writable. The Authority owns the vault, and its signer privilege carries into
-/// those (upgradeable) programs, which could otherwise leave the vault encumbered without
-/// changing its balance: an approved delegate, a close authority, a new owner (legacy SPL
-/// accounts have no ImmutableOwner), CPI Guard (would block every PDA-signed `redeem`
-/// transfer) or required incoming memos (would block harvests). Any of these makes the
-/// harvest fail, so it rolls back atomically. Only `redeem` moves quote out of the vault,
-/// and nothing in this program ever sets these fields, so an honest vault always passes.
-pub fn assert_vault_unencumbered(vault: &AccountInfo, authority: &Pubkey) -> Result<()> {
+/// Defence in depth after every CPI into DBC / DAMM v2 that runs with the vault writable.
+///
+/// The vault is owned by the vault authority PDA, which never signs those CPIs (the claimer PDA
+/// does), so an external program cannot approve, close or re-own the vault through them. The
+/// check still requires, by any means, that the vault comes back with the vault authority as its
+/// owner, no delegate, no close authority, no CPI Guard (would block every PDA-signed `redeem`
+/// transfer) and no required incoming memos (would block harvests). Any of these makes the harvest
+/// fail, so it rolls back atomically. Only `redeem` moves quote out of the vault, and nothing in
+/// this program ever sets these fields, so an honest vault always passes.
+pub fn assert_vault_unencumbered(vault: &AccountInfo, vault_authority: &Pubkey) -> Result<()> {
     let data = vault.try_borrow_data()?;
-    check_vault_account_data(&data, authority).map_err(Into::into)
+    check_vault_account_data(&data, vault_authority).map_err(Into::into)
 }
 
 /// Pure check over raw vault token account data (legacy SPL Token or Token-2022; unit tested).
 pub fn check_vault_account_data(
     data: &[u8],
-    authority: &Pubkey,
+    vault_authority: &Pubkey,
 ) -> std::result::Result<(), StockfloorError> {
     let state = StateWithExtensions::<SplAccount>::unpack(data)
         .map_err(|_| StockfloorError::InvalidTokenAccountData)?;
     let base = &state.base;
-    if base.owner != *authority || base.delegate.is_some() || base.close_authority.is_some() {
+    if base.owner != *vault_authority || base.delegate.is_some() || base.close_authority.is_some() {
         return Err(StockfloorError::VaultEncumbered);
     }
     if let Ok(guard) = state.get_extension::<CpiGuard>() {
@@ -94,8 +95,8 @@ pub fn check_vault_account_data(
     Ok(())
 }
 
-/// Burn the entire balance of `from` (a base-token account owned by the Authority),
-/// signed by the Authority. Returns the amount burned.
+/// Burn the entire balance of `from` (the claimer's base-token ATA), signed by the claimer PDA.
+/// Returns the amount burned.
 pub fn burn_all_signed<'info>(
     token_program: &AccountInfo<'info>,
     mint: &AccountInfo<'info>,

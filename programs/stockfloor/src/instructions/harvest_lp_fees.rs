@@ -6,7 +6,7 @@ use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 use crate::constants::external::{
     DAMM_V2_EVENT_AUTHORITY, DAMM_V2_POOL_AUTHORITY, DAMM_V2_PROGRAM_ID,
 };
-use crate::constants::{AUTHORITY_SEED, LAUNCH_SEED};
+use crate::constants::{CLAIMER_SEED, LAUNCH_SEED};
 use crate::cp_amm;
 use crate::errors::StockfloorError;
 use crate::events::LpFeesHarvested;
@@ -18,18 +18,19 @@ use crate::token_utils::{
 };
 
 /// Permissionless: claim DAMM v2 position fees for a position whose NFT is held by the
-/// Authority, on a pool with mints (base_mint, quote_mint). Quote goes to the vault,
-/// base is burned. Any such position qualifies (the migrated partner position, or a
-/// position someone donated to the Authority): the proceeds can only raise the floor.
+/// claimer PDA, on a pool with mints (base_mint, quote_mint). Quote goes straight into the
+/// vault, base is burned. Any such position qualifies (the migrated partner position, or a
+/// position someone gave to the claimer): the proceeds can only raise the floor. The claimer
+/// (NFT owner) signs the CPI; it has no authority over the vault.
 ///
 /// Account order:
-///  0. `payer`                     signer, writable (rent for the Authority base ATA if missing)
+///  0. `payer`                     signer, writable (rent for the claimer base ATA if missing)
 ///  1. `launch`                    writable
-///  2. `authority`                 PDA `["authority", config]`
+///  2. `claimer`                   PDA `["authority", config]`
 ///  3. `damm_pool`                 DAMM v2 pool, token_a = base_mint, token_b = quote_mint
 ///  4. `position`                  writable, DAMM v2 position on `damm_pool`
-///  5. `position_nft_account`      token account holding the position NFT, owner = authority
-///  6. `authority_base_account`    writable, ATA(authority, base_mint, SPL Token) (token A destination)
+///  5. `position_nft_account`      token account holding the position NFT, owner = claimer
+///  6. `claimer_base_account`      writable, ATA(claimer, base_mint, SPL Token) (token A destination)
 ///  7. `vault`                     writable, `launch.vault` (token B destination)
 ///  8. `damm_token_a_vault`        writable (validated by DAMM v2 against the pool)
 ///  9. `damm_token_b_vault`        writable (validated by DAMM v2 against the pool)
@@ -55,9 +56,9 @@ pub struct HarvestLpFees<'info> {
     )]
     pub launch: Box<Account<'info, Launch>>,
 
-    /// CHECK: PDA signer (owner of the position NFT account).
-    #[account(seeds = [AUTHORITY_SEED, launch.config.as_ref()], bump = launch.authority_bump)]
-    pub authority: UncheckedAccount<'info>,
+    /// CHECK: claimer PDA (owner of the position NFT account), signer of the DAMM v2 CPI.
+    #[account(seeds = [CLAIMER_SEED, launch.config.as_ref()], bump = launch.claimer_bump)]
+    pub claimer: UncheckedAccount<'info>,
 
     /// CHECK: decoded in the handler (owner, discriminator, mints).
     pub damm_pool: UncheckedAccount<'info>,
@@ -67,10 +68,10 @@ pub struct HarvestLpFees<'info> {
     pub position: UncheckedAccount<'info>,
 
     #[account(
-        constraint = position_nft_account.owner == authority.key()
-            @ StockfloorError::PositionNftNotOwnedByAuthority,
+        constraint = position_nft_account.owner == claimer.key()
+            @ StockfloorError::PositionNftNotOwnedByClaimer,
         constraint = position_nft_account.amount == 1
-            @ StockfloorError::PositionNftNotOwnedByAuthority,
+            @ StockfloorError::PositionNftNotOwnedByClaimer,
     )]
     pub position_nft_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
@@ -78,10 +79,10 @@ pub struct HarvestLpFees<'info> {
         init_if_needed,
         payer = payer,
         associated_token::mint = base_mint,
-        associated_token::authority = authority,
+        associated_token::authority = claimer,
         associated_token::token_program = token_program,
     )]
-    pub authority_base_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub claimer_base_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(mut, address = launch.vault)]
     pub vault: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -144,15 +145,15 @@ pub fn handle_harvest_lp_fees(ctx: Context<HarvestLpFees>) -> Result<()> {
         require_keys_eq!(
             accounts.position_nft_account.mint,
             position.nft_mint,
-            StockfloorError::PositionNftNotOwnedByAuthority
+            StockfloorError::PositionNftNotOwnedByClaimer
         );
     }
     assert_quote_mint_transferable(&accounts.quote_mint.to_account_info())?;
     assert_vault_not_frozen(&accounts.vault.to_account_info())?;
 
     let config_key = accounts.launch.config;
-    let bump = [accounts.launch.authority_bump];
-    let seeds: &[&[u8]] = &[AUTHORITY_SEED, config_key.as_ref(), &bump];
+    let bump = [accounts.launch.claimer_bump];
+    let seeds: &[&[u8]] = &[CLAIMER_SEED, config_key.as_ref(), &bump];
     let signer = &[seeds];
     let vault_before = accounts.vault.amount;
 
@@ -162,14 +163,14 @@ pub fn handle_harvest_lp_fees(ctx: Context<HarvestLpFees>) -> Result<()> {
             pool_authority: accounts.damm_pool_authority.to_account_info(),
             pool: accounts.damm_pool.to_account_info(),
             position: accounts.position.to_account_info(),
-            token_a_account: accounts.authority_base_account.to_account_info(),
+            token_a_account: accounts.claimer_base_account.to_account_info(),
             token_b_account: accounts.vault.to_account_info(),
             token_a_vault: accounts.damm_token_a_vault.to_account_info(),
             token_b_vault: accounts.damm_token_b_vault.to_account_info(),
             token_a_mint: accounts.base_mint.to_account_info(),
             token_b_mint: accounts.quote_mint.to_account_info(),
             position_nft_account: accounts.position_nft_account.to_account_info(),
-            signer: accounts.authority.to_account_info(),
+            signer: accounts.claimer.to_account_info(),
             token_a_program: accounts.token_program.to_account_info(),
             token_b_program: accounts.quote_token_program.to_account_info(),
             event_authority: accounts.damm_event_authority.to_account_info(),
@@ -181,14 +182,17 @@ pub fn handle_harvest_lp_fees(ctx: Context<HarvestLpFees>) -> Result<()> {
     let base_burned = burn_all_signed(
         &accounts.token_program.to_account_info(),
         &accounts.base_mint.to_account_info(),
-        &accounts.authority_base_account.to_account_info(),
-        &accounts.authority.to_account_info(),
+        &accounts.claimer_base_account.to_account_info(),
+        &accounts.claimer.to_account_info(),
         signer,
     )?;
 
-    // The Authority (vault owner) signed a CPI into an upgradeable program with the vault
-    // writable: the vault must come back unencumbered.
-    assert_vault_unencumbered(&accounts.vault.to_account_info(), &accounts.authority.key())?;
+    // The vault was writable in a CPI into an upgradeable program: it must come back owned by the
+    // vault authority and unencumbered.
+    assert_vault_unencumbered(
+        &accounts.vault.to_account_info(),
+        &accounts.launch.vault_authority_key()?,
+    )?;
 
     let accounts = ctx.accounts;
     accounts.vault.reload()?;

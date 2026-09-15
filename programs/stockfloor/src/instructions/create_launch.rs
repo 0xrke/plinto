@@ -2,11 +2,12 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
-use crate::constants::{AUTHORITY_SEED, LAUNCH_SEED, LAUNCH_VERSION};
+use crate::constants::{CLAIMER_SEED, LAUNCH_SEED, LAUNCH_VERSION, VAULT_AUTHORITY_SEED};
 use crate::errors::StockfloorError;
 use crate::events::LaunchCreated;
 use crate::external::{load_dbc_config, validate_launch_config};
 use crate::state::Launch;
+use crate::token_utils::assert_vault_unencumbered;
 
 /// Create the launch registry and the floor vault for a freshly created DBC config.
 ///
@@ -19,14 +20,16 @@ use crate::state::Launch;
 ///  0. `payer`                    signer, writable: pays rent for `launch` and `vault`
 ///  1. `creator`                  signer: recorded as the launch creator
 ///  2. `config`                   signer: the DBC config keypair (proves the caller created it)
-///  3. `authority`                PDA `["authority", config]`
-///  4. `launch`                   writable: PDA `["launch", config]`, created here
-///  5. `quote_mint`               must equal `config.quote_mint`
-///  6. `base_mint`                the base mint of the launch's DBC pool (may not exist yet)
-///  7. `vault`                    writable: ATA(authority, quote_mint, quote_token_program)
-///  8. `quote_token_program`      owner of `quote_mint` (Token or Token-2022)
-///  9. `associated_token_program`
-/// 10. `system_program`
+///  3. `claimer`                  PDA `["authority", config]`: the config's fee_claimer and
+///     leftover_receiver
+///  4. `vault_authority`          PDA `["vault_authority", config]` (owner of the vault)
+///  5. `launch`                   writable: PDA `["launch", config]`, created here
+///  6. `quote_mint`               must equal `config.quote_mint`
+///  7. `base_mint`                the base mint of the launch's DBC pool (may not exist yet)
+///  8. `vault`                    writable: ATA(vault_authority, quote_mint, quote_token_program)
+///  9. `quote_token_program`      owner of `quote_mint` (Token or Token-2022)
+/// 10. `associated_token_program`
+/// 11. `system_program`
 #[derive(Accounts)]
 pub struct CreateLaunch<'info> {
     #[account(mut)]
@@ -39,9 +42,13 @@ pub struct CreateLaunch<'info> {
     /// config they did not create.
     pub config: Signer<'info>,
 
-    /// CHECK: PDA signer for all CPIs, holds no data.
-    #[account(seeds = [AUTHORITY_SEED, config.key().as_ref()], bump)]
-    pub authority: UncheckedAccount<'info>,
+    /// CHECK: claimer PDA (DBC fee_claimer / leftover_receiver, CPI signer); holds no data.
+    #[account(seeds = [CLAIMER_SEED, config.key().as_ref()], bump)]
+    pub claimer: UncheckedAccount<'info>,
+
+    /// CHECK: vault authority PDA (owner of the vault, signs only `redeem` payouts); holds no data.
+    #[account(seeds = [VAULT_AUTHORITY_SEED, config.key().as_ref()], bump)]
+    pub vault_authority: UncheckedAccount<'info>,
 
     #[account(
         init,
@@ -63,7 +70,7 @@ pub struct CreateLaunch<'info> {
         init_if_needed,
         payer = payer,
         associated_token::mint = quote_mint,
-        associated_token::authority = authority,
+        associated_token::authority = vault_authority,
         associated_token::token_program = quote_token_program,
     )]
     pub vault: Box<InterfaceAccount<'info, TokenAccount>>,
@@ -83,7 +90,7 @@ pub fn handle_create_launch(ctx: Context<CreateLaunch>, exit_fee_bps: u16) -> Re
         let config = load_dbc_config(&ctx.accounts.config.to_account_info())?;
         validate_launch_config(
             &config,
-            &ctx.accounts.authority.key(),
+            &ctx.accounts.claimer.key(),
             &ctx.accounts.quote_mint.key(),
             exit_fee_bps,
         )?;
@@ -93,13 +100,21 @@ pub fn handle_create_launch(ctx: Context<CreateLaunch>, exit_fee_bps: u16) -> Re
         )
     };
 
+    // A vault pre-created by a third party (canonical ATA) must not come with a delegate, close
+    // authority, CPI Guard or required memos (only its owner could have set them, but check).
+    assert_vault_unencumbered(
+        &ctx.accounts.vault.to_account_info(),
+        &ctx.accounts.vault_authority.key(),
+    )?;
+
     let now = Clock::get()?.unix_timestamp;
     let quote_token_program = *ctx.accounts.quote_mint.to_account_info().owner;
 
     let launch = &mut ctx.accounts.launch;
     launch.version = LAUNCH_VERSION;
     launch.bump = ctx.bumps.launch;
-    launch.authority_bump = ctx.bumps.authority;
+    launch.claimer_bump = ctx.bumps.claimer;
+    launch.vault_authority_bump = ctx.bumps.vault_authority;
     launch.exit_fee_bps = exit_fee_bps;
     launch.migration_fee_harvested = false;
     launch.surplus_harvested = false;
@@ -117,13 +132,14 @@ pub fn handle_create_launch(ctx: Context<CreateLaunch>, exit_fee_bps: u16) -> Re
     launch.total_redeemed_base = 0;
     launch.total_redeemed_quote = 0;
     launch.total_exit_fees = 0;
-    launch.reserved = [0u8; 63];
+    launch.reserved = [0u8; 62];
 
     emit!(LaunchCreated {
         launch: launch.key(),
         config: launch.config,
         creator: launch.creator,
-        authority: ctx.accounts.authority.key(),
+        claimer: ctx.accounts.claimer.key(),
+        vault_authority: ctx.accounts.vault_authority.key(),
         quote_mint: launch.quote_mint,
         base_mint,
         quote_token_program,
