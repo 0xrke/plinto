@@ -53,8 +53,8 @@ few thousand, because PDA bump searches depend on the keys.
 | File | What it covers |
 |---|---|
 | `tests/integration/c1-lifecycle.test.ts` | The ordered BRIEF §8 flow (20 `it` blocks), with the stage-specific adversarial checks inline |
-| `tests/integration/c1-adversarial.test.ts` | Adversarial scenarios that need their own setup (11 tests), plus a self-check of the invariant checker |
-| `tests/integration/review-regressions.test.ts` | One block per M1 review finding (10 tests); each block failed on the pre-fix binary |
+| `tests/integration/c1-adversarial.test.ts` | Adversarial scenarios that need their own setup (16 tests): harvest redirection, early fee harvest, second pool, surplus routing, the invariant checker's self-check, quote issuer controls on every quote-moving instruction, redemption edge cases |
+| `tests/integration/review-regressions.test.ts` | One block per M1 review finding (11 tests); each block failed on the pre-fix binary |
 | `tests/integration/sdk-presets-fork.test.ts` | SDK presets `gentle`/`flat` × vault shares 30/50/70% on the real DBC and stockfloor programs, plus 15 negative SDK validation codes compared with DBC's errors (7 tests) |
 | `tests/integration/stockfloor-smoke.test.ts` | The program author's 43-check smoke test, moved here from `programs/stockfloor/fork-smoke/`. It uses the harness config builder with a 5 SPYx threshold |
 | `tests/src/stockfloor.ts` | Instruction builders for all 9 stockfloor instructions (from `target/idl/stockfloor.json`), the Launch reader and the `floor` return-data decoder (34 bytes) |
@@ -394,6 +394,26 @@ traded, completed and migrated; its DAMM v2 position NFT also belongs to the sam
   `BaseMintMismatch` when passing the launch pool.
 - **End state.** The vault stays 0, `Launch.pool` stays canonical and `total_harvested_quote` = 0.
 
+**› Quote issuer controls on every quote-moving instruction.**
+- **Controls.** SPYx paused, the vault frozen, or a transfer hook program set, each by cheatcode.
+- **Harvests.** `harvest_curve_fees`, `harvest_migration_fee`, `harvest_surplus` and
+  `harvest_lp_fees` fail with `QuoteMintPaused`, `VaultFrozen` or
+  `QuoteMintTransferHookUnsupported`.
+- **Redeem.** It fails with the same errors. The vault, supply, DBC and DAMM v2 vaults, Launch
+  flags, counters and the holder's balances stay unchanged.
+- **After restoring.** Everything succeeds.
+- **Multiplier change.** Setting the ScaledUiAmount multiplier to 1.5 before the harvests, then to
+  1.5 and 0.8 before redemptions, leaves every raw amount exact.
+
+**› Redemption edge cases.**
+- **Donation.** SPYx transferred straight into the vault raises the floor. The next redeem pays
+  `floor((V + donation)·a/S)` minus the fee.
+- **Exit fee 0.** net = gross, ten split redemptions pay at most `floor(V0·total/S0)`, and a dust
+  amount fails with `NothingToRedeem`.
+- **Exit fee 500 bps.** fee = `ceil(gross × 5%)`.
+- **Entire supply** (cheatcode: one holder owns all base). gross = vault, the vault keeps exactly
+  the fee, and the supply becomes 0.
+
 **› C1 edge: `harvest_surplus` routing with a non-trivial surplus (cheatcode state).** This is a
 routing check: the CPI into the real DBC binary and the destination are real, but the state is
 patched and no DBC 0.2.1 swap can reach it.
@@ -441,6 +461,10 @@ with a delegate on the vault, an 18-byte floor view).
      registered: `BaseMintMismatch` with either base mint account.
    - **A random wallet registers the committed pool.** After graduation it harvests exactly
      `T − ceil(T × 50%)`, and a holder redeems the exact net.
+   - **Sock-puppet creator key.** The creator creates the committed pool under a second wallet as
+     DBC `creator`. A random wallet still registers it. This path was found while fixing the
+     finding: the first fix still compared `pool.creator` and failed with `PoolCreatorMismatch`.
+     The check is gone, because the committed mint already identifies the one pool.
    - **Commit before the pool exists.** `create_launch` can commit the base mint before the pool
      exists. Registration fails before DBC creates the pool (`AccountNotInitialized`, the mint
      does not exist yet) and succeeds right after.
@@ -500,19 +524,11 @@ with a delegate on the vault, an 18-byte floor view).
   gates, realistic compute limits (every transaction sets 1.4M CU) and live account drift are
   not exercised. A Surfpool run against live mainnet state is planned before C2.
 - **Out of scope here (planned for M2).** These BRIEF §8 items are not written yet:
-  - repeated tiny redemptions on the fork (at 0 and 200 bps);
-  - a donation to the vault, then a pro-rata redeem;
-  - redeeming the entire circulating supply;
-  - a ScaledUiAmount multiplier change inside the stockfloor flow;
-  - a paused SPYx for `harvest_migration_fee`, `harvest_curve_fees` and `harvest_surplus`;
-  - a frozen vault or a transfer hook set by cheatcode;
-  - exit fees of 0 and 500 bps;
+  - many tiny redemptions at 200 bps on the fork, checked against the continuous split bound from
+    `docs/DECISIONS.md` (host property tests cover it);
   - a second DAMM v2 position donated to the Authority;
-  - migration through a FixedBps DAMM v2 config;
+  - migration through a FixedBps DAMM v2 config (the keeper path);
   - a fork property test over random multi-holder redeem sequences.
-
-  Paused SPYx is covered today only for `redeem` and `harvest_lp_fees` (smoke test and spike
-  edge cases), and the multiplier change only by the spike edge cases.
 
 ## How to run
 
@@ -534,39 +550,40 @@ prints a summary and exits non-zero on any failure or skip. Both paths were chec
 runs: a failing step gave exit 1, a skipped package gave exit 1, and a skipped package with
 `ALLOW_SKIP=1` gave exit 0.
 
-`pnpm test` output on 2026-09-15 after the M1 review fixes (both programs rebuilt):
+`pnpm test` output on 2026-09-15 after the M1 review fixes. The stockfloor binary was rebuilt
+after the last program source change; this run found it up to date:
 
 ```
 ==> cargo test -p stockfloor
-test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
 ==> @stockfloor/sdk tests
  Test Files  5 passed (5)
       Tests  93 passed (93)
 ==> @stockfloor/tests tests
  Test Files  8 passed (8)
-      Tests  70 passed (70)
+      Tests  76 passed (76)
 ==> @stockfloor/app tests
  Test Files  8 passed (8)
       Tests  58 passed (58)
 
 ================================ test summary ================================
-build program stockfloor         PASS     (9s)
-build program spike              PASS     (0s)
-cargo test -p stockfloor         PASS     (3s)
-typecheck @stockfloor/sdk        PASS     (1s)
+build program stockfloor         PASS     (0s)
+build program spike              PASS     (1s)
+cargo test -p stockfloor         PASS     (1s)
+typecheck @stockfloor/sdk        PASS     (0s)
 typecheck @stockfloor/tests      PASS     (1s)
 @stockfloor/sdk tests            PASS     (1s)
 @stockfloor/tests tests          PASS     (2s)
-@stockfloor/app tests            PASS     (1s)
+@stockfloor/app tests            PASS     (2s)
 ------------------------------------------------------------------------------
-ALL STEPS PASSED (18s)
+ALL STEPS PASSED (8s)
 ==============================================================================
 ```
 
-The 70 fork tests break down as follows:
+The 76 fork tests break down as follows:
 - 20 in the C1 lifecycle;
-- 11 in the C1 adversarial suite;
-- 10 M1 review regressions;
+- 16 in the C1 adversarial suite;
+- 11 M1 review regressions;
 - 7 SDK preset and negative-code checks on the fork;
 - 1 smoke test (43 checks inside one `it`);
 - 21 spike tests in 3 files (15 lifecycle, 5 edge cases, 1 smoke). The assertion-free "prints the
