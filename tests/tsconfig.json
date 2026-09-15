@@ -9,7 +9,9 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": { "@stockfloor/sdk": ["../packages/sdk/src/index.ts"] }
   },
   "include": ["src/**/*.ts", "spike/**/*.ts", "integration/**/*.ts", "unit/**/*.ts", "fixtures/**/*.ts", "vitest.config.ts"]
 }

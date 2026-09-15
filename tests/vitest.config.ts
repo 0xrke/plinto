@@ -1,6 +1,13 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      // The integration tests use the SDK from source (packages/sdk) without a workspace dependency.
+      "@stockfloor/sdk": fileURLToPath(new URL("../packages/sdk/src/index.ts", import.meta.url)),
+    },
+  },
   test: {
     include: ["spike/**/*.test.ts", "integration/**/*.test.ts", "unit/**/*.test.ts"],
     testTimeout: 600_000,
