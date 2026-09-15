@@ -74,15 +74,11 @@ has_test_script() {
 
 build_program() {
   local p="$1"
-  if [[ ! -f "keys/${p}-program.json" ]]; then
-    echo "missing keys/${p}-program.json: the repo-local program keypair (gitignored) is required to build ${p}"
-    return 1
-  fi
-  # `anchor build -p <p>` (Anchor 1.0.2) also reads programs/<p>/target/deploy/<p>-keypair.json and
-  # fails with "Program ID mismatch" when it generates a random one there; keep it in sync
-  # (gitignored). scripts/build-programs.sh copies the key into target/deploy/.
-  mkdir -p "programs/${p}/target/deploy"
-  cp "keys/${p}-program.json" "programs/${p}/target/deploy/${p}-keypair.json"
+  # scripts/build-programs.sh copies keys/<p>-program.json into both target/deploy/ and
+  # programs/<p>/target/deploy/ (Anchor 1.0.2 `build -p` reads the latter and fails with
+  # "Program ID mismatch" on the random keypair it would otherwise generate there).
+  # On a fresh clone keys/ does not exist; the script then builds with --ignore-keys, which
+  # produces the same .so and IDL, so the test suite runs without the deploy keypairs.
   bash scripts/build-programs.sh -p "$p"
 }
 
