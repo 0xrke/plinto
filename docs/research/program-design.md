@@ -1,125 +1,330 @@
 # `stockfloor` program design
 
-Date: 2026-09-15. Program id `98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA`, Anchor 1.0.2.
-Source: `programs/stockfloor/src/`. IDL: `target/idl/stockfloor.json` (after a build).
+Date: 2026-09-15 (M2). Program id `98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA`, Anchor 1.0.2.
+Source: `programs/stockfloor/src/`. IDL: `target/idl/stockfloor.json` (after a build). `Launch`
+layout version **2** (claimer / vault-authority split).
 
 ## 1. Status and evidence
 
-| Check | Command | Result (2026-09-15) |
+| Check | Command | Result (2026-09-15, M2) |
 |---|---|---|
-| Unit + property tests (math, config validation, account decoding, IDL layout cross-checks, Token-2022 checks) | `cargo test -p stockfloor` | 38 passed, 0 failed |
-| SBF build + IDL | `bash scripts/build-programs.sh -p stockfloor` | `target/deploy/stockfloor.so` (≈460 KB), `target/idl/stockfloor.json`, no warnings |
-| End-to-end smoke on the LiteSVM mainnet fork (real DBC 0.2.1, DAMM v2 0.2.4, Token-2022, SPYx + badge) | seed file `programs/stockfloor/fork-smoke/stockfloor-smoke.test.ts` (copy to `tests/integration/` and run `pnpm --filter @stockfloor/tests test`) | 43 checks passed: every instruction, every harvest, redeem math to the raw unit, events, return data, 23 rejection paths including paused SPYx |
+| Unit + property tests (math, config validation, account decoding, IDL layout cross-checks, Token-2022 checks, PDA and `Launch` layout) | `cargo test -p stockfloor` | 43 passed |
+| SBF build + IDL | `bash scripts/build-programs.sh -p stockfloor` | `target/deploy/stockfloor.so` 450,560 bytes (sha256 `580ecbee…`), `target/idl/stockfloor.json` |
+| Fork tests (LiteSVM + mainnet DBC 0.2.1, DAMM v2 0.2.4, Token-2022, SPYx, badges) | `pnpm --filter @stockfloor/tests test` | 13 files, 93 tests (§1.1) |
+| Everything | `pnpm test` | ALL STEPS PASSED |
 
-Compute units measured on the fork: `create_launch` ≈ 41–64k, `harvest_curve_fees` ≈ 66–75k (includes creating the Authority base ATA), `harvest_migration_fee` ≈ 35k, `harvest_lp_fees` ≈ 51–54k, `redeem` ≈ 26k.
+### 1.1 Fork test files
 
-The instruction-level integration and adversarial suite on the fork harness is owned by a later agent; the seed above is a starting point.
+| File | Tests | Covers |
+|---|---|---|
+| `tests/integration/c1-lifecycle.test.ts` | 20 | BRIEF §8 flow in order, exact amounts, FloorTracker after 26 steps |
+| `tests/integration/c1-adversarial.test.ts` | 17 | account substitution on every harvest (incl. the claimer and vault authority swapped), second pool, issuer controls, redemption edge cases, tracker self-check |
+| `tests/integration/review-regressions.test.ts` | 11 | M1 review findings (config shape, permissionless registration, migration latch, encumbered vault, floor view) |
+| `tests/integration/sdk-presets-fork.test.ts` | 7 | SDK presets × vault shares on the real programs, SDK negative codes vs DBC |
+| `tests/integration/instruction-errors.test.ts` | 7 | account and argument validation of `create_launch`, `register_pool`, `redeem`, `floor` (replaces the M1 smoke test) |
+| `tests/integration/vault-authority.test.ts` | 2 | the claimer never holds or controls the vault (harvest transactions, forged claimer signature) |
+| `tests/integration/redeem-splits.test.ts` | 3 | 200 tiny, 100 dust and interleaved redemptions at 200 bps vs exact pro-rata and the continuous bound |
+| `tests/integration/floor-property.test.ts` | 1 | fast-check, seed 20260915, 40 runs × 10–40 random actions, invariants after every action |
+| `tests/integration/lp-positions.test.ts` | 3 | a second position transferred to the claimer, an empty position, a both-token DAMM v2 pool (base fee burn) |
+| `tests/integration/compute-budget.test.ts` | 1 | the lifecycle with production CU limits (≤ 200,000 per transaction) |
+| `tests/spike/*.test.ts` | 21 | M1 spike program |
 
 ## 2. Code layout
 
 | File | Content |
 |---|---|
 | `lib.rs` | `declare_id!`, `declare_program!(dynamic_bonding_curve)`, `declare_program!(cp_amm)`, instruction dispatch |
-| `constants.rs` | seeds, limits, external program ids and PDAs (unit-tested against `find_program_address`) |
-| `state.rs` | `Launch` account, `FloorInfo` return type |
+| `constants.rs` | seeds (`LAUNCH_SEED`, `CLAIMER_SEED = "authority"`, `VAULT_AUTHORITY_SEED`), limits, external program ids and PDAs (unit-tested) |
+| `state.rs` | `Launch` (with `claimer_key()` / `vault_authority_key()` from the stored bumps), `FloorInfo` |
 | `math.rs` | pure redemption math, unit and property tests |
 | `external.rs` | read-only decoding of DBC `PoolConfig` / `VirtualPool` and DAMM v2 `Pool` / `Position`; `validate_launch_config` |
-| `token_utils.rs` | Token-2022 quote-mint checks (paused, transfer hook), frozen-vault check, burn helper |
+| `token_utils.rs` | Token-2022 quote-mint checks (paused, transfer hook), frozen-vault check, vault integrity check, burn helper |
 | `instructions/*.rs` | one file per instruction (`harvest_dbc_quote.rs` holds `harvest_migration_fee` and `harvest_surplus`) |
 | `errors.rs`, `events.rs` | custom errors and events |
 
-**External interfaces.** `declare_program!` compiles cleanly on Anchor 1.0.2 with `idls/dynamic_bonding_curve.json` and `idls/cp_amm.json`. It provides the CPI builders (`dynamic_bonding_curve::cpi::claim_trading_fee`, …) with the IDL discriminators and account order, and `bytemuck` layouts of the external accounts. Accounts are decoded by copying the body out with `bytemuck::try_pod_read_unaligned` after checking **owner program, exact length and discriminator** (so decoding never depends on the alignment of account data in the SBF input buffer). Tests assert that the generated sizes and field offsets match (a) values hand-computed from `vendor/dbc` / `vendor/damm-v2` and (b) offsets computed independently from the IDL JSON.
+**External interfaces.** `declare_program!` provides the CPI builders and `bytemuck` layouts from
+`idls/dynamic_bonding_curve.json` and `idls/cp_amm.json`. Accounts are decoded by copying the body
+out with `bytemuck::try_pod_read_unaligned` after checking the **owner program, a minimum length and
+the discriminator** (grown accounts are accepted; `ConfigWithTransferHook` / `TransferHookPool` are
+rejected by discriminator). Tests assert that generated sizes and field offsets match the vendored
+sources and offsets computed independently from the IDL JSON.
 
-**Dependencies.** `anchor-lang = "=1.0.2"` (feature `init-if-needed`), `anchor-spl = "=1.0.2"` (`token`, `token_2022`, `associated_token`), `bytemuck` (`derive`, `min_const_generics`); dev: `proptest`, `serde_json`. The anchor sub-crates were pinned to 1.0.2 in the workspace `Cargo.lock` with `cargo update -p <crate> --precise 1.0.2` (a caret requirement otherwise resolves them to 1.2.0).
+**Dependencies.** `anchor-lang = "=1.0.2"` (`init-if-needed`), `anchor-spl = "=1.0.2"` (`token`,
+`token_2022`, `associated_token`), `bytemuck`; dev: `proptest`, `serde_json`.
 
-## 3. Accounts and seeds
+## 3. Accounts, seeds and the two PDAs
 
-| Account | Seeds / derivation | Owner | Notes |
+| Account | Seeds / derivation | Owner | Role |
 |---|---|---|---|
 | `Launch` | `["launch", config]` | stockfloor | registry, created by `create_launch` |
-| `Authority` | `["authority", config]` | none (never created) | DBC `fee_claimer` and `leftover_receiver`; owns the vault, the Authority base ATA and the DAMM v2 position NFT; signs CPIs |
-| Vault | ATA(Authority, quote_mint, quote token program) | Token-2022 (SPYx) | floor backing; created (`init_if_needed`) by `create_launch` |
-| Authority base ATA | ATA(Authority, base_mint, SPL Token) | SPL Token | transit account for base tokens, always emptied (burned) in the same instruction; created `init_if_needed` by the base-receiving cranks |
+| **claimer** | `["authority", config]` | none (never created) | DBC `fee_claimer` and `leftover_receiver`; owner of the DAMM v2 position NFTs and of the claimer base ATA; signs the CPIs into DBC and DAMM v2 and the burns of its base tokens. **No authority over the vault.** |
+| **vault authority** | `["vault_authority", config]` | none (never created) | owner of the vault; signs exactly one thing: the payout `transfer_checked` in `redeem` |
+| vault | ATA(vault authority, quote mint, quote token program) | Token-2022 (SPYx) | floor backing; created `init_if_needed` by `create_launch`; Token-2022 ATAs carry `ImmutableOwner` |
+| claimer base ATA | ATA(claimer, base mint, SPL Token) | SPL Token | transit account for base tokens; always burned empty in the same instruction |
 
-`Launch` fields (Borsh, `8 + INIT_SPACE`): `version: u8`, `bump: u8`, `authority_bump: u8`, `exit_fee_bps: u16`, `migration_fee_harvested: bool`, `surplus_harvested: bool`, `config`, `creator`, `pool` (default until registered), `base_mint` (default until registered), `quote_mint`, `quote_token_program`, `vault`, `created_at: i64`, informational saturating counters `total_harvested_quote`, `total_burned_base`, `total_redeemed_base`, `total_redeemed_quote`, `total_exit_fees` (u64), `reserved: [u8; 64]`. No admin field exists.
+The seed of the claimer stays `"authority"` (it is what DBC configs name as `fee_claimer`); the SDK
+function is `authorityPda(config)`, and the IDL account is `claimer`. The SDK derives the vault
+authority with `vaultAuthorityPda(config)` and the vault with `vaultAddress(config, quoteMint,
+quoteTokenProgram)`.
+
+**Signer map.**
+
+| Signer | Signs | Never signs |
+|---|---|---|
+| claimer | DBC `claim_trading_fee`, `withdraw_migration_fee(0)`, `partner_withdraw_surplus`; DAMM v2 `claim_position_fee`; SPL `burn` from the claimer base ATA | anything touching the vault as authority (it is not the vault owner) |
+| vault authority | Token-2022 `transfer_checked` vault → holder in `redeem` | any CPI into DBC or DAMM v2 (it is not even an account of those transactions) |
+
+**`Launch` layout (version 2, `8 + 343` = 351 bytes, same size as version 1).** Borsh, offsets from
+the start of the account (useful for `getProgramAccounts` `memcmp` filters):
+
+| Offset | Field | Type | Notes |
+|---|---|---|---|
+| 0 | discriminator | `[u8; 8]` | `[144, 51, 51, 163, 206, 85, 213, 38]` |
+| 8 | `version` | u8 | 2 |
+| 9 | `bump` | u8 | Launch PDA bump |
+| 10 | `claimer_bump` | u8 | `["authority", config]` |
+| 11 | `vault_authority_bump` | u8 | `["vault_authority", config]` |
+| 12 | `exit_fee_bps` | u16 | ≤ 500, immutable |
+| 14 | `migration_fee_harvested` | bool | redemptions require it |
+| 15 | `surplus_harvested` | bool | |
+| 16 | `migrated` | bool | latched once DBC migration is observed |
+| 17 | `config` | Pubkey | DBC config |
+| 49 | `creator` | Pubkey | informational |
+| 81 | `pool` | Pubkey | default until `register_pool` |
+| 113 | `base_mint` | Pubkey | committed by `create_launch` |
+| 145 | `quote_mint` | Pubkey | |
+| 177 | `quote_token_program` | Pubkey | |
+| 209 | `vault` | Pubkey | |
+| 241 | `created_at` | i64 | |
+| 249 | `total_harvested_quote` | u64 | informational, saturating |
+| 257 | `total_burned_base` | u64 | |
+| 265 | `total_redeemed_base` | u64 | |
+| 273 | `total_redeemed_quote` | u64 | |
+| 281 | `total_exit_fees` | u64 | |
+| 289 | `reserved` | `[u8; 62]` | zero |
+
+No admin field exists.
 
 ## 4. Instructions
 
-All accounts are listed in IDL order. `w` = writable, `s` = signer. Constant addresses: DBC pool authority `FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM`, DBC event authority `8Ks12pbrD6PXxfty1hVQiE9sc289zgU1zHkvXhrSdriF`, DAMM v2 pool authority `HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC`, DAMM v2 event authority `3rmHSu74h1ZcmAisVcWerTCiRDQbUrBKmcwptYGjHfet`.
+Account lists are in IDL order (`target/idl/stockfloor.json`). `w` = writable, `s` = signer. Every
+`launch` account is checked with `seeds = ["launch", launch.config], bump = launch.bump`; every
+`claimer` with `seeds = ["authority", launch.config], bump = launch.claimer_bump`; every
+`vault_authority` with `seeds = ["vault_authority", launch.config], bump = launch.vault_authority_bump`.
 
-Every account that names a launch is checked with `seeds = ["launch", launch.config], bump = launch.bump`, and every Authority with `seeds = ["authority", launch.config], bump = launch.authority_bump`.
+Constant addresses: DBC pool authority `FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM`, DBC event
+authority `8Ks12pbrD6PXxfty1hVQiE9sc289zgU1zHkvXhrSdriF`, DAMM v2 pool authority
+`HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC`, DAMM v2 event authority
+`3rmHSu74h1ZcmAisVcWerTCiRDQbUrBKmcwptYGjHfet`, SPL Token `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA`,
+ATA program `ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL`, system program `11111111111111111111111111111111`.
 
 ### 4.1 `create_launch(exit_fee_bps: u16)`
 
-Accounts: `payer` (w, s), `creator` (s), `config` (**s**, the DBC config keypair), `authority`, `launch` (w, init), `quote_mint`, `vault` (w, init_if_needed ATA), `quote_token_program`, `associated_token_program`, `system_program`.
+| # | Account | Flags | Constraint |
+|---|---|---|---|
+| 0 | `payer` | w, s | rent for `launch` and `vault` |
+| 1 | `creator` | s | recorded (informational) |
+| 2 | `config` | **s** | the DBC config keypair |
+| 3 | `claimer` | | PDA `["authority", config]` |
+| 4 | `vault_authority` | | PDA `["vault_authority", config]` |
+| 5 | `launch` | w | init, PDA `["launch", config]` |
+| 6 | `quote_mint` | | mint of `quote_token_program` |
+| 7 | `base_mint` | | committed base mint (may not exist yet) |
+| 8 | `vault` | w | `init_if_needed` ATA(vault_authority, quote_mint, quote_token_program) |
+| 9 | `quote_token_program` | | Token or Token-2022 |
+| 10 | `associated_token_program` | | address |
+| 11 | `system_program` | | address |
 
-Checks (each has its own error, see §8): `config` owned by DBC, length `8 + 1040`, `PoolConfig` discriminator (rejects `ConfigWithTransferHook`); `exit_fee_bps <= 500`; `config.quote_mint == quote_mint`; `fee_claimer == Authority`; `leftover_receiver == Authority`; `creator_migration_fee_percentage == 0`; `migration_fee_percentage ∈ [30, 99]`; `partner_permanent_locked_liquidity_percentage == 100` and partner unlocked, creator unlocked and creator permanent-locked percentages `== 0`; partner and creator liquidity vesting `is_initialized == 0` and `vesting_percentage == 0`; locked vesting `amount_per_period == cliff_unlock_amount == number_of_period == 0`; `collect_fee_mode == QuoteToken (0)`; `migration_option == DammV2 (1)`; `token_type == SplToken (0)`. The quote token program is recorded from the quote mint's owner.
+Checks: `base_mint` not default and not the quote mint (`InvalidBaseMint`); config owned by DBC,
+`PoolConfig` discriminator (`InvalidDbcConfig`); `exit_fee_bps ≤ 500`; `config.quote_mint ==
+quote_mint`; `fee_claimer == claimer` (`FeeClaimerMismatch`); `leftover_receiver == claimer`
+(`LeftoverReceiverMismatch`); `creator_migration_fee_percentage == 0`; `migration_fee_percentage ∈
+[30, 99]`; partner permanent lock 100 and every other liquidity bucket 0; no liquidity vesting; no
+locked vesting; `collect_fee_mode == QuoteToken`; `migration_option == DammV2`; `token_type ==
+SplToken`; dynamic supply (`FixedTokenSupplyNotAllowed`); `creator_trading_fee_percentage ≤ 30`;
+base fee is a fee scheduler with cliff ≤ 20%; no dynamic fee; `migrated_collect_fee_mode ==
+QuoteToken`; `token_update_authority == Immutable`; `pool_creation_fee == 0`. After the vault init,
+the vault must be unencumbered with the vault authority as owner (a third party can pre-create the
+canonical ATA, never encumber it). Stores both bumps, `version = 2`.
 
-Why the config must sign: nothing in a DBC config identifies its creator, so without the signature anyone could front-run `create_launch` for a freshly created config and become `launch.creator`. The config keypair already signs `create_config`, so clients have it.
+Why the config must sign: nothing in a DBC config identifies its creator, so without the signature
+anyone could front-run `create_launch` for a fresh config.
 
-Event: `LaunchCreated`.
+Event: `LaunchCreated { launch, config, creator, claimer, vault_authority, quote_mint, base_mint,
+quote_token_program, vault, exit_fee_bps, migration_fee_percentage, migration_quote_threshold, created_at }`.
 
-### 4.2 `register_pool()`
+### 4.2 `register_pool()` — permissionless
 
-Accounts: `creator` (s, `== launch.creator`), `launch` (w), `config` (`== launch.config`), `pool`, `base_mint` (SPL Token mint), `token_program`.
+| # | Account | Flags | Constraint |
+|---|---|---|---|
+| 0 | `launch` | w | no pool yet (`PoolAlreadyRegistered`) |
+| 1 | `config` | | `== launch.config` |
+| 2 | `pool` | | DBC `VirtualPool` |
+| 3 | `base_mint` | | `== launch.base_mint` (`BaseMintMismatch`), SPL Token mint |
+| 4 | `token_program` | | SPL Token |
 
-Checks: launch has no pool yet; `pool` owned by DBC, length `8 + 416`, `VirtualPool` discriminator (rejects `TransferHookPool`); `pool.config == launch.config`; `pool.creator == launch.creator`; `pool.base_mint == base_mint`; `pool.pool_type == SplToken`; `base_mint.decimals == config.token_decimal`; `mint_authority == None` (DBC revokes it at pool creation; a live mint authority could mint and drain the vault); `freeze_authority == None`.
-
-Anyone can create pools on any DBC config (the fork confirms a stranger can create a second pool on ours). Requiring the launch creator's signature and `pool.creator == launch.creator` means only the creator chooses the canonical pool, once. Fees of other pools on the same config are never harvested: every crank pins `pool == launch.pool`.
-
-Event: `PoolRegistered`.
+Checks: `pool.config == launch.config` (`PoolConfigMismatch`); `pool.base_mint == base_mint`;
+`pool.pool_type == SplToken`; `base_mint.decimals == config.token_decimal`; no mint authority; no
+freeze authority. The committed base mint identifies the one DBC pool of the launch, so anyone can
+register it and the creator cannot withhold it. Event: `PoolRegistered`.
 
 ### 4.3 `harvest_curve_fees()` — permissionless
 
-Accounts: `payer` (w, s), `launch` (w), `authority`, `config`, `pool` (w, `== launch.pool`), `vault` (w, `== launch.vault`), `authority_base_account` (w, init_if_needed ATA), `dbc_base_vault` (w), `dbc_quote_vault` (w), `base_mint` (w, `== launch.base_mint`), `quote_mint` (`== launch.quote_mint`), `token_program` (SPL Token), `quote_token_program` (`== launch.quote_token_program`), `associated_token_program`, `system_program`, `dbc_pool_authority`, `dbc_event_authority`, `dbc_program`.
+| # | Account | Flags | Constraint |
+|---|---|---|---|
+| 0 | `payer` | w, s | rent for the claimer base ATA if missing |
+| 1 | `launch` | w | pool registered |
+| 2 | `claimer` | | PDA |
+| 3 | `config` | | `== launch.config` |
+| 4 | `pool` | w | `== launch.pool` (`InvalidDbcPool`) |
+| 5 | `vault` | w | `== launch.vault` |
+| 6 | `claimer_base_account` | w | `init_if_needed` ATA(claimer, base_mint, SPL Token) |
+| 7 | `dbc_base_vault` | w | validated by DBC |
+| 8 | `dbc_quote_vault` | w | validated by DBC |
+| 9 | `base_mint` | w | `== launch.base_mint` |
+| 10 | `quote_mint` | | `== launch.quote_mint` |
+| 11 | `token_program` | | SPL Token |
+| 12 | `quote_token_program` | | `== launch.quote_token_program` |
+| 13 | `associated_token_program` | | |
+| 14 | `system_program` | | |
+| 15 | `dbc_pool_authority` | | constant |
+| 16 | `dbc_event_authority` | | constant |
+| 17 | `dbc_program` | | constant |
 
-Flow: quote mint not paused and no active hook; vault not frozen; CPI DBC `claim_trading_fee(u64::MAX, u64::MAX)` with `token_a_account = authority_base_account`, `token_b_account = vault`, `fee_claimer = Authority`; burn the whole Authority base ATA balance; reload the vault and require it did not decrease. DBC validates the DBC vaults, mints and `pool.config` itself. With `collect_fee_mode = QuoteToken` the base part is always 0; the burn path is defensive. Callable at any time (fees from the completing buy accrue after earlier claims, so the crank should call it again after completion).
-
-Event: `CurveFeesHarvested { quote_amount, base_burned, vault_balance }` (amounts measured from balances).
+Flow: quote mint not paused, no active hook; vault not frozen; CPI DBC `claim_trading_fee(u64::MAX,
+u64::MAX)` signed by the claimer with `token_a_account = claimer_base_account`, `token_b_account =
+vault`; burn the claimer base ATA; the vault must be owned by the vault authority and unencumbered
+(`VaultEncumbered`) and must not have decreased (`VaultDecreased`). Event: `CurveFeesHarvested`.
 
 ### 4.4 `harvest_migration_fee()` and 4.5 `harvest_surplus()` — permissionless
 
-Shared accounts (`HarvestQuoteFromDbc`): `launch` (w), `authority`, `config`, `pool` (w, `== launch.pool`), `vault` (w, `== launch.vault`), `dbc_quote_vault` (w), `quote_mint`, `quote_token_program`, `dbc_pool_authority`, `dbc_event_authority`, `dbc_program`.
+| # | Account | Flags | Constraint |
+|---|---|---|---|
+| 0 | `launch` | w | pool registered |
+| 1 | `claimer` | | PDA |
+| 2 | `config` | | `== launch.config` |
+| 3 | `pool` | w | `== launch.pool` |
+| 4 | `vault` | w | `== launch.vault` |
+| 5 | `dbc_quote_vault` | w | validated by DBC |
+| 6 | `quote_mint` | | `== launch.quote_mint` |
+| 7 | `quote_token_program` | | `== launch.quote_token_program` |
+| 8 | `dbc_pool_authority` | | constant |
+| 9 | `dbc_event_authority` | | constant |
+| 10 | `dbc_program` | | constant |
 
-Flow: flag not set yet (`MigrationFeeAlreadyHarvested` / `SurplusAlreadyHarvested`); quote mint and vault checks; decode config and pool and require `quote_reserve >= migration_quote_threshold` (`CurveNotComplete`); CPI DBC `withdraw_migration_fee(flag = 0)` or `partner_withdraw_surplus` into the vault, signed by the Authority; reload vault; set the flag. DBC enforces the one-time bit as well (`migration_fee_withdraw_status & 0b100`, `is_partner_withdraw_surplus`). Neither requires a finished migration.
+Flow: flag not set (`MigrationFeeAlreadyHarvested` / `SurplusAlreadyHarvested`); quote mint and vault
+checks; `quote_reserve ≥ migration_quote_threshold` (`CurveNotComplete`); CPI DBC
+`withdraw_migration_fee(0)` / `partner_withdraw_surplus` into the vault, signed by the claimer; vault
+integrity and non-decrease; set the flag; latch `migrated` if the DBC pool is migrated. Events:
+`MigrationFeeHarvested`, `SurplusHarvested`.
 
-Events: `MigrationFeeHarvested`, `SurplusHarvested`.
+### 4.6 `burn_claimer_base()` — permissionless (replaces `harvest_leftover`)
 
-### 4.6 `harvest_leftover()` — permissionless
+| # | Account | Flags | Constraint |
+|---|---|---|---|
+| 0 | `launch` | w | PDA |
+| 1 | `claimer` | | PDA |
+| 2 | `claimer_base_account` | w | ATA(claimer, base_mint, SPL Token), must exist |
+| 3 | `base_mint` | w | `== launch.base_mint` |
+| 4 | `token_program` | | SPL Token |
 
-Accounts: `payer` (w, s), `launch` (w), `authority`, `config`, `pool` (w), `authority_base_account` (w, init_if_needed ATA), `dbc_base_vault` (w), `base_mint` (w), `token_program`, `associated_token_program`, `system_program`, `dbc_pool_authority`, `dbc_event_authority`, `dbc_program`.
-
-Flow: if `config.fixed_token_supply_flag == 1 && pool.migration_progress == CreatedPool && pool.is_withdraw_leftover == 0`, CPI DBC `withdraw_leftover` **without signer seeds** (DBC needs no signature; it pays the `leftover_receiver` ATA). Then burn everything the Authority base ATA holds (leftover, donations, dust). For the default dynamic-supply configs DBC rejects `withdraw_leftover`, so the instruction only burns what the ATA holds.
-
-Event: `LeftoverHarvested { leftover_withdrawn, base_burned }`.
+Burns the whole claimer base ATA balance (0 is a no-op) and adds it to `total_burned_base`. No
+external program, no DBC state, no pool registration needed. DBC `withdraw_leftover` only applies to
+fixed-supply configs, which `create_launch` rejects, so the M1 CPI branch was unreachable and is gone.
+Event: `ClaimerBaseBurned { launch, base_mint, base_burned }`.
 
 ### 4.7 `harvest_lp_fees()` — permissionless
 
-Accounts: `payer` (w, s), `launch` (w), `authority`, `damm_pool`, `position` (w), `position_nft_account` (`owner == Authority`, `amount == 1`), `authority_base_account` (w, init_if_needed ATA), `vault` (w), `damm_token_a_vault` (w), `damm_token_b_vault` (w), `base_mint` (w), `quote_mint`, `token_program`, `quote_token_program`, `associated_token_program`, `system_program`, `damm_pool_authority`, `damm_event_authority`, `damm_program`.
+| # | Account | Flags | Constraint |
+|---|---|---|---|
+| 0 | `payer` | w, s | rent for the claimer base ATA if missing |
+| 1 | `launch` | w | pool registered |
+| 2 | `claimer` | | PDA |
+| 3 | `damm_pool` | | DAMM v2 `Pool`, `token_a_mint == launch.base_mint`, `token_b_mint == launch.quote_mint` |
+| 4 | `position` | w | DAMM v2 `Position`, `position.pool == damm_pool` |
+| 5 | `position_nft_account` | | owner == claimer, amount == 1, mint == `position.nft_mint` (`PositionNftNotOwnedByClaimer`) |
+| 6 | `claimer_base_account` | w | `init_if_needed` ATA(claimer, base_mint, SPL Token) |
+| 7 | `vault` | w | `== launch.vault` |
+| 8 | `damm_token_a_vault` | w | validated by DAMM v2 |
+| 9 | `damm_token_b_vault` | w | validated by DAMM v2 |
+| 10 | `base_mint` | w | `== launch.base_mint` |
+| 11 | `quote_mint` | | `== launch.quote_mint` |
+| 12 | `token_program` | | SPL Token |
+| 13 | `quote_token_program` | | `== launch.quote_token_program` |
+| 14 | `associated_token_program` | | |
+| 15 | `system_program` | | |
+| 16 | `damm_pool_authority` | | constant |
+| 17 | `damm_event_authority` | | constant |
+| 18 | `damm_program` | | constant |
 
-Checks: `damm_pool` is a DAMM v2 `Pool` (owner, length `8 + 1104`, discriminator) with `token_a_mint == launch.base_mint` and `token_b_mint == launch.quote_mint`; `position` is a DAMM v2 `Position` (owner, `8 + 400`, discriminator) with `position.pool == damm_pool`; `position_nft_account.mint == position.nft_mint`. CPI DAMM v2 `claim_position_fee` with `token_a_account = authority_base_account`, `token_b_account = vault`, `signer = Authority`; burn base; reload vault.
-
-Any position held by the Authority on a pool with these mints qualifies (the migrated partner position, or a position someone gives to the Authority). The canonical DAMM v2 pool address is not recorded because DBC does not store it; harvesting another pool with the same mints can only add to the vault.
-
-Event: `LpFeesHarvested`.
+Flow: CPI DAMM v2 `claim_position_fee` signed by the claimer (NFT owner path), quote → vault, base →
+claimer base ATA; burn it; vault integrity and non-decrease. Any claimer-held position on a pool with
+these mints qualifies (the migrated position, a position transferred to the claimer, a position on a
+second pool with the same mints); the proceeds can only raise the floor. Event: `LpFeesHarvested`.
 
 ### 4.8 `redeem(amount: u64)`
 
-Accounts: `holder` (s), `launch` (w), `authority`, `pool` (`== launch.pool`), `base_mint` (w, `== launch.base_mint`, SPL Token), `holder_base_account` (w, mint = base, owner = holder), `vault` (w, `== launch.vault`), `holder_quote_account` (w, mint = quote, quote token program; any owner), `quote_mint` (`== launch.quote_mint`), `token_program`, `quote_token_program`.
+| # | Account | Flags | Constraint |
+|---|---|---|---|
+| 0 | `holder` | s | |
+| 1 | `launch` | w | pool registered |
+| 2 | `vault_authority` | | PDA, signs the payout |
+| 3 | `pool` | | `== launch.pool` (decoded only while `migrated` is false) |
+| 4 | `base_mint` | w | `== launch.base_mint`, SPL Token mint |
+| 5 | `holder_base_account` | w | mint = base, owner = holder, SPL Token |
+| 6 | `vault` | w | `== launch.vault` |
+| 7 | `holder_quote_account` | w | mint = quote, quote token program (any owner) |
+| 8 | `quote_mint` | | `== launch.quote_mint` |
+| 9 | `token_program` | | SPL Token |
+| 10 | `quote_token_program` | | `== launch.quote_token_program` |
 
 Flow:
-1. `amount > 0`; payout account is not the vault (Anchor's duplicate-mutable-account check fires first).
-2. DBC pool: `is_migrated == 1 && migration_progress == CreatedPool` (`MigrationNotComplete`); `launch.migration_fee_harvested` (`MigrationFeeNotHarvested`).
-3. Holder balance `>= amount`; quote mint not paused, no active hook; vault not frozen.
-4. `supply_before = base_mint.supply`, `vault_raw = vault.amount`; `compute_redeem` (§5), error `NothingToRedeem` when `net == 0`.
-5. Burn `amount` from the holder (holder signs), then `transfer_checked(net)` from the vault (Authority signs, quote decimals).
-6. Post-conditions on reloaded balances: `vault_after == vault_raw - net`, `supply_after == supply_before - amount`, floor non-decreasing (`vault_after * supply_before >= vault_raw * supply_after`).
+1. `amount > 0` (`ZeroAmount`); the payout account is not the vault (Anchor's duplicate-mutable check
+   fires first).
+2. Unless latched: the DBC pool is migrated (`MigrationNotComplete`), then latch `migrated`.
+   `migration_fee_harvested` (`MigrationFeeNotHarvested`).
+3. Holder balance ≥ amount; quote mint not paused, no active hook; vault not frozen.
+4. `compute_redeem(vault, supply, amount, bps)` (§5); `NothingToRedeem` when `net == 0`.
+5. Burn `amount` from the holder (holder signs); `transfer_checked(net)` vault → holder signed by the
+   vault authority.
+6. Post-conditions on reloaded balances: `vault_after == vault − net`, `supply_after == supply −
+   amount`, floor not decreased.
 
-Event: `Redeemed { base_amount, gross, fee, net, vault_before, supply_before, vault_after, supply_after }`.
+Event: `Redeemed { launch, holder, base_amount, gross, fee, net, vault_before, supply_before, vault_after, supply_after }`.
 
 ### 4.9 `floor()` — view
 
-Accounts: `launch`, `vault` (`== launch.vault`), `base_mint` (`== launch.base_mint`; before `register_pool` pass any account, e.g. the system program). Returns `FloorInfo { vault_raw: u64, supply: u64, exit_fee_bps: u16 }` as Anchor return data (Borsh, 18 bytes) and emits `FloorSnapshot`. `supply` is 0 before registration or after the whole supply was redeemed; the client computes the floor as `vault_raw / supply` only when `supply > 0`. Use `simulateTransaction`.
+| # | Account | Constraint |
+|---|---|---|
+| 0 | `launch` | PDA |
+| 1 | `vault` | `== launch.vault` |
+| 2 | `base_mint` | `== launch.base_mint` once registered (`FloorAccountMismatch`); before registration any account |
+
+Returns `FloorInfo { vault_raw: u64, supply: u64, exit_fee_bps: u16, floor_q64: u128 }` as return
+data (34 bytes, little endian) and emits `FloorSnapshot`. `supply` is 0 before registration;
+`floor_q64 = (vault_raw << 64) / supply`, 0 when the supply is 0. Use `simulateTransaction`.
+
+### 4.10 Compute units
+
+Measured on the fork with explicit limits (`compute-budget.test.ts`, six runs with random keys; the
+spread comes from PDA / ATA bump searches). Recommended limits are what the test enforces.
+
+| Transaction | Measured CU | Limit |
+|---|---|---|
+| `create_launch` | 46,276–71,776 | 120,000 |
+| `register_pool` | 7,282 | 20,000 |
+| `harvest_curve_fees` (creates the claimer base ATA) | 68,203–72,703 | 100,000 |
+| `harvest_curve_fees` | 51,107–52,607 | 80,000 |
+| `harvest_migration_fee` | 37,384 | 60,000 |
+| `harvest_surplus` | 37,390 | 60,000 |
+| `burn_claimer_base` (empty) | 11,791–13,291 | 25,000 |
+| SPL transfer + `burn_claimer_base` | 13,733–15,233 | 30,000 |
+| `harvest_lp_fees` | 53,356–54,856 | 100,000 |
+| `floor` | 5,385 | 15,000 |
+| `redeem` | 25,977–25,978 | 40,000 |
+
+DBC and DAMM v2 transactions of the same lifecycle are in `docs/research/c1-evidence.md`
+(`migration_damm_v2` 151,921–160,921 CU, limit 200,000).
 
 ## 5. Math (`math.rs`)
 
@@ -129,53 +334,84 @@ fee   = ceil(gross * bps / 10_000)
 net   = gross - fee                 error if net == 0
 ```
 
-`V` vault raw, `S` supply raw, `A` amount burned, `f = bps / 10_000`. Every operation is checked; `gross` rounds down and `fee` rounds up, both in the vault's favour. Inputs are validated (`A > 0`, `S > 0`, `A <= S`, `bps <= 10_000`); the program caps `bps` at 500.
+`V` vault raw, `S` supply raw, `A` amount burned, `f = bps / 10_000`. Every operation is checked;
+`gross` rounds down and `fee` rounds up, both in the vault's favour. Inputs are validated (`A > 0`,
+`S > 0`, `A ≤ S`, `bps ≤ 10_000`); the program caps `bps` at 500.
 
-**Floor monotonicity.** `(V − net)·S − V·(S − A) = V·A − net·S ≥ V·A − gross·S ≥ 0`, strictly positive when `fee > 0`. So `V/S` never decreases, and strictly increases when a fee is charged (and supply remains).
+**Floor monotonicity.** `(V − net)·S − V·(S − A) = V·A − net·S ≥ V·A − gross·S ≥ 0`, strictly
+positive when `fee > 0`. So `V/S` never decreases, and strictly increases when a fee is charged.
 
-**Splitting a redemption.** With `bps = 0`, any split of `A` into sequential redemptions receives at most the single redemption of `A`: after the steps `V_k/S_k ≥ V/S`, hence `T = V − V_k ≤ V·(S − S_k)/S = V·A/S`, and `T` is an integer so `T ≤ floor(V·A/S)`.
+**Splitting a redemption.** With `bps = 0`, any split of `A` receives at most the single redemption
+of `A` (`T ≤ floor(V·A/S)` from monotonicity). With `bps > 0`, sequential small redemptions
+legitimately receive slightly more than one large redemption: each retained fee raises the floor for
+the remaining tokens, including the redeemer's. The bounds that hold:
+- each step: `net·S_k·10_000 ≤ V_k·a_k·(10_000 − bps)`;
+- total: `T ≤ floor(V·A/S)`;
+- total: `T ≤ V·(1 − ((S − A)/S)^(1 − f))` (continuous limit; Bernoulli's inequality per step).
 
-With `bps > 0`, sequential small redemptions **legitimately receive slightly more in total than one large redemption**: the fee retained at each step raises the floor for the remaining tokens, including the redeemer's own. This is fee redistribution, not a rounding leak. The bounds that do hold (and are property tested):
-- each step: `net·S_k·10_000 ≤ V_k·a_k·(10_000 − bps)` (exact 256-bit comparison in the tests);
-- total: `T ≤ floor(V·A/S)` (fee-free pro-rata; follows from monotonicity as above);
-- total: `T ≤ V·(1 − ((S − A)/S)^(1 − f))`, the continuous limit of infinitely many infinitesimal redemptions. Discrete steps leave `V_{k+1} ≥ V_k·(1 − (1 − f)·a_k/S_k) ≥ V_k·((S_k − a_k)/S_k)^(1 − f)` by Bernoulli's inequality (`(1 − x)^r ≤ 1 − r·x` for `r ∈ [0, 1]`), so the vault after any split is at least the continuous-limit vault. The test uses `f64` with values below 2^53 and a relative tolerance of 1e-9.
-
-Tests (`cargo test -p stockfloor math`): exact formula table, rounding edge cases, zero-net rejection, entire-supply redemption (with and without fee), `u64::MAX` overflow cases, donation monotonicity, deterministic split scenarios, and proptest properties (4096 cases each): exact formula, floor monotonic (strict with fee), per-step rational bound, monotonic in amount, split-never-beats-single at 0 fee (full u64 and dense small ranges), split-with-fee bounded by fee-free pro-rata and the continuous limit, Q64 floor consistency, donations never hurt.
+Rust property tests (4,096 cases each) cover the formula, monotonicity, per-step bound, split bounds,
+Q64 floor and donations. On the fork (`redeem-splits.test.ts`), 200 tiny redemptions of 454,647,307,743
+raw base each paid 5,857,466 raw in total: below the continuous bound 5,857,686.45 and the fee-free
+pro-rata 5,971,625, and 5,274 raw more than one redemption of the same total on a replayed fork.
 
 ## 6. Invariants and enforcement
 
-| Invariant (BRIEF §5.4) | Enforcement |
-|---|---|
-| Quote leaves the vault only through `redeem`; no admin, withdraw or sweep | The only Authority-signed transfer out of the vault is in `redeem`; no other instruction takes the vault as a source. Harvests reload the vault and fail with `VaultDecreased` if it shrank. |
-| Floor after `redeem` ≥ before (strict with fee) | Math proof + property tests; runtime post-condition on reloaded balances (`FloorDecreased`, `VaultBalanceMismatch`, `SupplyMismatch`). |
-| Rounding never favours the redeemer | floor/ceil choices; property tests (§5). |
-| `redeem` accepts only the registered base mint and pays only from that launch's vault | `address = launch.base_mint`, `address = launch.vault`, `address = launch.quote_mint`, launch PDA seeds; fork smoke rejects wrong mint, vault and pool. |
-| Vault quote mint == config quote mint | `create_launch` checks `config.quote_mint == quote_mint` and derives the vault as the ATA for that mint; later instructions pin `launch.vault` / `launch.quote_mint`. |
-| Base tokens the program holds are burned in the same instruction | `burn_all_signed` empties the Authority base ATA in every base-receiving crank. |
-| Donations only raise the floor | Math (property `donation_never_hurts`); donated base tokens sent to the Authority base ATA are burned by the next crank (fork smoke). |
-| No price oracle | The math uses only `vault.amount` and `mint.supply`. |
-| Paused quote mint: clean failure, no corruption | `QuoteMintPaused` pre-check in redeem and every quote-moving harvest; atomic transactions (fork smoke: balances unchanged). |
-| Future transfer hook fails cleanly | `QuoteMintTransferHookUnsupported` pre-check when the hook program id is non-null (SPYx today: extension present, program id null → allowed). |
-| Migration fee harvested once | Program flag + DBC status bit (fork smoke: `MigrationFeeAlreadyHarvested`). |
+| Invariant (BRIEF §5.4) | Enforcement | Fork evidence |
+|---|---|---|
+| Quote leaves the vault only through `redeem`; no admin, withdraw or sweep | The only transfer out of the vault is `redeem`'s, signed by the vault authority; no other instruction includes the vault authority; harvests fail with `VaultDecreased` if the vault shrank | FloorTracker in every suite; `vault-authority.test.ts`; `floor-property.test.ts` |
+| The claimer never holds or controls the vault | Separate PDA owns the vault; post-CPI `VaultEncumbered` check (owner, delegate, close authority, CPI Guard, memo) | `vault-authority.test.ts` (forged claimer signature rejected by Token-2022), tracker checks owner / delegate / close authority after every step |
+| Floor after `redeem` ≥ before (strict with fee) | Math proof, property tests, runtime post-condition | all suites; property test |
+| Rounding never favours the redeemer | floor/ceil; per-step rational bound | `redeem-splits.test.ts` (tiny, dust, interleaved) |
+| `redeem` accepts only the registered base mint and pays only from that launch's vault | `address` constraints, PDA seeds | `instruction-errors.test.ts`, `c1-adversarial.test.ts` |
+| Vault quote mint == config quote mint | `create_launch` checks, vault derived for that mint | `instruction-errors.test.ts` (`QuoteMintMismatch`) |
+| Base tokens the program holds are burned in the same instruction | `burn_all_signed` in `harvest_curve_fees`, `harvest_lp_fees`, `burn_claimer_base` | lifecycle 8f, `lp-positions.test.ts` (both-token pool: base fee burned exactly) |
+| Donations only raise the floor | math; SPYx donations and base donations + burn | edge cases, property test |
+| No price oracle | only `vault.amount` and `mint.supply` | |
+| Paused quote mint: clean failure | `QuoteMintPaused` pre-check, atomic transactions | issuer-controls test |
+| Future transfer hook fails cleanly | `QuoteMintTransferHookUnsupported` pre-check | issuer-controls test |
+| Migration fee harvested once | program flag + DBC status bit | lifecycle 8c |
 
-## 7. Security analysis
+## 7. Security model
 
-- **Account substitution.** External accounts are decoded only after owner, exact size and discriminator checks. Launch-bound accounts use `address =` constraints against `Launch` fields; `Launch` itself is bound by PDA seeds. Fake configs (wrong owner or type), `TransferHookPool`/`ConfigWithTransferHook`, fake DAMM pools and positions are rejected with specific errors. DBC and DAMM v2 additionally validate their own vaults, mints and pool relationships (`has_one`).
-- **PDA signer scope.** The Authority signs exactly four external instructions, and in each the destination accounts are constrained by this program: DBC `claim_trading_fee` (quote → `launch.vault`, base → Authority base ATA), `withdraw_migration_fee` and `partner_withdraw_surplus` (→ `launch.vault`), DAMM v2 `claim_position_fee` (quote → `launch.vault`, base → Authority base ATA); plus SPL `burn` from its own base ATA and Token-2022 `transfer_checked` from the vault in `redeem`. DBC `withdraw_leftover` is invoked without signer seeds. DBC `claim_trading_fee` does not constrain destination owners itself, so these constraints are load-bearing. The CPI program ids are constants.
-- **Rogue pools / front-running.** `create_launch` requires the config keypair's signature; `register_pool` requires the launch creator's signature and `pool.creator == launch.creator`; all cranks pin `launch.pool`.
+- **Two PDAs, least privilege.** DBC and DAMM v2 are upgradeable by Meteora. Whatever they receive
+  through a CPI (the claimer's signer privilege and the writable vault as a destination) cannot move
+  the floor backing: the vault's owner is the vault authority, which never appears in those
+  transactions. Token-2022 rejects a transfer, burn, approve or set-authority on the vault signed by
+  the claimer with `OwnerMismatch`, and the vault ATA is `ImmutableOwner` (proven on the fork with a
+  forged claimer signature). A compromised external program could still fail harvests or keep its
+  own funds (fees, migration fee) away from the vault; it cannot drain what is already there.
+- **Defence in depth.** After every CPI with the vault writable, the vault must still be owned by the
+  vault authority, with no delegate, no close authority, no CPI Guard and no required memos, and its
+  balance must not have decreased.
+- **Account substitution.** External accounts are decoded after owner, length and discriminator
+  checks; launch-bound accounts use `address =` constraints; both PDAs use stored bumps. Swapping the
+  claimer and the vault authority, or using another launch's PDAs, fails with `ConstraintSeeds`
+  (or an earlier Anchor/runtime error) on every instruction that takes them (fork tests).
+- **Destinations.** DBC `claim_trading_fee`, `withdraw_migration_fee`, `partner_withdraw_surplus` and
+  DAMM v2 `claim_position_fee` (owner path) do not constrain the destination owner, so the program
+  constrains them: quote → `launch.vault`, base → the claimer's canonical base ATA.
+- **Rogue pools / front-running.** `create_launch` requires the config signature and commits the base
+  mint; `register_pool` accepts only that mint's pool; every crank pins `launch.pool`.
 - **Double harvest.** Program flags plus DBC's one-time bits.
-- **Reentrancy.** Solana forbids indirect reentrancy (A → B → A). Accounts read after CPIs are reloaded (`vault.reload()`, `base_mint.reload()`); DBC/DAMM accounts are decoded into owned copies before CPIs, so no `RefCell` borrow is held across a CPI.
-- **Rent / ATA spoofing.** The vault and the Authority base ATA are canonical ATAs (address derived from owner, mint, token program) and are created with `init_if_needed`, so a third party pre-creating them cannot block anything and cannot substitute a different account. Token-2022 ATAs carry `ImmutableOwner`.
+- **Reentrancy.** Solana forbids A → B → A. Accounts read after CPIs are reloaded; DBC/DAMM state is
+  decoded into owned copies before CPIs.
+- **ATA spoofing.** The vault and the claimer base ATA are canonical ATAs (`init_if_needed` or an
+  address constraint); a pre-created ATA cannot be substituted or encumbered.
 - **Mint authority.** `register_pool` requires the base mint to have no mint and no freeze authority.
-- **Token-2022 quote specifics.** Raw amounts only (ScaledUiAmount multiplier changes never affect the math); `transfer_checked` with the mint's decimals; paused mint and active hook pre-checked; frozen vault pre-checked (`VaultFrozen`). The issuer's PermanentDelegate can move tokens out of the vault; `redeem` always uses the live vault balance, so it stays pro-rata, but the floor would drop. This is an issuer risk to disclose, not something the program can prevent.
+- **Token-2022 quote.** Raw amounts only (ScaledUiAmount changes never affect the math);
+  `transfer_checked`; paused mint, active hook and frozen vault pre-checked.
+- **DBC upgrades after migration.** `Launch.migrated` latches; `redeem` then never decodes DBC state.
+- **Issuer powers (not preventable).** SPYx's permanent delegate can move vault tokens, the issuer can
+  pause or freeze. Disclose.
+- **Our upgrade authority** must be revoked before production (user decision, hard stop).
 
 ## 8. Errors
 
 | Code | Name | Message |
 |---|---|---|
 | 6000 | `InvalidDbcConfig` | Config account is not a DBC PoolConfig (wrong owner, discriminator or size) |
-| 6001 | `FeeClaimerNotAuthority` | DBC config fee_claimer must be the launch Authority PDA |
-| 6002 | `LeftoverReceiverNotAuthority` | DBC config leftover_receiver must be the launch Authority PDA |
+| 6001 | `FeeClaimerMismatch` | DBC config fee_claimer must be the launch claimer PDA (seeds: authority, config) |
+| 6002 | `LeftoverReceiverMismatch` | DBC config leftover_receiver must be the launch claimer PDA (seeds: authority, config) |
 | 6003 | `CreatorMigrationFeeNotZero` | DBC config creator_migration_fee_percentage must be 0 |
 | 6004 | `MigrationFeePercentageOutOfRange` | DBC config migration_fee_percentage must be within [30, 99] |
 | 6005 | `LiquidityNotFullyPartnerLocked` | DBC config must lock 100% of migrated liquidity permanently for the partner |
@@ -186,73 +422,113 @@ Tests (`cargo test -p stockfloor math`): exact formula table, rounding edge case
 | 6010 | `BaseTokenTypeNotSplToken` | DBC config base token type must be SPL Token |
 | 6011 | `ExitFeeTooHigh` | Exit fee exceeds the 500 bps cap |
 | 6012 | `QuoteMintMismatch` | Quote mint does not match the DBC config quote mint |
-| 6013 | `InvalidDbcPool` | Pool account is not a DBC VirtualPool (wrong owner, discriminator or size) |
-| 6014 | `PoolAlreadyRegistered` | A pool is already registered for this launch |
-| 6015 | `PoolNotRegistered` | No pool is registered for this launch yet |
-| 6016 | `PoolConfigMismatch` | DBC pool belongs to a different config |
-| 6017 | `PoolCreatorMismatch` | DBC pool creator is not the launch creator |
-| 6018 | `BaseMintMismatch` | Base mint does not match the DBC pool base mint |
-| 6019 | `PoolTypeNotSplToken` | DBC pool base token must be SPL Token |
-| 6020 | `BaseMintDecimalsMismatch` | Base mint decimals do not match the DBC config |
-| 6021 | `BaseMintAuthorityNotRevoked` | Base mint still has a mint authority |
-| 6022 | `BaseMintHasFreezeAuthority` | Base mint has a freeze authority |
-| 6023 | `CurveNotComplete` | DBC curve is not complete yet |
-| 6024 | `MigrationFeeAlreadyHarvested` | Migration fee was already harvested |
-| 6025 | `SurplusAlreadyHarvested` | Surplus was already harvested |
-| 6026 | `InvalidDammPool` | Account is not a DAMM v2 Pool |
-| 6027 | `InvalidDammPosition` | Account is not a DAMM v2 Position |
-| 6028 | `PositionPoolMismatch` | Position belongs to a different DAMM v2 pool |
-| 6029 | `DammPoolMintMismatch` | DAMM v2 pool mints must be (launch base mint, launch quote mint) |
-| 6030 | `PositionNftNotOwnedByAuthority` | Position NFT account is not owned by the launch Authority or does not hold the position NFT |
-| 6031 | `VaultDecreased` | Vault balance decreased during a harvest |
-| 6032 | `MigrationNotComplete` | DBC pool migration to DAMM v2 is not complete |
-| 6033 | `MigrationFeeNotHarvested` | Migration fee must be harvested before redemptions open |
-| 6034 | `ZeroAmount` | Amount must be greater than zero |
-| 6035 | `InsufficientBaseBalance` | Insufficient base token balance |
-| 6036 | `ZeroSupply` | Base mint supply is zero |
-| 6037 | `NothingToRedeem` | Redemption would pay nothing (net amount is zero) |
-| 6038 | `InvalidFeeBps` | Invalid exit fee basis points |
-| 6039 | `MathOverflow` | Arithmetic overflow |
-| 6040 | `VaultBalanceMismatch` | Vault balance after redemption does not match the expected amount |
-| 6041 | `SupplyMismatch` | Base mint supply after burn does not match the expected amount |
-| 6042 | `FloorDecreased` | Floor per token would decrease |
-| 6043 | `DestinationIsVault` | The payout destination cannot be the vault |
-| 6044 | `QuoteMintPaused` | Quote mint is paused by its issuer |
-| 6045 | `QuoteMintTransferHookUnsupported` | Quote mint has an active transfer hook, which is not supported |
-| 6046 | `VaultFrozen` | Vault token account is frozen |
-| 6047 | `InvalidQuoteMintData` | Invalid Token-2022 mint data |
-| 6048 | `InvalidTokenAccountData` | Invalid token account data |
-| 6049 | `FloorAccountMismatch` | Base mint account does not match the launch |
+| 6013 | `FixedTokenSupplyNotAllowed` | DBC config must use dynamic token supply (fixed supply is not supported) |
+| 6014 | `CreatorTradingFeeTooHigh` | DBC config creator_trading_fee_percentage exceeds 30 |
+| 6015 | `CurveFeeTooHigh` | DBC config base fee must be a fee scheduler with a cliff fee of at most 20% |
+| 6016 | `DynamicFeeNotAllowed` | DBC config must not enable the dynamic (volatility) fee |
+| 6017 | `MigratedCollectFeeModeNotQuote` | DBC config migrated_collect_fee_mode must be QuoteToken |
+| 6018 | `TokenUpdateAuthorityNotImmutable` | DBC config token_update_authority must be Immutable |
+| 6019 | `PoolCreationFeeNotZero` | DBC config pool_creation_fee must be 0 |
+| 6020 | `InvalidBaseMint` | Base mint must not be the default pubkey or the quote mint |
+| 6021 | `InvalidDbcPool` | Pool account is not a DBC VirtualPool (wrong owner, discriminator or size) |
+| 6022 | `PoolAlreadyRegistered` | A pool is already registered for this launch |
+| 6023 | `PoolNotRegistered` | No pool is registered for this launch yet |
+| 6024 | `PoolConfigMismatch` | DBC pool belongs to a different config |
+| 6025 | `BaseMintMismatch` | Base mint does not match the DBC pool base mint |
+| 6026 | `PoolTypeNotSplToken` | DBC pool base token must be SPL Token |
+| 6027 | `BaseMintDecimalsMismatch` | Base mint decimals do not match the DBC config |
+| 6028 | `BaseMintAuthorityNotRevoked` | Base mint still has a mint authority |
+| 6029 | `BaseMintHasFreezeAuthority` | Base mint has a freeze authority |
+| 6030 | `CurveNotComplete` | DBC curve is not complete yet |
+| 6031 | `MigrationFeeAlreadyHarvested` | Migration fee was already harvested |
+| 6032 | `SurplusAlreadyHarvested` | Surplus was already harvested |
+| 6033 | `InvalidDammPool` | Account is not a DAMM v2 Pool |
+| 6034 | `InvalidDammPosition` | Account is not a DAMM v2 Position |
+| 6035 | `PositionPoolMismatch` | Position belongs to a different DAMM v2 pool |
+| 6036 | `DammPoolMintMismatch` | DAMM v2 pool mints must be (launch base mint, launch quote mint) |
+| 6037 | `PositionNftNotOwnedByClaimer` | Position NFT account is not owned by the launch claimer PDA or does not hold the position NFT |
+| 6038 | `VaultDecreased` | Vault balance decreased during a harvest |
+| 6039 | `VaultEncumbered` | Vault token account has a delegate, close authority, an owner other than the vault authority, CPI guard or required memo |
+| 6040 | `MigrationNotComplete` | DBC pool migration to DAMM v2 is not complete |
+| 6041 | `MigrationFeeNotHarvested` | Migration fee must be harvested before redemptions open |
+| 6042 | `ZeroAmount` | Amount must be greater than zero |
+| 6043 | `InsufficientBaseBalance` | Insufficient base token balance |
+| 6044 | `ZeroSupply` | Base mint supply is zero |
+| 6045 | `NothingToRedeem` | Redemption would pay nothing (net amount is zero) |
+| 6046 | `InvalidFeeBps` | Invalid exit fee basis points |
+| 6047 | `MathOverflow` | Arithmetic overflow |
+| 6048 | `VaultBalanceMismatch` | Vault balance after redemption does not match the expected amount |
+| 6049 | `SupplyMismatch` | Base mint supply after burn does not match the expected amount |
+| 6050 | `FloorDecreased` | Floor per token would decrease |
+| 6051 | `DestinationIsVault` | The payout destination cannot be the vault |
+| 6052 | `QuoteMintPaused` | Quote mint is paused by its issuer |
+| 6053 | `QuoteMintTransferHookUnsupported` | Quote mint has an active transfer hook, which is not supported |
+| 6054 | `VaultFrozen` | Vault token account is frozen |
+| 6055 | `InvalidQuoteMintData` | Invalid Token-2022 mint data |
+| 6056 | `InvalidTokenAccountData` | Invalid token account data |
+| 6057 | `FloorAccountMismatch` | Base mint account does not match the launch |
 
-Anchor built-in errors also appear for account-constraint failures (for example `ConstraintAddress` for a wrong vault, `AccountNotSigner` for a missing config signature, `ConstraintDuplicateMutableAccount` when the payout account is the vault).
+M2 renamed 6001, 6002 and 6037 (codes unchanged). Anchor built-in errors also appear for constraint
+failures, for example `ConstraintSeeds` (a substituted PDA), `ConstraintAddress` (a wrong vault),
+`AccountNotSigner` (no config signature), `ConstraintDuplicateMutableAccount` (payout into the vault),
+`ConstraintTokenOwner` / `ConstraintAssociated` (a wrong claimer base account), and the runtime
+`MissingAccount` when an `init_if_needed` ATA for a substituted owner is not in the transaction.
 
-## 9. Findings from the DBC / DAMM v2 sources vs the brief
+## 9. Findings from the DBC / DAMM v2 sources
 
-1. **DBC 0.2.1 has transfer-hook variants.** `ConfigWithTransferHook` (1120 bytes) and `TransferHookPool` share layouts with `PoolConfig` / `VirtualPool` but have different discriminators. The program accepts only `PoolConfig` and `VirtualPool` (SPL base token).
-2. **`withdraw_leftover` also requires a fixed-supply config** (`config.is_fixed_token_supply()`), in addition to `migration_progress == CreatedPool`. With the default dynamic supply it always fails, which is why `harvest_leftover` skips the CPI in that case (and DBC burns the unsold buffer at migration).
-3. **Partner surplus share** is `80% × surplus × (100 − creator_trading_fee_percentage)%`: the creator percentage is the *trading* fee percentage (30 by default), not the migration fee percentage. With DBC 0.2.1 buys stopping at the migration price, the surplus is rounding dust.
-4. **"100% partner permanent lock" can still create a small creator position.** In `migration_damm_v2`, leftover migration liquidity (rounding) goes to a second position owned by the pool creator, unlocked because the creator's locked percentage is 0. It is dust-level and did not occur on the fork run.
-5. **`claim_trading_fee` does not constrain `token_a_account` / `token_b_account` owner or mint.** Destinations must be constrained by the caller (done).
-6. **DAMM v2 0.2.4 `claim_position_fee` has delegate paths** (`PositionDelegatePermission`). The Authority is the NFT owner, so the owner path applies; the program never sets delegates.
-7. **The migration fee is based on the threshold, not the reserve,** and is claimable once the curve is complete, before migration. `redeem` is therefore gated on both the DBC migration status and the program flag.
-8. **Mint and freeze authority.** `initialize_virtual_pool_with_spl_token` creates the mint with no freeze authority and revokes the mint authority in the same instruction; `register_pool` verifies both.
-9. Not enforced by the program (config-builder responsibility, harmless to the floor): `token_update_authority` (Immutable in the SDK), `pool_creation_fee` (a non-zero fee would pay SOL to the Authority PDA with no way to move it), `migrated_collect_fee_mode` (OnlyB recommended; with BothToken the base side is burned; Compounding would leave no claimable LP fees), trading fee schedule, activation type.
+1. **Transfer-hook variants.** `ConfigWithTransferHook` and `TransferHookPool` share layouts with
+   `PoolConfig` / `VirtualPool` but have other discriminators; only the SPL variants are accepted.
+2. **`withdraw_leftover` requires a fixed-supply config**; with dynamic supply DBC burns the unsold
+   buffer at migration. Hence no leftover CPI (`burn_claimer_base`).
+3. **Partner surplus share** is `80% × surplus × (100 − creator_trading_fee_percentage)%`. With
+   DBC 0.2.1 buys stopping at the migration price, the surplus is rounding dust.
+4. **"100% partner permanent lock" can still create a small creator position** from rounding in
+   `migration_damm_v2`; not observed on the fork.
+5. **Destination accounts are unconstrained** in DBC `claim_trading_fee`, `withdraw_migration_fee`,
+   `partner_withdraw_surplus` (plain `InterfaceAccount<TokenAccount>`, no owner or mint constraint)
+   and in DAMM v2 `claim_position_fee` on the NFT-owner path (`assert_authority_with_owner_destinations`
+   returns before checking destinations when the signer owns the NFT account). This is what lets the
+   claimer sign while the vault authority owns the destination; the fork confirms it on the deployed
+   binaries.
+6. **DAMM v2 0.2.4 has position delegates** (`PositionDelegatePermission`); the claimer is the NFT owner,
+   so the owner path applies; the program never sets delegates.
+7. **The migration fee is based on the threshold** and is claimable once the curve is complete, before
+   migration; `redeem` is gated on both the DBC migration status (latched) and the program flag.
+8. **Mint and freeze authority** are revoked / absent after DBC pool creation; `register_pool` checks.
+9. **DAMM v2 position NFTs are transferable** Token-2022 NFTs (metadata pointer and close authority
+   extensions, no non-transferable extension); `create_position` accepts any `owner`, so anyone can
+   give the claimer a position.
 
 ## 10. Known limitations
 
-- **Quote-mint transfer hooks are not supported.** If the issuer activates a hook, redemptions and harvests fail with `QuoteMintTransferHookUnsupported` until a program upgrade adds hook account forwarding. Nothing is lost; the vault stays intact.
-- **Issuer controls.** Pause (clean failure, retry after unpause), freeze of the vault (`VaultFrozen`), permanent delegate transfers out of the vault (floor drops), default-frozen accounts (would freeze a new vault). Disclose.
-- **Base tokens in non-ATA accounts owned by the Authority** cannot be burned by the cranks (only the canonical Authority base ATA is emptied). Such tokens stay in the supply, which lowers the floor slightly; nobody can move them.
-- **`mint.supply` includes non-redeemable tokens** (base in the DAMM v2 pool, the 0.2% protocol migration base fee in the DBC vault). The floor `vault / supply` is conservative.
-- **The canonical DAMM v2 pool is not recorded.** `harvest_lp_fees` accepts any DAMM v2 pool with mints (base, quote) and an Authority-owned position; extra proceeds only raise the floor.
-- **Harvesting fees of other pools on the same config is not possible** by design; their partner fees stay in DBC forever.
-- **Lamports sent to the Authority** (for example a non-zero DBC pool creation fee claimed by the partner) cannot be moved.
-- **Counters in `Launch` are informational** (saturating) and may lag if tokens reach the vault by donation.
-- **Upgrade authority** must be revoked before production (user decision, hard stop).
+- **Quote-mint transfer hooks are not supported.** If the issuer activates one, redemptions and
+  harvests fail with `QuoteMintTransferHookUnsupported` until an upgrade forwards hook accounts.
+- **Issuer controls.** Pause, freeze of the vault, permanent-delegate transfers out of the vault (the
+  floor drops), default-frozen accounts. Disclose.
+- **Stuck assets outside the vault.** Quote tokens sent to any account other than the vault (for
+  example ATA(claimer, SPYx)), base tokens in non-ATA accounts owned by the claimer, lamports sent to
+  either PDA, and liquidity in positions given to the claimer cannot be moved by anyone. Liquidity
+  stays in DAMM v2 (it deepens the market), its fees are harvestable.
+- **`burn_claimer_base` needs the claimer base ATA to exist** (it does after the first
+  `harvest_curve_fees`; a donor creates it when transferring).
+- **`mint.supply` includes non-redeemable tokens** (base in DAMM v2 pools, the protocol migration base
+  fee in the DBC vault), so `vault / supply` is conservative.
+- **The canonical DAMM v2 pool is not recorded.** `harvest_lp_fees` accepts any DAMM v2 pool with mints
+  (base, quote) and a claimer-held position; extra proceeds only raise the floor.
+- **Fees of other DBC pools on the same config** are never harvested (by design).
+- **Counters in `Launch` are informational** (saturating, not updated by donations).
+- **Upgrade authority** must be revoked before production (user decision).
 
 ## 11. Notes for other agents
 
-- **Build quirk.** `anchor build -p stockfloor` (Anchor CLI 1.0.2) checks `programs/stockfloor/target/deploy/stockfloor-keypair.json`, not only `target/deploy/`. On first run it generated a random keypair there and failed with "Program ID mismatch". The copy of `keys/stockfloor-program.json` placed at that path (gitignored) fixes it. Suggested fix in `scripts/build-programs.sh`: also copy each keypair to `programs/<p>/target/deploy/<p>-keypair.json`.
-- **`Cargo.lock`** at the repository root is untracked; it pins the anchor sub-crates to 1.0.2 and should be committed by its owner.
-- **SDK.** Build instructions from `target/idl/stockfloor.json`. `create_launch` needs the config keypair as a signer. `floor` returns 18 bytes of return data: `u64 vault_raw, u64 supply, u16 exit_fee_bps` (little endian).
-- **Crank order after completion:** `harvest_curve_fees` (again), `harvest_migration_fee`, `harvest_surplus`, `migration_damm_v2` (DBC, permissionless), `harvest_leftover` (only burns for dynamic supply), `harvest_lp_fees` periodically.
+- **Build.** `bash scripts/build-programs.sh -p stockfloor`; the IDL is `target/idl/stockfloor.json`
+  (Anchor 1.0 format with PDA seeds for `launch`, `claimer`, `vault_authority`, the vault and the
+  claimer base ATA).
+- **SDK.** `authorityPda(config)` is the claimer (pass it as `feeClaimer` and `leftoverReceiver` of the
+  DBC config); `vaultAuthorityPda(config)`; `vaultAddress(config, quoteMint, quoteTokenProgram)` is the
+  vault authority's ATA. `create_launch` needs the config keypair as a signer.
+- **`floor`** returns 34 bytes: `u64 vault_raw, u64 supply, u16 exit_fee_bps, u128 floor_q64` (LE).
+- **Crank order after completion:** `harvest_curve_fees` (again), `harvest_migration_fee`,
+  `harvest_surplus`, DBC `migration_damm_v2` (permissionless), then `harvest_lp_fees` periodically and
+  `burn_claimer_base` whenever the claimer base ATA balance is non-zero.
+- **Compute unit limits:** see §4.10; simulate first when possible.
