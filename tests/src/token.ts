@@ -5,6 +5,7 @@
  * Base mint layout: mint_authority COption(0..36) supply(36..44) decimals(44) is_initialized(45)
  * freeze_authority COption(46..82). Token-2022 extensions start at 166 (account type at 165).
  */
+import { createInitializeAccount3Instruction } from "@solana/spl-token";
 import { Keypair, PublicKey, SystemProgram, TransactionInstruction } from "@solana/web3.js";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -107,6 +108,37 @@ export function cheatMintTo(
   setTokenAmount(fork, ata, tokenAmount(fork, ata) + amount);
   setMintSupply(fork, mint, mintSupply(fork, mint) + amount);
   return ata;
+}
+
+/**
+ * Create a non-associated token account for `mint` whose owner is `owner` (anyone can do this for
+ * any owner, including a PDA). `space` defaults to the size of an SPL Token account; for Token-2022
+ * mints with account extensions pass the size of an existing account of that mint.
+ */
+export function createTokenAccountOwnedBy(
+  fork: Fork,
+  payer: Keypair,
+  owner: PublicKey,
+  mint: PublicKey,
+  tokenProgram: PublicKey,
+  space = 165,
+): PublicKey {
+  const account = Keypair.generate();
+  fork.send(
+    [
+      SystemProgram.createAccount({
+        fromPubkey: payer.publicKey,
+        newAccountPubkey: account.publicKey,
+        lamports: 10_000_000,
+        space,
+        programId: tokenProgram,
+      }),
+      createInitializeAccount3Instruction(account.publicKey, mint, owner, tokenProgram),
+    ],
+    [payer, account],
+    { computeUnits: 0 },
+  );
+  return account.publicKey;
 }
 
 /** Fund `owner` with raw SPYx via cheatcode. Returns the owner's SPYx ATA. */
