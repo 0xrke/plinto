@@ -3,13 +3,17 @@
 #
 #   1. build the Anchor programs (stockfloor, spike) with the repo-local program keypairs
 #   2. cargo test -p stockfloor                (program unit and property tests)
-#   3. pnpm --filter @stockfloor/sdk test      (SDK unit and property tests)
-#   4. pnpm --filter @stockfloor/tests test    (LiteSVM mainnet-fork integration tests; need step 1)
-#   5. pnpm --filter @stockfloor/app test      (web app unit tests)
+#   3. tsc --noEmit for @stockfloor/sdk and @stockfloor/tests (vitest strips types, so type
+#      regressions in the SDK or the fork harness would otherwise only show up at runtime)
+#   4. pnpm --filter @stockfloor/sdk test      (SDK unit and property tests)
+#   5. pnpm --filter @stockfloor/tests test    (LiteSVM mainnet-fork integration tests; need step 1)
+#   6. pnpm --filter @stockfloor/app test      (web app unit tests)
 #
 # Every step runs even if an earlier one failed (except the fork tests, which are not run on a
-# failed program build so they never test a stale binary). A package without any test files is
-# skipped with a note. Prints a summary and exits non-zero if any step failed or was not run.
+# failed program build so they never test a stale binary). The SDK, fork and app packages are
+# required: a missing package, test script or test files counts as a failure (SKIP is only
+# accepted with ALLOW_SKIP=1). Prints a summary and exits non-zero if any step failed, was not
+# run or was skipped without ALLOW_SKIP=1.
 #
 # Works with macOS bash 3.2 (no associative arrays, no `set -e`).
 set -uo pipefail
@@ -20,12 +24,16 @@ cd "$ROOT"
 STEP_NAMES=()
 STEP_RESULTS=()
 FAILED=0
+ALLOW_SKIP="${ALLOW_SKIP:-0}"
 
 record() {
   # record <name> <PASS|FAIL|SKIP|NOT RUN> <detail>
   STEP_NAMES+=("$1")
   STEP_RESULTS+=("$(printf '%-8s %s' "$2" "$3")")
   if [[ "$2" == "FAIL" || "$2" == "NOT RUN" ]]; then
+    FAILED=1
+  fi
+  if [[ "$2" == "SKIP" && "$ALLOW_SKIP" != "1" ]]; then
     FAILED=1
   fi
 }
@@ -84,13 +92,13 @@ pnpm_package_tests() {
   if [[ ! -d "$dir" ]] || ! has_test_script "$dir"; then
     record "$pkg tests" "SKIP" "(no package or no test script in ${dir})"
     echo
-    echo "==> ${pkg} tests: skipped (no package or no test script in ${dir})"
+    echo "==> ${pkg} tests: SKIPPED (no package or no test script in ${dir}); a failure unless ALLOW_SKIP=1"
     return 0
   fi
   if ! has_test_files "$dir"; then
     record "$pkg tests" "SKIP" "(no test files in ${dir} yet)"
     echo
-    echo "==> ${pkg} tests: skipped (no test files in ${dir} yet)"
+    echo "==> ${pkg} tests: SKIPPED (no test files in ${dir}); a failure unless ALLOW_SKIP=1"
     return 0
   fi
   run_step "$pkg tests" pnpm --filter "$pkg" test
@@ -109,17 +117,21 @@ done
 # 2. Program unit tests
 run_step "cargo test -p stockfloor" cargo test -p stockfloor
 
-# 3. SDK
+# 3. Type checks (tsc --noEmit)
+run_step "typecheck @stockfloor/sdk" pnpm --filter @stockfloor/sdk exec tsc --noEmit -p tsconfig.json
+run_step "typecheck @stockfloor/tests" pnpm --filter @stockfloor/tests exec tsc --noEmit -p tsconfig.json
+
+# 4. SDK
 pnpm_package_tests "@stockfloor/sdk" "packages/sdk"
 
-# 4. Fork integration tests (use target/deploy/*.so and target/idl/*.json from step 1)
+# 5. Fork integration tests (use target/deploy/*.so and target/idl/*.json from step 1)
 if [[ $BUILD_OK -eq 1 ]]; then
   pnpm_package_tests "@stockfloor/tests" "tests"
 else
   record "@stockfloor/tests tests" "NOT RUN" "(a program build failed; refusing to test stale binaries)"
 fi
 
-# 5. Web app
+# 6. Web app
 pnpm_package_tests "@stockfloor/app" "app"
 
 echo
@@ -130,6 +142,8 @@ done
 echo "------------------------------------------------------------------------------"
 if [[ $FAILED -eq 0 ]]; then
   echo "ALL STEPS PASSED ($((SECONDS - TOTAL_START))s)"
+elif [[ "$ALLOW_SKIP" != "1" ]] && printf '%s\n' "${STEP_RESULTS[@]}" | grep -q '^SKIP'; then
+  echo "SOME STEPS FAILED OR WERE SKIPPED ($((SECONDS - TOTAL_START))s; set ALLOW_SKIP=1 to accept skips)"
 else
   echo "SOME STEPS FAILED ($((SECONDS - TOTAL_START))s)"
 fi
