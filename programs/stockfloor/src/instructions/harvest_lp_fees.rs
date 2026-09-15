@@ -12,7 +12,9 @@ use crate::errors::StockfloorError;
 use crate::events::LpFeesHarvested;
 use crate::external::{load_damm_pool, load_damm_position};
 use crate::state::Launch;
-use crate::token_utils::{assert_quote_mint_transferable, assert_vault_not_frozen, burn_all_signed};
+use crate::token_utils::{
+    assert_quote_mint_transferable, assert_vault_not_frozen, burn_all_signed,
+};
 
 /// Permissionless: claim DAMM v2 position fees for a position whose NFT is held by the
 /// Authority, on a pool with mints (base_mint, quote_mint). Quote goes to the vault,

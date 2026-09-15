@@ -52,8 +52,8 @@ fn decode<T: bytemuck::Pod>(
     if data.len() != DISC_LEN + size || &data[..DISC_LEN] != discriminator {
         return Err(error.into());
     }
-    let value: T = bytemuck::try_pod_read_unaligned(&data[DISC_LEN..DISC_LEN + size])
-        .map_err(|_| error)?;
+    let value: T =
+        bytemuck::try_pod_read_unaligned(&data[DISC_LEN..DISC_LEN + size]).map_err(|_| error)?;
     Ok(Box::new(value))
 }
 
@@ -218,13 +218,22 @@ pub(crate) mod tests {
         assert_eq!(offset_of!(PoolConfig, migration_option), 225);
         assert_eq!(offset_of!(PoolConfig, token_decimal), 227);
         assert_eq!(offset_of!(PoolConfig, token_type), 229);
-        assert_eq!(offset_of!(PoolConfig, partner_permanent_locked_liquidity_percentage), 231);
+        assert_eq!(
+            offset_of!(PoolConfig, partner_permanent_locked_liquidity_percentage),
+            231
+        );
         assert_eq!(offset_of!(PoolConfig, partner_liquidity_percentage), 232);
-        assert_eq!(offset_of!(PoolConfig, creator_permanent_locked_liquidity_percentage), 233);
+        assert_eq!(
+            offset_of!(PoolConfig, creator_permanent_locked_liquidity_percentage),
+            233
+        );
         assert_eq!(offset_of!(PoolConfig, creator_liquidity_percentage), 234);
         assert_eq!(offset_of!(PoolConfig, fixed_token_supply_flag), 236);
         assert_eq!(offset_of!(PoolConfig, migration_fee_percentage), 239);
-        assert_eq!(offset_of!(PoolConfig, creator_migration_fee_percentage), 240);
+        assert_eq!(
+            offset_of!(PoolConfig, creator_migration_fee_percentage),
+            240
+        );
         assert_eq!(offset_of!(PoolConfig, swap_base_amount), 248);
         assert_eq!(offset_of!(PoolConfig, migration_quote_threshold), 256);
         assert_eq!(offset_of!(PoolConfig, migration_sqrt_price), 272);
@@ -243,10 +252,16 @@ pub(crate) mod tests {
         assert_eq!(offset_of!(dbc_types::PoolState, quote_reserve), 232);
         assert_eq!(offset_of!(dbc_types::PoolState, pool_type), 296);
         assert_eq!(offset_of!(dbc_types::PoolState, is_migrated), 297);
-        assert_eq!(offset_of!(dbc_types::PoolState, is_partner_withdraw_surplus), 298);
+        assert_eq!(
+            offset_of!(dbc_types::PoolState, is_partner_withdraw_surplus),
+            298
+        );
         assert_eq!(offset_of!(dbc_types::PoolState, migration_progress), 300);
         assert_eq!(offset_of!(dbc_types::PoolState, is_withdraw_leftover), 301);
-        assert_eq!(offset_of!(dbc_types::PoolState, migration_fee_withdraw_status), 303);
+        assert_eq!(
+            offset_of!(dbc_types::PoolState, migration_fee_withdraw_status),
+            303
+        );
 
         assert_eq!(offset_of!(DammPool, token_a_mint), 160);
         assert_eq!(offset_of!(DammPool, token_b_mint), 192);
@@ -292,7 +307,9 @@ pub(crate) mod tests {
         name: &str,
         types: &HashMap<String, serde_json::Value>,
     ) -> (HashMap<String, usize>, usize) {
-        let t = types.get(name).unwrap_or_else(|| panic!("type {name} not in IDL"));
+        let t = types
+            .get(name)
+            .unwrap_or_else(|| panic!("type {name} not in IDL"));
         let mut offsets = HashMap::new();
         let mut cursor = 0usize;
         for f in t["type"]["fields"].as_array().unwrap() {
@@ -334,22 +351,58 @@ pub(crate) mod tests {
         for (field, off) in [
             ("quote_mint", offset_of!(PoolConfig, quote_mint)),
             ("fee_claimer", offset_of!(PoolConfig, fee_claimer)),
-            ("leftover_receiver", offset_of!(PoolConfig, leftover_receiver)),
-            ("partner_liquidity_vesting_info", offset_of!(PoolConfig, partner_liquidity_vesting_info)),
-            ("creator_liquidity_vesting_info", offset_of!(PoolConfig, creator_liquidity_vesting_info)),
+            (
+                "leftover_receiver",
+                offset_of!(PoolConfig, leftover_receiver),
+            ),
+            (
+                "partner_liquidity_vesting_info",
+                offset_of!(PoolConfig, partner_liquidity_vesting_info),
+            ),
+            (
+                "creator_liquidity_vesting_info",
+                offset_of!(PoolConfig, creator_liquidity_vesting_info),
+            ),
             ("collect_fee_mode", offset_of!(PoolConfig, collect_fee_mode)),
             ("migration_option", offset_of!(PoolConfig, migration_option)),
             ("token_decimal", offset_of!(PoolConfig, token_decimal)),
             ("token_type", offset_of!(PoolConfig, token_type)),
-            ("partner_permanent_locked_liquidity_percentage", offset_of!(PoolConfig, partner_permanent_locked_liquidity_percentage)),
-            ("partner_liquidity_percentage", offset_of!(PoolConfig, partner_liquidity_percentage)),
-            ("creator_permanent_locked_liquidity_percentage", offset_of!(PoolConfig, creator_permanent_locked_liquidity_percentage)),
-            ("creator_liquidity_percentage", offset_of!(PoolConfig, creator_liquidity_percentage)),
-            ("fixed_token_supply_flag", offset_of!(PoolConfig, fixed_token_supply_flag)),
-            ("migration_fee_percentage", offset_of!(PoolConfig, migration_fee_percentage)),
-            ("creator_migration_fee_percentage", offset_of!(PoolConfig, creator_migration_fee_percentage)),
-            ("migration_quote_threshold", offset_of!(PoolConfig, migration_quote_threshold)),
-            ("locked_vesting_config", offset_of!(PoolConfig, locked_vesting_config)),
+            (
+                "partner_permanent_locked_liquidity_percentage",
+                offset_of!(PoolConfig, partner_permanent_locked_liquidity_percentage),
+            ),
+            (
+                "partner_liquidity_percentage",
+                offset_of!(PoolConfig, partner_liquidity_percentage),
+            ),
+            (
+                "creator_permanent_locked_liquidity_percentage",
+                offset_of!(PoolConfig, creator_permanent_locked_liquidity_percentage),
+            ),
+            (
+                "creator_liquidity_percentage",
+                offset_of!(PoolConfig, creator_liquidity_percentage),
+            ),
+            (
+                "fixed_token_supply_flag",
+                offset_of!(PoolConfig, fixed_token_supply_flag),
+            ),
+            (
+                "migration_fee_percentage",
+                offset_of!(PoolConfig, migration_fee_percentage),
+            ),
+            (
+                "creator_migration_fee_percentage",
+                offset_of!(PoolConfig, creator_migration_fee_percentage),
+            ),
+            (
+                "migration_quote_threshold",
+                offset_of!(PoolConfig, migration_quote_threshold),
+            ),
+            (
+                "locked_vesting_config",
+                offset_of!(PoolConfig, locked_vesting_config),
+            ),
         ] {
             assert_eq!(cfg[field], off, "PoolConfig.{field}");
         }
@@ -362,25 +415,52 @@ pub(crate) mod tests {
             ("config", offset_of!(dbc_types::PoolState, config)),
             ("creator", offset_of!(dbc_types::PoolState, creator)),
             ("base_mint", offset_of!(dbc_types::PoolState, base_mint)),
-            ("quote_reserve", offset_of!(dbc_types::PoolState, quote_reserve)),
+            (
+                "quote_reserve",
+                offset_of!(dbc_types::PoolState, quote_reserve),
+            ),
             ("pool_type", offset_of!(dbc_types::PoolState, pool_type)),
             ("is_migrated", offset_of!(dbc_types::PoolState, is_migrated)),
-            ("is_partner_withdraw_surplus", offset_of!(dbc_types::PoolState, is_partner_withdraw_surplus)),
-            ("migration_progress", offset_of!(dbc_types::PoolState, migration_progress)),
-            ("is_withdraw_leftover", offset_of!(dbc_types::PoolState, is_withdraw_leftover)),
-            ("migration_fee_withdraw_status", offset_of!(dbc_types::PoolState, migration_fee_withdraw_status)),
+            (
+                "is_partner_withdraw_surplus",
+                offset_of!(dbc_types::PoolState, is_partner_withdraw_surplus),
+            ),
+            (
+                "migration_progress",
+                offset_of!(dbc_types::PoolState, migration_progress),
+            ),
+            (
+                "is_withdraw_leftover",
+                offset_of!(dbc_types::PoolState, is_withdraw_leftover),
+            ),
+            (
+                "migration_fee_withdraw_status",
+                offset_of!(dbc_types::PoolState, migration_fee_withdraw_status),
+            ),
         ] {
             assert_eq!(st[field], off, "PoolState.{field}");
         }
 
         let (lvi, _) = struct_offsets("LiquidityVestingInfo", &types);
-        assert_eq!(lvi["is_initialized"], offset_of!(dbc_types::LiquidityVestingInfo, is_initialized));
-        assert_eq!(lvi["vesting_percentage"], offset_of!(dbc_types::LiquidityVestingInfo, vesting_percentage));
+        assert_eq!(
+            lvi["is_initialized"],
+            offset_of!(dbc_types::LiquidityVestingInfo, is_initialized)
+        );
+        assert_eq!(
+            lvi["vesting_percentage"],
+            offset_of!(dbc_types::LiquidityVestingInfo, vesting_percentage)
+        );
 
         assert_eq!(account_disc(&v, "PoolConfig"), PoolConfig::DISCRIMINATOR);
         assert_eq!(account_disc(&v, "VirtualPool"), VirtualPool::DISCRIMINATOR);
-        assert_ne!(account_disc(&v, "TransferHookPool"), VirtualPool::DISCRIMINATOR);
-        assert_ne!(account_disc(&v, "ConfigWithTransferHook"), PoolConfig::DISCRIMINATOR);
+        assert_ne!(
+            account_disc(&v, "TransferHookPool"),
+            VirtualPool::DISCRIMINATOR
+        );
+        assert_ne!(
+            account_disc(&v, "ConfigWithTransferHook"),
+            PoolConfig::DISCRIMINATOR
+        );
     }
 
     #[test]
@@ -442,35 +522,102 @@ pub(crate) mod tests {
         let other = Pubkey::new_unique();
         type Mutator = fn(&mut PoolConfig, Pubkey);
         let cases: Vec<(Mutator, StockfloorError)> = vec![
-            (|c, o| c.fee_claimer = o, StockfloorError::FeeClaimerNotAuthority),
-            (|c, o| c.leftover_receiver = o, StockfloorError::LeftoverReceiverNotAuthority),
-            (|c, _| c.creator_migration_fee_percentage = 1, StockfloorError::CreatorMigrationFeeNotZero),
-            (|c, _| c.migration_fee_percentage = 29, StockfloorError::MigrationFeePercentageOutOfRange),
-            (|c, _| c.migration_fee_percentage = 0, StockfloorError::MigrationFeePercentageOutOfRange),
-            (|c, _| c.migration_fee_percentage = 100, StockfloorError::MigrationFeePercentageOutOfRange),
-            (|c, _| c.partner_permanent_locked_liquidity_percentage = 99, StockfloorError::LiquidityNotFullyPartnerLocked),
-            (|c, _| c.partner_liquidity_percentage = 1, StockfloorError::LiquidityNotFullyPartnerLocked),
-            (|c, _| c.creator_permanent_locked_liquidity_percentage = 1, StockfloorError::LiquidityNotFullyPartnerLocked),
-            (|c, _| c.creator_liquidity_percentage = 1, StockfloorError::LiquidityNotFullyPartnerLocked),
-            (|c, _| c.partner_liquidity_vesting_info.vesting_percentage = 10, StockfloorError::LiquidityVestingNotAllowed),
-            (|c, _| c.partner_liquidity_vesting_info.is_initialized = 1, StockfloorError::LiquidityVestingNotAllowed),
-            (|c, _| c.creator_liquidity_vesting_info.vesting_percentage = 10, StockfloorError::LiquidityVestingNotAllowed),
-            (|c, _| c.creator_liquidity_vesting_info.is_initialized = 1, StockfloorError::LiquidityVestingNotAllowed),
-            (|c, _| c.locked_vesting_config.amount_per_period = 1, StockfloorError::LockedVestingNotAllowed),
-            (|c, _| c.locked_vesting_config.cliff_unlock_amount = 1, StockfloorError::LockedVestingNotAllowed),
-            (|c, _| c.locked_vesting_config.number_of_period = 1, StockfloorError::LockedVestingNotAllowed),
-            (|c, _| c.collect_fee_mode = 1, StockfloorError::CollectFeeModeNotQuote),
-            (|c, _| c.migration_option = 0, StockfloorError::MigrationOptionNotDammV2),
-            (|c, _| c.token_type = 1, StockfloorError::BaseTokenTypeNotSplToken),
+            (
+                |c, o| c.fee_claimer = o,
+                StockfloorError::FeeClaimerNotAuthority,
+            ),
+            (
+                |c, o| c.leftover_receiver = o,
+                StockfloorError::LeftoverReceiverNotAuthority,
+            ),
+            (
+                |c, _| c.creator_migration_fee_percentage = 1,
+                StockfloorError::CreatorMigrationFeeNotZero,
+            ),
+            (
+                |c, _| c.migration_fee_percentage = 29,
+                StockfloorError::MigrationFeePercentageOutOfRange,
+            ),
+            (
+                |c, _| c.migration_fee_percentage = 0,
+                StockfloorError::MigrationFeePercentageOutOfRange,
+            ),
+            (
+                |c, _| c.migration_fee_percentage = 100,
+                StockfloorError::MigrationFeePercentageOutOfRange,
+            ),
+            (
+                |c, _| c.partner_permanent_locked_liquidity_percentage = 99,
+                StockfloorError::LiquidityNotFullyPartnerLocked,
+            ),
+            (
+                |c, _| c.partner_liquidity_percentage = 1,
+                StockfloorError::LiquidityNotFullyPartnerLocked,
+            ),
+            (
+                |c, _| c.creator_permanent_locked_liquidity_percentage = 1,
+                StockfloorError::LiquidityNotFullyPartnerLocked,
+            ),
+            (
+                |c, _| c.creator_liquidity_percentage = 1,
+                StockfloorError::LiquidityNotFullyPartnerLocked,
+            ),
+            (
+                |c, _| c.partner_liquidity_vesting_info.vesting_percentage = 10,
+                StockfloorError::LiquidityVestingNotAllowed,
+            ),
+            (
+                |c, _| c.partner_liquidity_vesting_info.is_initialized = 1,
+                StockfloorError::LiquidityVestingNotAllowed,
+            ),
+            (
+                |c, _| c.creator_liquidity_vesting_info.vesting_percentage = 10,
+                StockfloorError::LiquidityVestingNotAllowed,
+            ),
+            (
+                |c, _| c.creator_liquidity_vesting_info.is_initialized = 1,
+                StockfloorError::LiquidityVestingNotAllowed,
+            ),
+            (
+                |c, _| c.locked_vesting_config.amount_per_period = 1,
+                StockfloorError::LockedVestingNotAllowed,
+            ),
+            (
+                |c, _| c.locked_vesting_config.cliff_unlock_amount = 1,
+                StockfloorError::LockedVestingNotAllowed,
+            ),
+            (
+                |c, _| c.locked_vesting_config.number_of_period = 1,
+                StockfloorError::LockedVestingNotAllowed,
+            ),
+            (
+                |c, _| c.collect_fee_mode = 1,
+                StockfloorError::CollectFeeModeNotQuote,
+            ),
+            (
+                |c, _| c.migration_option = 0,
+                StockfloorError::MigrationOptionNotDammV2,
+            ),
+            (
+                |c, _| c.token_type = 1,
+                StockfloorError::BaseTokenTypeNotSplToken,
+            ),
             (|c, o| c.quote_mint = o, StockfloorError::QuoteMintMismatch),
         ];
         for (i, (mutate, expected)) in cases.into_iter().enumerate() {
             let mut c = valid_config(a, q);
             mutate(&mut c, other);
-            assert_eq!(validate_launch_config(&c, &a, &q, 200), Err(expected), "case {i}");
+            assert_eq!(
+                validate_launch_config(&c, &a, &q, 200),
+                Err(expected),
+                "case {i}"
+            );
         }
         let c = valid_config(a, q);
-        assert_eq!(validate_launch_config(&c, &a, &q, 501), Err(StockfloorError::ExitFeeTooHigh));
+        assert_eq!(
+            validate_launch_config(&c, &a, &q, 501),
+            Err(StockfloorError::ExitFeeTooHigh)
+        );
         // Authority of a different config is rejected.
         assert_eq!(
             validate_launch_config(&c, &other, &q, 200),
@@ -503,29 +650,39 @@ pub(crate) mod tests {
         let key = Pubkey::new_unique();
 
         let mut data = account_bytes(PoolConfig::DISCRIMINATOR, &cfg);
-        let decoded = with_info(key, DBC_PROGRAM_ID, &mut data, |i| load_dbc_config(i).unwrap());
+        let decoded = with_info(key, DBC_PROGRAM_ID, &mut data, |i| {
+            load_dbc_config(i).unwrap()
+        });
         assert_eq!(decoded.fee_claimer, a);
         assert_eq!(decoded.migration_fee_percentage, 50);
 
         // Wrong owner.
         let mut data = account_bytes(PoolConfig::DISCRIMINATOR, &cfg);
-        let err = with_info(key, Pubkey::new_unique(), &mut data, |i| load_dbc_config(i).unwrap_err());
+        let err = with_info(key, Pubkey::new_unique(), &mut data, |i| {
+            load_dbc_config(i).unwrap_err()
+        });
         assert_eq!(err, StockfloorError::InvalidDbcConfig.into());
 
         // Wrong discriminator (a VirtualPool-discriminated account of config size).
         let mut data = account_bytes(VirtualPool::DISCRIMINATOR, &cfg);
-        let err = with_info(key, DBC_PROGRAM_ID, &mut data, |i| load_dbc_config(i).unwrap_err());
+        let err = with_info(key, DBC_PROGRAM_ID, &mut data, |i| {
+            load_dbc_config(i).unwrap_err()
+        });
         assert_eq!(err, StockfloorError::InvalidDbcConfig.into());
 
         // Wrong size (ConfigWithTransferHook is 1120 bytes).
         let mut data = account_bytes(PoolConfig::DISCRIMINATOR, &cfg);
         data.extend_from_slice(&[0u8; 80]);
-        let err = with_info(key, DBC_PROGRAM_ID, &mut data, |i| load_dbc_config(i).unwrap_err());
+        let err = with_info(key, DBC_PROGRAM_ID, &mut data, |i| {
+            load_dbc_config(i).unwrap_err()
+        });
         assert_eq!(err, StockfloorError::InvalidDbcConfig.into());
 
         // Empty account.
         let mut data = vec![];
-        let err = with_info(key, DBC_PROGRAM_ID, &mut data, |i| load_dbc_config(i).unwrap_err());
+        let err = with_info(key, DBC_PROGRAM_ID, &mut data, |i| {
+            load_dbc_config(i).unwrap_err()
+        });
         assert_eq!(err, StockfloorError::InvalidDbcConfig.into());
 
         // Pools.
@@ -534,17 +691,23 @@ pub(crate) mod tests {
         pool.pool_state.is_migrated = 1;
         pool.pool_state.migration_progress = DBC_MIGRATION_PROGRESS_CREATED_POOL;
         let mut data = account_bytes(VirtualPool::DISCRIMINATOR, &pool);
-        let decoded = with_info(key, DBC_PROGRAM_ID, &mut data, |i| load_dbc_pool(i).unwrap());
+        let decoded = with_info(key, DBC_PROGRAM_ID, &mut data, |i| {
+            load_dbc_pool(i).unwrap()
+        });
         assert_eq!(decoded.pool_state.config, key);
         assert!(is_migration_complete(&decoded));
 
         let th_disc = [237u8, 219, 184, 23, 42, 189, 169, 35]; // TransferHookPool
         let mut data = account_bytes(&th_disc, &pool);
-        let err = with_info(key, DBC_PROGRAM_ID, &mut data, |i| load_dbc_pool(i).unwrap_err());
+        let err = with_info(key, DBC_PROGRAM_ID, &mut data, |i| {
+            load_dbc_pool(i).unwrap_err()
+        });
         assert_eq!(err, StockfloorError::InvalidDbcPool.into());
 
         let mut data = account_bytes(VirtualPool::DISCRIMINATOR, &pool);
-        let err = with_info(key, DAMM_V2_PROGRAM_ID, &mut data, |i| load_dbc_pool(i).unwrap_err());
+        let err = with_info(key, DAMM_V2_PROGRAM_ID, &mut data, |i| {
+            load_dbc_pool(i).unwrap_err()
+        });
         assert_eq!(err, StockfloorError::InvalidDbcPool.into());
 
         // DAMM accounts.
@@ -552,19 +715,27 @@ pub(crate) mod tests {
         dp.token_a_mint = a;
         dp.token_b_mint = q;
         let mut data = account_bytes(DammPool::DISCRIMINATOR, &dp);
-        let decoded = with_info(key, DAMM_V2_PROGRAM_ID, &mut data, |i| load_damm_pool(i).unwrap());
+        let decoded = with_info(key, DAMM_V2_PROGRAM_ID, &mut data, |i| {
+            load_damm_pool(i).unwrap()
+        });
         assert_eq!((decoded.token_a_mint, decoded.token_b_mint), (a, q));
         let mut data = account_bytes(DammPool::DISCRIMINATOR, &dp);
-        let err = with_info(key, DBC_PROGRAM_ID, &mut data, |i| load_damm_pool(i).unwrap_err());
+        let err = with_info(key, DBC_PROGRAM_ID, &mut data, |i| {
+            load_damm_pool(i).unwrap_err()
+        });
         assert_eq!(err, StockfloorError::InvalidDammPool.into());
 
         let mut pos: DammPosition = bytemuck::Zeroable::zeroed();
         pos.pool = key;
         let mut data = account_bytes(DammPosition::DISCRIMINATOR, &pos);
-        let decoded = with_info(key, DAMM_V2_PROGRAM_ID, &mut data, |i| load_damm_position(i).unwrap());
+        let decoded = with_info(key, DAMM_V2_PROGRAM_ID, &mut data, |i| {
+            load_damm_position(i).unwrap()
+        });
         assert_eq!(decoded.pool, key);
         let mut data = account_bytes(DammPool::DISCRIMINATOR, &dp);
-        let err = with_info(key, DAMM_V2_PROGRAM_ID, &mut data, |i| load_damm_position(i).unwrap_err());
+        let err = with_info(key, DAMM_V2_PROGRAM_ID, &mut data, |i| {
+            load_damm_position(i).unwrap_err()
+        });
         assert_eq!(err, StockfloorError::InvalidDammPosition.into());
     }
 

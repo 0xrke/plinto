@@ -9,7 +9,9 @@ use crate::dynamic_bonding_curve;
 use crate::errors::StockfloorError;
 use crate::events::CurveFeesHarvested;
 use crate::state::Launch;
-use crate::token_utils::{assert_quote_mint_transferable, assert_vault_not_frozen, burn_all_signed};
+use crate::token_utils::{
+    assert_quote_mint_transferable, assert_vault_not_frozen, burn_all_signed,
+};
 
 /// Permissionless: claim the partner share of DBC trading fees of the registered pool.
 /// Quote goes to the vault; any base goes to the Authority base ATA and is burned.

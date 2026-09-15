@@ -116,7 +116,9 @@ pub fn apply_redeem(
     exit_fee_bps: u16,
 ) -> Result<(u64, u64, RedeemQuote), MathError> {
     let quote = compute_redeem(vault_raw, supply, amount, exit_fee_bps)?;
-    let new_vault = vault_raw.checked_sub(quote.net).ok_or(MathError::Overflow)?;
+    let new_vault = vault_raw
+        .checked_sub(quote.net)
+        .ok_or(MathError::Overflow)?;
     let new_supply = supply.checked_sub(amount).ok_or(MathError::Overflow)?;
     Ok((new_vault, new_supply, quote))
 }
@@ -212,7 +214,14 @@ mod tests {
     fn exact_example_from_brief() {
         // 1_000 quote, 100 supply, redeem 10 at 2%: gross 100, fee 2, net 98.
         let q = compute_redeem(1_000, 100, 10, 200).unwrap();
-        assert_eq!(q, RedeemQuote { gross: 100, fee: 2, net: 98 });
+        assert_eq!(
+            q,
+            RedeemQuote {
+                gross: 100,
+                fee: 2,
+                net: 98
+            }
+        );
     }
 
     #[test]
@@ -230,7 +239,14 @@ mod tests {
     fn fee_rounds_up() {
         // gross 99, 2% = 1.98 -> 2
         let q = compute_redeem(99, 1, 1, 200).unwrap();
-        assert_eq!(q, RedeemQuote { gross: 99, fee: 2, net: 97 });
+        assert_eq!(
+            q,
+            RedeemQuote {
+                gross: 99,
+                fee: 2,
+                net: 97
+            }
+        );
         // gross 1, any positive bps -> fee 1 -> net 0 -> rejected
         assert_eq!(compute_redeem(1, 1, 1, 1), Err(MathError::NothingToRedeem));
         // gross 50, 2% = exactly 1 -> 1 (no extra rounding when exact)
@@ -255,25 +271,43 @@ mod tests {
     #[test]
     fn zero_net_is_rejected() {
         // gross 0 because vault is tiny relative to supply
-        assert_eq!(compute_redeem(1, 1_000, 1, 0), Err(MathError::NothingToRedeem));
+        assert_eq!(
+            compute_redeem(1, 1_000, 1, 0),
+            Err(MathError::NothingToRedeem)
+        );
         // empty vault
-        assert_eq!(compute_redeem(0, 1_000, 1_000, 0), Err(MathError::NothingToRedeem));
+        assert_eq!(
+            compute_redeem(0, 1_000, 1_000, 0),
+            Err(MathError::NothingToRedeem)
+        );
         // gross 1 eaten entirely by the ceil fee
-        assert_eq!(compute_redeem(1_000, 1_000, 1, 200), Err(MathError::NothingToRedeem));
+        assert_eq!(
+            compute_redeem(1_000, 1_000, 1, 200),
+            Err(MathError::NothingToRedeem)
+        );
     }
 
     #[test]
     fn input_validation() {
         assert_eq!(compute_redeem(100, 100, 0, 200), Err(MathError::ZeroAmount));
         assert_eq!(compute_redeem(100, 0, 1, 200), Err(MathError::ZeroSupply));
-        assert_eq!(compute_redeem(100, 10, 11, 200), Err(MathError::AmountExceedsSupply));
-        assert_eq!(compute_redeem(100, 10, 1, 10_001), Err(MathError::InvalidFeeBps));
+        assert_eq!(
+            compute_redeem(100, 10, 11, 200),
+            Err(MathError::AmountExceedsSupply)
+        );
+        assert_eq!(
+            compute_redeem(100, 10, 1, 10_001),
+            Err(MathError::InvalidFeeBps)
+        );
         assert_eq!(pro_rata_floor(1, 1, 0), Err(MathError::ZeroSupply));
     }
 
     #[test]
     fn full_fee_bps_is_valid_but_pays_nothing() {
-        assert_eq!(compute_redeem(1_000, 10, 10, 10_000), Err(MathError::NothingToRedeem));
+        assert_eq!(
+            compute_redeem(1_000, 10, 10, 10_000),
+            Err(MathError::NothingToRedeem)
+        );
     }
 
     #[test]
@@ -286,7 +320,14 @@ mod tests {
 
         // With a fee: the fee stays in the vault even though supply is now zero.
         let (v, s, q) = apply_redeem(1_000_000, 500, 500, 200).unwrap();
-        assert_eq!(q, RedeemQuote { gross: 1_000_000, fee: 20_000, net: 980_000 });
+        assert_eq!(
+            q,
+            RedeemQuote {
+                gross: 1_000_000,
+                fee: 20_000,
+                net: 980_000
+            }
+        );
         assert_eq!((v, s), (20_000, 0));
         assert!(floor_not_decreased(1_000_000, 500, v, s));
     }
@@ -295,7 +336,14 @@ mod tests {
     fn overflow_safety_at_u64_max() {
         let max = u64::MAX;
         let q = compute_redeem(max, max, max, 0).unwrap();
-        assert_eq!(q, RedeemQuote { gross: max, fee: 0, net: max });
+        assert_eq!(
+            q,
+            RedeemQuote {
+                gross: max,
+                fee: 0,
+                net: max
+            }
+        );
 
         let q = compute_redeem(max, max, max, 500).unwrap();
         let expected_fee = ((max as u128 * 500 + 9_999) / 10_000) as u64;
@@ -310,7 +358,10 @@ mod tests {
         assert_eq!(q.gross, max);
         assert_eq!(q.fee, ((max as u128 * 9_999 + 9_999) / 10_000) as u64);
 
-        assert_eq!(compute_redeem(1, max, max - 1, 0), Err(MathError::NothingToRedeem));
+        assert_eq!(
+            compute_redeem(1, max, max - 1, 0),
+            Err(MathError::NothingToRedeem)
+        );
         let q = compute_redeem(max, max, max - 1, 0).unwrap();
         assert_eq!(q.gross, max - 1);
 
@@ -397,7 +448,10 @@ mod tests {
         assert!(received > single);
         // ...but never more than the continuous limit, nor the fee-free pro-rata amount.
         let bound = continuous_limit(v, s, total, bps);
-        assert!((received as f64) <= bound + 1.0, "received {received} bound {bound}");
+        assert!(
+            (received as f64) <= bound + 1.0,
+            "received {received} bound {bound}"
+        );
         assert!(received <= pro_rata_floor(v, total, s).unwrap());
     }
 
@@ -414,14 +468,23 @@ mod tests {
     // ---------------------------------------------------------------------
 
     fn bps_strategy() -> impl Strategy<Value = u16> {
-        prop_oneof![Just(0u16), Just(200u16), Just(500u16), 0u16..=500u16, 0u16..=10_000u16]
+        prop_oneof![
+            Just(0u16),
+            Just(200u16),
+            Just(500u16),
+            0u16..=500u16,
+            0u16..=10_000u16
+        ]
     }
 
     /// (vault, supply, amount) with amount in [1, supply], covering full u64 range and small values.
     fn state_strategy() -> impl Strategy<Value = (u64, u64, u64)> {
         let big = (any::<u64>(), 1u64..=u64::MAX).prop_flat_map(|(v, s)| (Just(v), Just(s), 1..=s));
         let small = (0u64..10_000, 1u64..10_000).prop_flat_map(|(v, s)| (Just(v), Just(s), 1..=s));
-        let realistic = (0u64..=1_000_000_000_000_000u64, 1u64..=1_000_000_000_000_000u64)
+        let realistic = (
+            0u64..=1_000_000_000_000_000u64,
+            1u64..=1_000_000_000_000_000u64,
+        )
             .prop_flat_map(|(v, s)| (Just(v), Just(s), 1..=s));
         prop_oneof![big, small, realistic]
     }

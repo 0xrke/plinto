@@ -1,6 +1,8 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::Token;
-use anchor_spl::token_interface::{self, Burn, Mint, TokenAccount, TokenInterface, TransferChecked};
+use anchor_spl::token_interface::{
+    self, Burn, Mint, TokenAccount, TokenInterface, TransferChecked,
+};
 
 use crate::constants::{AUTHORITY_SEED, LAUNCH_SEED};
 use crate::errors::StockfloorError;

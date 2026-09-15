@@ -110,6 +110,8 @@ pub enum StockfloorError {
     VaultFrozen,
     #[msg("Invalid Token-2022 mint data")]
     InvalidQuoteMintData,
+    #[msg("Invalid token account data")]
+    InvalidTokenAccountData,
 
     // ----- views -----
     #[msg("Base mint account does not match the launch")]

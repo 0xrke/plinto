@@ -49,7 +49,7 @@ pub fn check_token_2022_mint_data(data: &[u8]) -> std::result::Result<(), Stockf
 pub fn assert_vault_not_frozen(vault: &AccountInfo) -> Result<()> {
     let data = vault.try_borrow_data()?;
     let state = StateWithExtensions::<SplAccount>::unpack(&data)
-        .map_err(|_| StockfloorError::InvalidQuoteMintData)?;
+        .map_err(|_| StockfloorError::InvalidTokenAccountData)?;
     require!(
         state.base.state != AccountState::Frozen,
         StockfloorError::VaultFrozen
@@ -68,7 +68,10 @@ pub fn burn_all_signed<'info>(
 ) -> Result<u64> {
     let amount = {
         let data = from.try_borrow_data()?;
-        StateWithExtensions::<SplAccount>::unpack(&data)?.base.amount
+        StateWithExtensions::<SplAccount>::unpack(&data)
+            .map_err(|_| StockfloorError::InvalidTokenAccountData)?
+            .base
+            .amount
     };
     if amount > 0 {
         token_interface::burn(
@@ -90,15 +93,16 @@ pub fn burn_all_signed<'info>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anchor_spl::token_2022::spl_token_2022::{
-        extension::{
-            pausable::PausableConfig, transfer_hook::TransferHook, ExtensionType,
-            StateWithExtensionsMut, BaseStateWithExtensionsMut,
-        },
-    };
     use anchor_lang::solana_program::program_pack::Pack;
+    use anchor_spl::token_2022::spl_token_2022::extension::{
+        pausable::PausableConfig, transfer_hook::TransferHook, BaseStateWithExtensionsMut,
+        ExtensionType, StateWithExtensionsMut,
+    };
 
-    fn mint_with(extensions: &[ExtensionType], setup: impl FnOnce(&mut StateWithExtensionsMut<SplMint>)) -> Vec<u8> {
+    fn mint_with(
+        extensions: &[ExtensionType],
+        setup: impl FnOnce(&mut StateWithExtensionsMut<SplMint>),
+    ) -> Vec<u8> {
         let len = ExtensionType::try_calculate_account_len::<SplMint>(extensions).unwrap();
         let mut data = vec![0u8; len];
         let mut state = StateWithExtensionsMut::<SplMint>::unpack_uninitialized(&mut data).unwrap();
@@ -117,7 +121,11 @@ mod tests {
         assert_eq!(check_token_2022_mint_data(&data), Ok(()));
         // A legacy-sized mint (82 bytes) also unpacks.
         let mut legacy = vec![0u8; SplMint::LEN];
-        let m = SplMint { decimals: 6, is_initialized: true, ..Default::default() };
+        let m = SplMint {
+            decimals: 6,
+            is_initialized: true,
+            ..Default::default()
+        };
         SplMint::pack(m, &mut legacy).unwrap();
         assert_eq!(check_token_2022_mint_data(&legacy), Ok(()));
     }
@@ -129,7 +137,10 @@ mod tests {
             ext.authority = Some(Pubkey::new_unique()).try_into().unwrap();
             ext.paused = true.into();
         });
-        assert_eq!(check_token_2022_mint_data(&data), Err(StockfloorError::QuoteMintPaused));
+        assert_eq!(
+            check_token_2022_mint_data(&data),
+            Err(StockfloorError::QuoteMintPaused)
+        );
 
         let data = mint_with(&[ExtensionType::Pausable], |s| {
             let ext = s.init_extension::<PausableConfig>(true).unwrap();

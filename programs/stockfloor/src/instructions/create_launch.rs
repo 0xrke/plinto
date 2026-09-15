@@ -27,11 +27,10 @@ pub struct CreateLaunch<'info> {
 
     pub creator: Signer<'info>,
 
-    /// CHECK: DBC PoolConfig; owner, discriminator, size and fields are validated in the
-    /// handler. It must sign so that nobody can front-run `create_launch` for a config
-    /// they did not create.
-    #[account(signer)]
-    pub config: UncheckedAccount<'info>,
+    /// DBC PoolConfig; owner, discriminator, size and fields are validated in the handler.
+    /// The config keypair must sign so that nobody can front-run `create_launch` for a
+    /// config they did not create.
+    pub config: Signer<'info>,
 
     /// CHECK: PDA signer for all CPIs, holds no data.
     #[account(seeds = [AUTHORITY_SEED, config.key().as_ref()], bump)]
@@ -73,7 +72,10 @@ pub fn handle_create_launch(ctx: Context<CreateLaunch>, exit_fee_bps: u16) -> Re
             &ctx.accounts.quote_mint.key(),
             exit_fee_bps,
         )?;
-        (config.migration_fee_percentage, config.migration_quote_threshold)
+        (
+            config.migration_fee_percentage,
+            config.migration_quote_threshold,
+        )
     };
 
     let now = Clock::get()?.unix_timestamp;
