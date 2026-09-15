@@ -394,9 +394,9 @@ describe("M1 spike: SPYx-quoted DBC lifecycle with a PDA fee_claimer (LiteSVM fo
     expect(baseGain).toBe(0n); // OnlyB: LP fees accrue in the quote token only
     log.dammLpFeeClaimed = { quote: quoteGain, base: baseGain };
     log.cuClaimPositionFee = res.computeUnits;
-  });
 
-  it("prints the spike log", () => {
+    // The spike log (evidence for docs/research/m1-spike.md); printed here rather than in an
+    // assertion-free test so it does not inflate the test count.
     console.log(
       JSON.stringify(
         { ...log, dbcPoolAuthority: DBC_POOL_AUTHORITY.toBase58(), spikePda: authority.toBase58(), creator: creator.publicKey.toBase58() },
