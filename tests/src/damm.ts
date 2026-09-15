@@ -60,7 +60,8 @@ export async function dammSwap2Ix(a: {
       payer: a.payer,
       tokenAProgram: k.tokenAProgram,
       tokenBProgram: k.tokenBProgram,
-      referralTokenAccount: null,
+      // optional account: null encodes "not provided" (program id placeholder)
+      referralTokenAccount: null as unknown as PublicKey,
       eventAuthority: DAMM_V2_EVENT_AUTHORITY,
       program: DAMM_V2_PROGRAM_ID,
     })

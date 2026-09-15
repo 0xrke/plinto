@@ -344,7 +344,8 @@ export async function swap2Ix(a: {
       payer: a.payer,
       tokenBaseProgram: k.baseTokenProgram,
       tokenQuoteProgram: k.quoteTokenProgram,
-      referralTokenAccount: a.referralTokenAccount ?? null,
+      // optional account: null encodes "not provided" (program id placeholder)
+      referralTokenAccount: (a.referralTokenAccount ?? null) as unknown as PublicKey,
       eventAuthority: DBC_EVENT_AUTHORITY,
       program: DBC_PROGRAM_ID,
     })
