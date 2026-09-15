@@ -111,7 +111,8 @@ The counters are never used for access control or math. A donation straight to t
 
 ### 2.4 Signer scope
 
-This table is the core of the security design. Each row is the complete list of what a key can sign.
+This table is the core of the security design. Together, the rows are the complete list of what each key
+can sign in this program.
 
 | Signer | Instruction | Signs | Into | Destinations (constrained by stockfloor) |
 |---|---|---|---|---|
