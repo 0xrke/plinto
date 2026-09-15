@@ -92,6 +92,18 @@ const ACCOUNTS: AccountSpec[] = [
     optional: true,
   },
   {
+    name: "dbc_pool_authority",
+    address: pda([Buffer.from("pool_authority")], DBC),
+    purpose:
+      "DBC pool authority PDA (system account). Mainnet keeps ~1 SOL here: migration_damm_v2 flash-rents from it and fails with 'insufficient lamports' if it is empty",
+  },
+  {
+    name: "damm_v2_pool_authority",
+    address: pda([Buffer.from("pool_authority")], DAMM_V2),
+    purpose: "DAMM v2 pool authority PDA (system account, for fidelity)",
+    optional: true,
+  },
+  {
     name: "damm_v2_config_customizable",
     address: "A8gMrEPJkacWkcb3DGwtJwTe16HktSEfvwtuDh2MCtck",
     purpose: "DAMM v2 dynamic config for DBC MigrationFeeOption::Customizable (6); remaining account 0 of migration_damm_v2",

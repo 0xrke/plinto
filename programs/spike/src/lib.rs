@@ -4,6 +4,7 @@
 //! (and `leftover_receiver`) and harvest, via `invoke_signed`:
 //! - DBC `claim_trading_fee` (partner trading fees, pre-migration),
 //! - DBC `withdraw_migration_fee(flag = 0)` (partner migration fee),
+//! - DBC `partner_withdraw_surplus` (partner share of the quote surplus above the threshold),
 //! - DAMM v2 `claim_position_fee` for a position whose NFT the PDA owns (post-migration).
 //!
 //! The PDA is `["authority", dbc_config]`. Destination token accounts must be owned by the PDA.
@@ -105,6 +106,41 @@ pub mod spike {
             config: config_key,
             virtual_pool: ctx.accounts.virtual_pool.key(),
             quote_received,
+        });
+        Ok(())
+    }
+
+    /// CPI DBC `partner_withdraw_surplus` as the partner fee claimer (PDA signer).
+    pub fn withdraw_partner_surplus(ctx: Context<WithdrawPartnerMigrationFee>) -> Result<()> {
+        let config_key = ctx.accounts.config.key();
+        let bump = [ctx.bumps.authority];
+        let seeds: &[&[u8]] = &[AUTHORITY_SEED, config_key.as_ref(), &bump];
+
+        let quote_before = ctx.accounts.token_quote_account.amount;
+
+        let accounts = dynamic_bonding_curve::cpi::accounts::PartnerWithdrawSurplus {
+            pool_authority: ctx.accounts.dbc_pool_authority.to_account_info(),
+            config: ctx.accounts.config.to_account_info(),
+            virtual_pool: ctx.accounts.virtual_pool.to_account_info(),
+            token_quote_account: ctx.accounts.token_quote_account.to_account_info(),
+            quote_vault: ctx.accounts.quote_vault.to_account_info(),
+            quote_mint: ctx.accounts.quote_mint.to_account_info(),
+            fee_claimer: ctx.accounts.authority.to_account_info(),
+            token_quote_program: ctx.accounts.token_quote_program.to_account_info(),
+            event_authority: ctx.accounts.dbc_event_authority.to_account_info(),
+            program: ctx.accounts.dbc_program.to_account_info(),
+        };
+        dynamic_bonding_curve::cpi::partner_withdraw_surplus(CpiContext::new_with_signer(
+            dynamic_bonding_curve::ID,
+            accounts,
+            &[seeds],
+        ))?;
+
+        ctx.accounts.token_quote_account.reload()?;
+        emit!(PartnerSurplusWithdrawn {
+            config: config_key,
+            virtual_pool: ctx.accounts.virtual_pool.key(),
+            quote_received: ctx.accounts.token_quote_account.amount - quote_before,
         });
         Ok(())
     }
@@ -295,6 +331,13 @@ pub struct PartnerTradingFeeClaimed {
 
 #[event]
 pub struct PartnerMigrationFeeWithdrawn {
+    pub config: Pubkey,
+    pub virtual_pool: Pubkey,
+    pub quote_received: u64,
+}
+
+#[event]
+pub struct PartnerSurplusWithdrawn {
     pub config: Pubkey,
     pub virtual_pool: Pubkey,
     pub quote_received: u64,
