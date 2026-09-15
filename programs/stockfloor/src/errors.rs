@@ -10,7 +10,9 @@ pub enum StockfloorError {
     InvalidDbcConfig,
     #[msg("DBC config fee_claimer must be the launch claimer PDA (seeds: authority, config)")]
     FeeClaimerMismatch,
-    #[msg("DBC config leftover_receiver must be the launch claimer PDA (seeds: authority, config)")]
+    #[msg(
+        "DBC config leftover_receiver must be the launch claimer PDA (seeds: authority, config)"
+    )]
     LeftoverReceiverMismatch,
     #[msg("DBC config creator_migration_fee_percentage must be 0")]
     CreatorMigrationFeeNotZero,
