@@ -11,7 +11,7 @@ import { PublicKey, type TransactionInstruction } from "@solana/web3.js";
 import { anchorErrorFromLogs, TransactionFailedError, type TxSender } from "./chain";
 import { DbcMigrationProgress, PARTNER_MIGRATION_FEE_MASK } from "./dbc/accounts";
 import { dbcMigrationDammV2Ix, dbcPoolKeys } from "./dbc/instructions";
-import { fetchLaunchState, type LaunchRef, type LaunchState } from "./launchState";
+import { fetchLaunchState, listLaunches, type LaunchRef, type LaunchState } from "./launchState";
 import {
   burnClaimerBaseIx,
   harvestCurveFeesIx,
@@ -228,4 +228,27 @@ export async function runCrank(sender: TxSender, ref: LaunchRef, opts: RunCrankO
   }
   const remaining = planCrank(state, opts);
   return { launch, steps, remaining, finalState: state };
+}
+
+export interface CrankAllResult {
+  results: CrankRunResult[];
+  errors: Array<{ launch: PublicKey; error: string }>;
+}
+
+/**
+ * Run the crank for every StockFloor launch (or the given ones). A failure on one launch is
+ * recorded and does not stop the others.
+ */
+export async function runCrankAll(sender: TxSender, opts: RunCrankOptions & { launches?: PublicKey[] } = {}): Promise<CrankAllResult> {
+  const launches = opts.launches ?? (await listLaunches(sender)).map((l) => l.address);
+  const results: CrankRunResult[] = [];
+  const errors: CrankAllResult["errors"] = [];
+  for (const launch of launches) {
+    try {
+      results.push(await runCrank(sender, { launch }, opts));
+    } catch (e) {
+      errors.push({ launch, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return { results, errors };
 }
