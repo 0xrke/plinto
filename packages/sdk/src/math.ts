@@ -40,7 +40,12 @@ export function floorPerTokenRaw(
  *   net   = gross - fee          (fee stays in the vault)
  *
  * Both rounding steps favor the vault. Throws on a zero supply, an amount above the supply,
- * or bps outside [0, 10_000].
+ * or bps outside [0, 10_000]. A quote with `net === 0n` is returned as is, but the on-chain
+ * `redeem` rejects it (docs/DECISIONS.md), so UIs should disable the action in that case.
+ *
+ * Splitting a redemption with a non-zero fee can return slightly more in total than one large
+ * redemption (earlier fees raise the floor for the remaining tokens); any sequence still pays
+ * at most `floor(vault * redeemed / supply)` of the starting state.
  */
 export function redeemQuote(
   vaultRaw: bigint,
