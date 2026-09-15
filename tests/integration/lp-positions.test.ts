@@ -16,6 +16,10 @@
  *    instruction, so the supply falls by exactly the base fee (the burn path of `harvest_lp_fees`,
  *    which the quote-only migrated pool never takes).
  *
+ * 4. the SDK finds all of them (including the NFT held in the claimer's ATA, not the DAMM v2 NFT
+ *    account PDA) and, by default, runCrank harvests only the positions on the launch's own pool with
+ *    at least 0.00001 SPYx pending; the second pool's position is harvested only when opted in.
+ *
  * FloorTracker checks every step: floor monotonic, vault outflow only through redeem, supply equals
  * the sum of all base accounts (including both DAMM v2 base vaults), the claimer holds no base, the
  * vault stays the vault authority's.
@@ -45,6 +49,8 @@ import { fundedWallet, Migration } from "../src/scenario.js";
 import { createStockfloorLaunch, graduate, StockfloorLaunch, trackerAccounts } from "../src/stockfloor-scenario.js";
 import { fetchLaunch, harvestLpFeesIx, harvestMigrationFeeIx, stockfloorProgram } from "../src/stockfloor.js";
 import { createAta, createAtaIdempotentIx, getAta, mintSupply, spyxAta, tokenAccountOwner, tokenAmount } from "../src/token.js";
+import { defaultMinLpFeeQuote, fetchLaunchState, findClaimerPositions, planCrank, runCrank } from "@stockfloor/sdk";
+import { LiteSvmSender } from "../sdk/litesvm-sender.js";
 
 const errName = (f: TxFailure) => anchorErrorFromLogs(f.logs)?.name ?? f.error;
 
@@ -54,6 +60,8 @@ describe("extra DAMM v2 positions held by the claimer", () => {
   let migration: Migration;
   let tracker: FloorTracker;
   let cranker: Keypair;
+  /** Positions created by the tests, for the SDK discovery test at the end. */
+  const made: { transferred?: { position: PublicKey; nftAccount: PublicKey }; empty?: { position: PublicKey; nftAccount: PublicKey }; second?: { keys: DammPoolKeys; position: PublicKey; nftAccount: PublicKey } } = {};
 
   const baseAta = (w: Keypair) => createAta(fork, w, w.publicKey, L.keys.baseMint, TOKEN_PROGRAM_ID);
 
@@ -142,6 +150,7 @@ describe("extra DAMM v2 positions held by the claimer", () => {
     expect(tokenAccountOwner(fork, claimerNft).equals(L.claimer)).toBe(true);
     expect(tokenAmount(fork, claimerNft)).toBe(1n);
     expect(tokenAmount(fork, created.positionNftAccount)).toBe(0n);
+    made.transferred = { position: created.position, nftAccount: claimerNft };
 
     // Trades generate LP fees for both positions (quote only: the migrated pool collects OnlyB).
     const trader = fundedWallet(fork, 10n * L.threshold);
@@ -192,6 +201,7 @@ describe("extra DAMM v2 positions held by the claimer", () => {
     const created = await createPositionIx({ keys: migration.dammKeys, owner: L.claimer, positionNftMint: nftMint.publicKey, payer: payer.publicKey });
     fork.send([created.ix], [payer, nftMint]);
     expect(tokenAccountOwner(fork, created.positionNftAccount).equals(L.claimer)).toBe(true);
+    made.empty = { position: created.position, nftAccount: created.positionNftAccount };
     const v0 = tokenAmount(fork, L.vault);
     const ev = await harvest("harvest_lp_fees empty position", migration.dammKeys, created.position, created.positionNftAccount);
     expect(tokenAmount(fork, L.vault)).toBe(v0);
@@ -234,6 +244,7 @@ describe("extra DAMM v2 positions held by the claimer", () => {
     expect(custom.tokenAMint.equals(L.keys.baseMint) && custom.tokenBMint.equals(SPYX_MINT)).toBe(true);
     expect(custom.collectFeeMode).toBe(0);
     expect(tokenAccountOwner(fork, init.positionNftAccount).equals(L.claimer)).toBe(true);
+    made.second = { keys: init.keys, position: init.position, nftAccount: init.positionNftAccount };
 
     fork.warp(10);
     const trader = fundedWallet(fork, 10n * L.threshold);
@@ -259,5 +270,65 @@ describe("extra DAMM v2 positions held by the claimer", () => {
     const last = tracker.last;
     expect(last.vault * prev.supply > prev.vault * last.supply).toBe(true);
     console.log(JSON.stringify({ bothTokenPool: { pool: init.keys.pool.toBase58(), quoteFee: pending.b, baseFeeBurned: pending.a } }, (_k, v) => (typeof v === "bigint" ? v.toString() : v)));
+  });
+
+  it("the SDK finds every claimer position (the NFT in the claimer's ATA included); runCrank harvests the launch pool by default and the second pool only when opted in", async () => {
+    const { transferred, empty, second } = made;
+    expect(transferred && empty && second).toBeTruthy();
+    const sender = new LiteSvmSender(fork, cranker);
+    const launch = PublicKey.findProgramAddressSync([Buffer.from("launch"), L.config.toBuffer()], stockfloorProgram().programId)[0];
+    fork.warp(10);
+    const trader = fundedWallet(fork, 10n * L.threshold);
+    tracker.trackBase(baseAta(trader));
+    const base = () => tokenAmount(fork, getAta(trader.publicKey, L.keys.baseMint, TOKEN_PROGRAM_ID));
+    await swap("buy on the migrated pool", migration.dammKeys, trader, "buy", L.threshold / 2n);
+    await swap("sell on the migrated pool", migration.dammKeys, trader, "sell", base() / 2n);
+    await swap("buy on the second pool", second!.keys, trader, "buy", L.threshold / 10n);
+    await swap("sell on the second pool", second!.keys, trader, "sell", base() / 4n);
+
+    // Discovery: position NFT account PDAs and the claimer's ATA.
+    const found = await findClaimerPositions(sender, { claimer: L.claimer, baseMint: L.keys.baseMint, quoteMint: SPYX_MINT });
+    const byPosition = new Map(found.map((p) => [p.position.toBase58(), p]));
+    expect(found.length).toBe(4);
+    const pMigrated = byPosition.get(migration.firstPosition.toBase58())!;
+    const pTransferred = byPosition.get(transferred!.position.toBase58())!;
+    const pEmpty = byPosition.get(empty!.position.toBase58())!;
+    const pSecond = byPosition.get(second!.position.toBase58())!;
+    expect(pMigrated.positionNftAccount.equals(migration.firstPositionNftAccount)).toBe(true);
+    expect(pTransferred.positionNftAccount.equals(transferred!.nftAccount)).toBe(true); // the claimer's ATA
+    expect(pEmpty.positionNftAccount.equals(empty!.nftAccount)).toBe(true);
+    expect(pSecond.dammPool.equals(second!.keys.pool)).toBe(true);
+    expect(pMigrated.pending).toEqual(pendingPositionFees(fork, migration.dammPool, migration.firstPosition));
+    expect(pTransferred.pending).toEqual(pendingPositionFees(fork, migration.dammPool, transferred!.position));
+    expect(pSecond.pending).toEqual(pendingPositionFees(fork, second!.keys.pool, second!.position));
+    expect(pEmpty.pending).toEqual({ a: 0n, b: 0n });
+    const min = defaultMinLpFeeQuote(8);
+    expect(pMigrated.pending.b >= min && pTransferred.pending.b >= min && pSecond.pending.b >= min && pSecond.pending.a > 0n).toBe(true);
+
+    // Default plan: the migrated pool's two funded positions only, largest pending quote first.
+    const s0 = (await fetchLaunchState(sender, { launch }))!;
+    expect(s0.positions.length).toBe(4);
+    const lpPlan = planCrank(s0).filter((a) => a.kind === "harvest_lp_fees");
+    const expectedOrder = [pMigrated, pTransferred].sort((x, y) => (x.pending.b > y.pending.b ? -1 : 1)).map((p) => p.position.toBase58());
+    expect(lpPlan.map((a) => (a.kind === "harvest_lp_fees" ? a.position.toBase58() : ""))).toEqual(expectedOrder);
+    expect(planCrank(s0, { includeForeignPositions: true }).filter((a) => a.kind === "harvest_lp_fees").length).toBe(3);
+
+    // runCrank with defaults (also harvests the pending curve fees and surplus of this launch).
+    const v0 = tokenAmount(fork, L.vault);
+    const expectedOther = (s0.dbcPool!.partnerQuoteFee) + s0.partnerSurplus;
+    const res = await tracker.step("runCrank (defaults)", "no-outflow", () => runCrank(sender, { launch }));
+    expect(res.steps.every((st) => st.status === "executed")).toBe(true);
+    expect(res.steps.filter((st) => st.action.kind === "harvest_lp_fees").length).toBe(2);
+    expect(tokenAmount(fork, L.vault) - v0).toBe(expectedOther + pMigrated.pending.b + pTransferred.pending.b);
+    expect(pendingPositionFees(fork, second!.keys.pool, second!.position)).toEqual(pSecond.pending);
+
+    // Opted in: the second pool's position, quote into the vault and base burned.
+    const v1 = tokenAmount(fork, L.vault);
+    const s1 = mintSupply(fork, L.keys.baseMint);
+    const opted = await tracker.step("runCrank (includeForeignPositions)", "no-outflow", () => runCrank(sender, { launch }, { includeForeignPositions: true }));
+    expect(opted.steps.map((st) => [st.action.kind, st.status])).toEqual([["harvest_lp_fees", "executed"]]);
+    expect(tokenAmount(fork, L.vault) - v1).toBe(pSecond.pending.b);
+    expect(s1 - mintSupply(fork, L.keys.baseMint)).toBe(pSecond.pending.a);
+    expect(planCrank((await fetchLaunchState(sender, { launch }))!, { includeForeignPositions: true })).toEqual([]);
   });
 });

@@ -97,26 +97,88 @@ export interface LaunchState {
 
 export type LaunchRef = { launch: PublicKey } | { config: PublicKey } | { baseMint: PublicKey };
 
-/** Launch PDA for a reference; `baseMint` needs a getProgramAccounts lookup. */
-export async function resolveLaunchAddress(reader: ChainReader, ref: LaunchRef): Promise<PublicKey> {
-  if ("launch" in ref) return ref.launch;
-  if ("config" in ref) return launchPda(ref.config)[0];
+/** More than one Launch account could be the launch of a base mint (see `resolveLaunchByBaseMint`). */
+export class AmbiguousLaunchError extends Error {
+  constructor(
+    readonly baseMint: PublicKey,
+    readonly candidates: PublicKey[],
+  ) {
+    super(`${candidates.length} StockFloor launches commit base mint ${baseMint.toBase58()} and none of them owns its DBC pool yet`);
+    this.name = "AmbiguousLaunchError";
+  }
+}
+
+export interface BaseMintLaunchMatch {
+  address: PublicKey;
+  launch: LaunchAccount;
+  /**
+   * True when this launch owns the base mint's DBC pool: the pool is registered, or the canonical
+   * pool `dbcPoolPda(launch.config, baseMint, quoteMint)` exists and belongs to the launch config.
+   * A base mint has exactly one DBC pool, so at most one launch can be canonical. False only for the
+   * single launch of a mint whose pool does not exist yet (between the two launch transactions);
+   * do not cache such a result.
+   */
+  canonical: boolean;
+}
+
+/**
+ * The launch of a base mint. `create_launch` accepts any base mint, so anyone can create extra
+ * pool-less Launch accounts that commit the mint of an existing launch, and getProgramAccounts
+ * returns matches in no guaranteed order. Only the launch that owns the mint's DBC pool is returned
+ * when one does; with no such launch, a single match is returned as not canonical and several
+ * matches throw `AmbiguousLaunchError`. Returns null when no Launch commits the mint.
+ */
+export async function resolveLaunchByBaseMint(reader: ChainReader, baseMint: PublicKey): Promise<BaseMintLaunchMatch | null> {
   const found = await reader.getProgramAccounts(STOCKFLOOR_PROGRAM_ID, {
     dataSize: LAUNCH_ACCOUNT_SIZE,
     memcmp: [
       { offset: 0, bytes: LAUNCH_DISCRIMINATOR },
-      { offset: LAUNCH_OFFSETS.baseMint, bytes: ref.baseMint.toBytes() },
+      { offset: LAUNCH_OFFSETS.baseMint, bytes: baseMint.toBytes() },
     ],
   });
-  if (found.length === 0) throw new Error(`no StockFloor launch for base mint ${ref.baseMint.toBase58()}`);
-  return found[0]!.pubkey;
+  const candidates = found
+    .filter((a) => a.account.owner.equals(STOCKFLOOR_PROGRAM_ID) && isLaunchAccountData(a.account.data))
+    .map((a) => ({ address: a.pubkey, launch: decodeLaunch(a.account.data) }))
+    .filter((c) => c.launch.baseMint.equals(baseMint));
+  if (candidates.length === 0) return null;
+
+  const pools = candidates.map((c) => dbcPoolPda(c.launch.config, baseMint, c.launch.quoteMint));
+  const registered = candidates.filter((c, i) => c.launch.poolRegistered && c.launch.pool.equals(pools[i]!));
+  let canonical = registered;
+  if (canonical.length === 0) {
+    const accounts = await reader.getMultipleAccountsInfo(pools);
+    canonical = candidates.filter((c, i) => {
+      const acc = accounts[i];
+      if (!acc) return false;
+      try {
+        const pool = decodeDbcVirtualPool(acc);
+        return pool.config.equals(c.launch.config) && pool.baseMint.equals(baseMint);
+      } catch {
+        return false;
+      }
+    });
+  }
+  if (canonical.length > 1) throw new AmbiguousLaunchError(baseMint, canonical.map((c) => c.address));
+  if (canonical.length === 1) return { ...canonical[0]!, canonical: true };
+  if (candidates.length > 1) throw new AmbiguousLaunchError(baseMint, candidates.map((c) => c.address));
+  return { ...candidates[0]!, canonical: false };
+}
+
+/** Launch PDA for a reference; `baseMint` needs a getProgramAccounts lookup (`resolveLaunchByBaseMint`). */
+export async function resolveLaunchAddress(reader: ChainReader, ref: LaunchRef): Promise<PublicKey> {
+  if ("launch" in ref) return ref.launch;
+  if ("config" in ref) return launchPda(ref.config)[0];
+  const match = await resolveLaunchByBaseMint(reader, ref.baseMint);
+  if (!match) throw new Error(`no StockFloor launch for base mint ${ref.baseMint.toBase58()}`);
+  return match.address;
 }
 
 export async function getLaunch(reader: ChainReader, ref: LaunchRef): Promise<{ address: PublicKey; launch: LaunchAccount } | null> {
   let address: PublicKey;
   try {
     address = await resolveLaunchAddress(reader, ref);
-  } catch {
+  } catch (e) {
+    if (e instanceof AmbiguousLaunchError) throw e;
     return null;
   }
   const acc = await reader.getAccountInfo(address);
@@ -245,16 +307,32 @@ export async function fetchLaunchState(reader: ChainReader, ref: LaunchRef, opts
 /**
  * DAMM v2 positions whose NFT is held by the claimer, on any DAMM v2 pool with the launch mints
  * (what harvest_lp_fees accepts), with their pending fees.
+ *
+ * The NFT may sit in any Token-2022 account the claimer owns: the DAMM v2 position NFT account PDA
+ * (positions created with the claimer as owner, including the migrated one) or the claimer's ATA
+ * (a position NFT transferred to it). A candidate counts only when its amount is 1 and the DAMM v2
+ * position derived from the mint exists, decodes and names that mint as its `nft_mint`.
  */
 export async function findClaimerPositions(
   reader: ChainReader,
   a: { claimer: PublicKey; baseMint: PublicKey; quoteMint: PublicKey },
 ): Promise<ClaimerPosition[]> {
   const tokenAccounts = await reader.getTokenAccountsByOwner(a.claimer, TOKEN_2022_PROGRAM_ID);
-  const nfts = tokenAccounts
-    .map((t) => ({ pubkey: t.pubkey, info: decodeTokenAccount(t.account.data) }))
-    .filter((t) => t.info.amount === 1n && t.info.owner.equals(a.claimer))
-    .filter((t) => t.pubkey.equals(dammV2PositionNftAccountPda(t.info.mint)));
+  const byMint = new Map<string, { pubkey: PublicKey; info: ReturnType<typeof decodeTokenAccount> }>();
+  for (const t of tokenAccounts) {
+    let info: ReturnType<typeof decodeTokenAccount>;
+    try {
+      info = decodeTokenAccount(t.account.data);
+    } catch {
+      continue;
+    }
+    if (info.amount !== 1n || !info.owner.equals(a.claimer)) continue;
+    const key = info.mint.toBase58();
+    // A 1-supply NFT cannot sit in two accounts with amount 1; prefer the canonical NFT account if it ever did.
+    const prev = byMint.get(key);
+    if (!prev || t.pubkey.equals(dammV2PositionNftAccountPda(info.mint))) byMint.set(key, { pubkey: t.pubkey, info });
+  }
+  const nfts = [...byMint.values()];
   if (nfts.length === 0) return [];
   const positionKeys = nfts.map((n) => dammV2PositionPda(n.info.mint));
   const positionAccs = await reader.getMultipleAccountsInfo(positionKeys);
@@ -262,7 +340,8 @@ export async function findClaimerPositions(
   positionAccs.forEach((acc, i) => {
     if (!acc) return;
     try {
-      decoded.push({ nft: nfts[i]!, position: positionKeys[i]!, state: decodeDammV2Position(acc) });
+      const state = decodeDammV2Position(acc);
+      if (state.nftMint.equals(nfts[i]!.info.mint)) decoded.push({ nft: nfts[i]!, position: positionKeys[i]!, state });
     } catch {
       // not a DAMM v2 position
     }
