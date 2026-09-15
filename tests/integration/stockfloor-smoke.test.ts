@@ -57,7 +57,7 @@ const dbcCommon = {
   dbcProgram: C.DBC_PROGRAM_ID,
 };
 
-const createLaunchIx = (feeBps: number, cfg = config, creatorPk = creator.publicKey) =>
+const createLaunchIx = (feeBps: number, cfg = config, baseMint = keys.baseMint, creatorPk = creator.publicKey) =>
   sf.methods.createLaunch(feeBps).accountsStrict({
     payer: partner.publicKey,
     creator: creatorPk,
@@ -65,6 +65,7 @@ const createLaunchIx = (feeBps: number, cfg = config, creatorPk = creator.public
     authority: deriveAuthority(cfg, PID),
     launch: PublicKey.findProgramAddressSync([Buffer.from("launch"), cfg.toBuffer()], PID)[0],
     quoteMint: C.SPYX_MINT,
+    baseMint,
     vault: T.spyxAta(deriveAuthority(cfg, PID)),
     quoteTokenProgram: C.TOKEN_2022_PROGRAM_ID,
     associatedTokenProgram: C.ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -76,15 +77,15 @@ expectErr("create_launch exit fee 501", fork.sendTx([await createLaunchIx(501)],
 let res = fork.send([await createLaunchIx(200)], [partner, creator, configKp]);
 results.cuCreateLaunch = res.computeUnits;
 const L = () => sf.coder.accounts.decode("launch", fork.mustGetAccount(launchPda).data);
-check("launch created", L().exitFeeBps === 200 && L().vault.equals(vault) && L().quoteTokenProgram.equals(C.TOKEN_2022_PROGRAM_ID));
+check("launch created", L().exitFeeBps === 200 && L().vault.equals(vault) && L().quoteTokenProgram.equals(C.TOKEN_2022_PROGRAM_ID) && L().baseMint.equals(keys.baseMint));
 check("LaunchCreated event", parseEvents(sf, res.logs).some((e: any) => e.name === "launchCreated"));
 {
   const r2 = fork.sendTx([await createLaunchIx(200)], [partner, creator, configKp]);
   check("create_launch twice fails (launch PDA in use)", !r2.ok && r2.logs.some((l: string) => l.includes("already in use")));
   // create_launch without the config signature is rejected by the signer constraint.
   const cfgNs = Keypair.generate();
-  await createLaunch(fork, { feeClaimer: deriveAuthority(cfgNs.publicKey, PID), configKeypair: cfgNs, partner, creator, migrationQuoteThreshold: THRESHOLD });
-  const ix = await createLaunchIx(200, cfgNs.publicKey);
+  const lNs = await createLaunch(fork, { feeClaimer: deriveAuthority(cfgNs.publicKey, PID), configKeypair: cfgNs, partner, creator, migrationQuoteThreshold: THRESHOLD });
+  const ix = await createLaunchIx(200, cfgNs.publicKey, lNs.keys.baseMint);
   ix.keys.forEach((k) => { if (k.pubkey.equals(cfgNs.publicKey)) k.isSigner = false; });
   expectErr("create_launch without config signer", fork.sendTx([ix], [partner, creator]), "AccountNotSigner");
 }
@@ -92,35 +93,35 @@ check("LaunchCreated event", parseEvents(sf, res.logs).some((e: any) => e.name =
 {
   const cfg2 = Keypair.generate();
   const auth2 = deriveAuthority(cfg2.publicKey, PID);
-  await createLaunch(fork, { feeClaimer: auth2, configKeypair: cfg2, partner, creator, migrationQuoteThreshold: THRESHOLD });
-  fork.send([await createLaunchIx(0, cfg2.publicKey)], [partner, creator, cfg2]);
+  const l2 = await createLaunch(fork, { feeClaimer: auth2, configKeypair: cfg2, partner, creator, migrationQuoteThreshold: THRESHOLD });
+  fork.send([await createLaunchIx(0, cfg2.publicKey, l2.keys.baseMint)], [partner, creator, cfg2]);
   const launch2 = PublicKey.findProgramAddressSync([Buffer.from("launch"), cfg2.publicKey.toBuffer()], PID)[0];
   const r = fork.send([await sf.methods.floor().accountsStrict({ launch: launch2, vault: T.spyxAta(auth2), baseMint: SystemProgram.programId }).instruction()], [partner]);
   const b = Buffer.from(r.meta.returnData().data());
-  check("floor view before registration", b.readBigUInt64LE(0) === 0n && b.readBigUInt64LE(8) === 0n && b.readUInt16LE(16) === 0);
+  check("floor view before registration", b.length === 34 && b.readBigUInt64LE(0) === 0n && b.readBigUInt64LE(8) === 0n && b.readUInt16LE(16) === 0 && b.readBigUInt64LE(18) === 0n && b.readBigUInt64LE(26) === 0n);
   // A config whose fee_claimer is not the authority is rejected.
   const cfg3 = Keypair.generate();
-  await createLaunch(fork, { feeClaimer: partner.publicKey, leftoverReceiver: deriveAuthority(cfg3.publicKey, PID), configKeypair: cfg3, partner, creator, migrationQuoteThreshold: THRESHOLD });
-  expectErr("create_launch with foreign fee_claimer", fork.sendTx([await createLaunchIx(200, cfg3.publicKey)], [partner, creator, cfg3]), "FeeClaimerNotAuthority");
+  const l3 = await createLaunch(fork, { feeClaimer: partner.publicKey, leftoverReceiver: deriveAuthority(cfg3.publicKey, PID), configKeypair: cfg3, partner, creator, migrationQuoteThreshold: THRESHOLD });
+  expectErr("create_launch with foreign fee_claimer", fork.sendTx([await createLaunchIx(200, cfg3.publicKey, l3.keys.baseMint)], [partner, creator, cfg3]), "FeeClaimerNotAuthority");
   // Wrong quote mint account.
 }
 
-// ---- register_pool
-const registerIx = (signer: PublicKey, pool = keys.pool, baseMint = keys.baseMint) =>
-  sf.methods.registerPool().accountsStrict({ creator: signer, launch: launchPda, config, pool, baseMint, tokenProgram: C.TOKEN_PROGRAM_ID }).instruction();
+// ---- register_pool (permissionless: the base mint was committed by create_launch)
+const registerIx = (pool = keys.pool, baseMint = keys.baseMint) =>
+  sf.methods.registerPool().accountsStrict({ launch: launchPda, config, pool, baseMint, tokenProgram: C.TOKEN_PROGRAM_ID }).instruction();
 const rando = fork.newWallet();
-expectErr("register_pool by non-creator", fork.sendTx([await registerIx(rando.publicKey)], [rando]), "PoolCreatorMismatch");
 // Rogue pool on our config by someone else.
 const rogueCreator = fork.newWallet();
 {
   const bm = Keypair.generate();
   const init = await initializeVirtualPoolWithSplTokenIx({ config, creator: rogueCreator.publicKey, baseMint: bm.publicKey, quoteMint: C.SPYX_MINT, payer: rogueCreator.publicKey, name: "Rogue", symbol: "RGE", uri: "https://x", tokenBadge: C.DBC_TOKEN_BADGE_SPYX });
   fork.send([init.ix], [rogueCreator, bm]);
-  expectErr("register rogue pool (creator signs)", fork.sendTx([await registerIx(creator.publicKey, init.pool, bm.publicKey)], [creator]), "PoolCreatorMismatch");
+  expectErr("register rogue pool with its own base mint", fork.sendTx([await registerIx(init.pool, bm.publicKey)], [rando]), "BaseMintMismatch");
+  expectErr("register rogue pool with the committed base mint", fork.sendTx([await registerIx(init.pool)], [rando]), "BaseMintMismatch");
 }
-res = fork.send([await registerIx(creator.publicKey)], [creator]);
-check("pool registered", L().pool.equals(keys.pool) && L().baseMint.equals(keys.baseMint));
-expectErr("register_pool twice", fork.sendTx([await registerIx(creator.publicKey)], [creator]), "PoolAlreadyRegistered");
+res = fork.send([await registerIx()], [rando]);
+check("pool registered by a non-creator", L().pool.equals(keys.pool) && L().baseMint.equals(keys.baseMint));
+expectErr("register_pool twice", fork.sendTx([await registerIx()], [creator]), "PoolAlreadyRegistered");
 
 // ---- trades
 const buyers: Keypair[] = [];
@@ -145,7 +146,7 @@ res = fork.send([await harvestCurveIx(cranker.publicKey)], [cranker]);
 results.cuHarvestCurveFees = res.computeUnits;
 check("curve fees harvested into vault", T.tokenAmount(fork, vault) === partnerFee && partnerFee > 0n, { partnerFee });
 const ev = parseEvents(sf, res.logs).find((e: any) => e.name === "curveFeesHarvested");
-check("CurveFeesHarvested event amount", ev && bnToBig(ev.data.quoteAmount) === partnerFee);
+check("CurveFeesHarvested event amount", !!ev && bnToBig(ev.data.quoteAmount) === partnerFee);
 
 const quoteIx = (method: "harvestMigrationFee" | "harvestSurplus") =>
   (sf.methods as any)[method]().accountsStrict({
@@ -198,7 +199,7 @@ const supplyPreDonation = T.mintSupply(fork, keys.baseMint);
 res = fork.send([await leftoverIx()], [cranker]);
 check("harvest_leftover burns donated base", T.tokenAmount(fork, baseAtaAuth) === 0n && T.mintSupply(fork, keys.baseMint) === supplyPreDonation - donation);
 const lev = parseEvents(sf, res.logs).find((e: any) => e.name === "leftoverHarvested");
-check("LeftoverHarvested event", lev && lev.data.leftoverWithdrawn === false && bnToBig(lev.data.baseBurned) === donation);
+check("LeftoverHarvested event", !!lev && lev.data.leftoverWithdrawn === false && bnToBig(lev.data.baseBurned) === donation);
 
 // ---- DAMM trades + LP fees
 const trader = fundedWallet(fork, 5n * C.SPYX_ONE);
@@ -226,7 +227,8 @@ res = fork.send([floorIx], [cranker]);
 const rd = res.meta.returnData();
 const rdBytes = Buffer.from(rd.data());
 const vaultRaw = rdBytes.readBigUInt64LE(0), supplyRd = rdBytes.readBigUInt64LE(8), bpsRd = rdBytes.readUInt16LE(16);
-check("floor view return data", vaultRaw === T.tokenAmount(fork, vault) && supplyRd === T.mintSupply(fork, keys.baseMint) && bpsRd === 200, { vaultRaw, supplyRd, bpsRd });
+const floorQ64 = rdBytes.readBigUInt64LE(18) | (rdBytes.readBigUInt64LE(26) << 64n);
+check("floor view return data", vaultRaw === T.tokenAmount(fork, vault) && supplyRd === T.mintSupply(fork, keys.baseMint) && bpsRd === 200 && floorQ64 === (vaultRaw << 64n) / supplyRd, { vaultRaw, supplyRd, bpsRd, floorQ64 });
 
 // ---- redeem
 const holder = buyers[1];
@@ -251,7 +253,7 @@ check("redeem exact payout", T.tokenAmount(fork, T.spyxAta(holder.publicKey)) - 
 check("redeem vault/supply", V1 === V0 - net && S1 === S0 - amount);
 check("floor increased", V1 * S0 > V0 * S1);
 const rev = parseEvents(sf, res.logs).find((e: any) => e.name === "redeemed");
-check("Redeemed event", rev && bnToBig(rev.data.net) === net && bnToBig(rev.data.fee) === fee);
+check("Redeemed event", !!rev && bnToBig(rev.data.net) === net && bnToBig(rev.data.fee) === fee);
 
 // ---- paused quote mint
 T.setMintPaused(fork, C.SPYX_MINT, true);

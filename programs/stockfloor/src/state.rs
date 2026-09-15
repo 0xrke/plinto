@@ -20,13 +20,19 @@ pub struct Launch {
     pub migration_fee_harvested: bool,
     /// `true` once the partner surplus has been moved into the vault.
     pub surplus_harvested: bool,
+    /// Latched to `true` the first time this program sees the registered DBC pool fully
+    /// migrated to DAMM v2 (`harvest_migration_fee`, `harvest_surplus`, `harvest_leftover`
+    /// or the first `redeem`). Once set, `redeem` never decodes DBC state again, so a later
+    /// DBC upgrade that changes the VirtualPool layout cannot lock redemptions.
+    pub migrated: bool,
     /// DBC config (one config per launch).
     pub config: Pubkey,
     /// Launch creator. Must sign `register_pool` and must be the DBC pool creator.
     pub creator: Pubkey,
     /// Canonical DBC virtual pool. `Pubkey::default()` until `register_pool`.
     pub pool: Pubkey,
-    /// Base token mint (SPL Token). `Pubkey::default()` until `register_pool`.
+    /// Base token mint (SPL Token), committed by `create_launch`. The DBC pool of
+    /// `(config, base_mint)` is unique, so `register_pool` is permissionless.
     pub base_mint: Pubkey,
     /// Quote mint (from the DBC config).
     pub quote_mint: Pubkey,
@@ -43,7 +49,7 @@ pub struct Launch {
     pub total_redeemed_quote: u64,
     pub total_exit_fees: u64,
     /// Reserved for future fields.
-    pub reserved: [u8; 64],
+    pub reserved: [u8; 63],
 }
 
 impl Launch {
@@ -61,4 +67,7 @@ pub struct FloorInfo {
     pub supply: u64,
     /// Exit fee in basis points.
     pub exit_fee_bps: u16,
+    /// Floor per token as Q64.64 raw quote units per raw base unit:
+    /// `(vault_raw << 64) / supply`, 0 when the supply is 0.
+    pub floor_q64: u128,
 }

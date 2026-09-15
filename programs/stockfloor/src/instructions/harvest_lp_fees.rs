@@ -13,7 +13,8 @@ use crate::events::LpFeesHarvested;
 use crate::external::{load_damm_pool, load_damm_position};
 use crate::state::Launch;
 use crate::token_utils::{
-    assert_quote_mint_transferable, assert_vault_not_frozen, burn_all_signed,
+    assert_quote_mint_transferable, assert_vault_not_frozen, assert_vault_unencumbered,
+    burn_all_signed,
 };
 
 /// Permissionless: claim DAMM v2 position fees for a position whose NFT is held by the
@@ -184,6 +185,10 @@ pub fn handle_harvest_lp_fees(ctx: Context<HarvestLpFees>) -> Result<()> {
         &accounts.authority.to_account_info(),
         signer,
     )?;
+
+    // The Authority (vault owner) signed a CPI into an upgradeable program with the vault
+    // writable: the vault must come back unencumbered.
+    assert_vault_unencumbered(&accounts.vault.to_account_info(), &accounts.authority.key())?;
 
     let accounts = ctx.accounts;
     accounts.vault.reload()?;

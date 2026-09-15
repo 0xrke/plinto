@@ -12,6 +12,7 @@ import {
   PublicKey,
   Transaction,
   TransactionInstruction,
+  VersionedTransaction,
 } from "@solana/web3.js";
 import { Clock, FailedTransactionMetadata, LiteSVM, TransactionMetadata } from "litesvm";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -60,6 +61,8 @@ export interface TxSuccess {
   logs: string[];
   computeUnits: bigint;
   meta: TransactionMetadata;
+  /** Static account keys of the sent message, in order (resolves `programIdIndex` of inner instructions). */
+  accountKeys: PublicKey[];
 }
 
 export interface TxFailure {
@@ -67,6 +70,7 @@ export interface TxFailure {
   logs: string[];
   error: string;
   meta: FailedTransactionMetadata;
+  accountKeys: PublicKey[];
 }
 
 export type TxResult = TxSuccess | TxFailure;
@@ -250,11 +254,12 @@ export class Fork {
     tx.recentBlockhash = this.svm.latestBlockhash();
     tx.sign(...dedupeSigners(signers));
     const bytes = tx.serialize();
+    const accountKeys = VersionedTransaction.deserialize(bytes).message.staticAccountKeys;
     const inner = (this.svm as unknown as { inner: InnerLiteSvm }).inner;
     const res = inner.sendLegacyTransaction(bytes);
     this.svm.expireBlockhash();
     if (res instanceof FailedTransactionMetadata) {
-      return { ok: false, logs: res.meta().logs(), error: res.err().toString(), meta: res };
+      return { ok: false, logs: res.meta().logs(), error: res.err().toString(), meta: res, accountKeys };
     }
     return {
       ok: true,
@@ -262,6 +267,7 @@ export class Fork {
       logs: res.logs(),
       computeUnits: res.computeUnitsConsumed(),
       meta: res,
+      accountKeys,
     };
   }
 

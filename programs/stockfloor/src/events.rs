@@ -7,6 +7,8 @@ pub struct LaunchCreated {
     pub creator: Pubkey,
     pub authority: Pubkey,
     pub quote_mint: Pubkey,
+    /// Base mint committed for the launch's DBC pool.
+    pub base_mint: Pubkey,
     pub quote_token_program: Pubkey,
     pub vault: Pubkey,
     pub exit_fee_bps: u16,
@@ -87,4 +89,6 @@ pub struct FloorSnapshot {
     pub vault_raw: u64,
     pub supply: u64,
     pub exit_fee_bps: u16,
+    /// `(vault_raw << 64) / supply`, 0 when the supply is 0.
+    pub floor_q64: u128,
 }

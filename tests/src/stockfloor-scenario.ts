@@ -46,6 +46,10 @@ export interface StockfloorLaunchOptions {
   creator?: Keypair;
   /** Skip register_pool (default false). */
   skipRegister?: boolean;
+  /** Mutate the SDK-built DBC ConfigParameters before create_config (adversarial configs). */
+  mutateParams?: (params: any) => void;
+  /** Skip create_launch (and register_pool), e.g. to send a create_launch that must fail. */
+  skipCreateLaunch?: boolean;
 }
 
 /** Effective SPYx ScaledUiAmount multiplier at the fork clock. */
@@ -77,6 +81,7 @@ export async function createStockfloorLaunch(fork: Fork, o: StockfloorLaunchOpti
     exitFeeBps,
   };
   const { feeClaimer, leftoverReceiver, quoteMint, ...params } = buildDbcConfigParams(input, authority, authority);
+  o.mutateParams?.(params);
   fork.send(
     [
       await createConfigIx({
@@ -114,9 +119,16 @@ export async function createStockfloorLaunch(fork: Fork, o: StockfloorLaunchOpti
     baseTokenProgram: TOKEN_PROGRAM_ID,
     quoteTokenProgram: TOKEN_2022_PROGRAM_ID,
   };
-  fork.send([await createLaunchIx({ payer: partner.publicKey, creator: creator.publicKey, config, exitFeeBps })], [partner, creator, configKeypair]);
-  if (!o.skipRegister) {
-    fork.send([await registerPoolIx({ creator: creator.publicKey, config, pool: keys.pool, baseMint: keys.baseMint })], [creator]);
+  if (!o.skipCreateLaunch) {
+    fork.send(
+      [await createLaunchIx({ payer: partner.publicKey, creator: creator.publicKey, config, baseMint: keys.baseMint, exitFeeBps })],
+      [partner, creator, configKeypair],
+    );
+    if (!o.skipRegister) {
+      // Permissionless: sent by a fresh wallet, not the creator.
+      const registrar = fork.newWallet(1);
+      fork.send([await registerPoolIx({ config, pool: keys.pool, baseMint: keys.baseMint })], [registrar]);
+    }
   }
   return {
     partner,

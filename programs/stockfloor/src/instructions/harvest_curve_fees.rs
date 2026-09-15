@@ -10,7 +10,8 @@ use crate::errors::StockfloorError;
 use crate::events::CurveFeesHarvested;
 use crate::state::Launch;
 use crate::token_utils::{
-    assert_quote_mint_transferable, assert_vault_not_frozen, burn_all_signed,
+    assert_quote_mint_transferable, assert_vault_not_frozen, assert_vault_unencumbered,
+    burn_all_signed,
 };
 
 /// Permissionless: claim the partner share of DBC trading fees of the registered pool.
@@ -151,6 +152,10 @@ pub fn handle_harvest_curve_fees(ctx: Context<HarvestCurveFees>) -> Result<()> {
         &accounts.authority.to_account_info(),
         signer,
     )?;
+
+    // The Authority (vault owner) signed a CPI into an upgradeable program with the vault
+    // writable: the vault must come back unencumbered.
+    assert_vault_unencumbered(&accounts.vault.to_account_info(), &accounts.authority.key())?;
 
     let accounts = ctx.accounts;
     accounts.vault.reload()?;

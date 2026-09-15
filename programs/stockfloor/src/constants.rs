@@ -17,6 +17,17 @@ pub const MAX_EXIT_FEE_BPS: u16 = 500;
 pub const MIN_MIGRATION_FEE_PERCENTAGE: u8 = 30;
 pub const MAX_MIGRATION_FEE_PERCENTAGE: u8 = 99;
 
+/// Maximum DBC `creator_trading_fee_percentage` (brief §4 default). The creator's share
+/// of curve trading fees is capped so a config cannot route the partner share (the
+/// vault's) to the creator.
+pub const MAX_CREATOR_TRADING_FEE_PERCENTAGE: u8 = 30;
+
+/// DBC fee numerators are out of 1e9.
+pub const DBC_FEE_DENOMINATOR: u64 = 1_000_000_000;
+/// Maximum DBC curve base fee (`cliff_fee_numerator`, the highest fee of a fee scheduler):
+/// 20%, the start of the brief's optional anti-snipe schedule (§4).
+pub const MAX_CURVE_FEE_NUMERATOR: u64 = 200_000_000;
+
 /// Launch account layout version.
 pub const LAUNCH_VERSION: u8 = 1;
 
@@ -72,4 +83,6 @@ mod tests {
     const _: () = assert!(MAX_EXIT_FEE_BPS as u64 <= crate::math::BPS_DENOMINATOR);
     const _: () = assert!(MIN_MIGRATION_FEE_PERCENTAGE <= MAX_MIGRATION_FEE_PERCENTAGE);
     const _: () = assert!(MAX_MIGRATION_FEE_PERCENTAGE < 100);
+    const _: () = assert!(MAX_CREATOR_TRADING_FEE_PERCENTAGE <= 100);
+    const _: () = assert!(MAX_CURVE_FEE_NUMERATOR < DBC_FEE_DENOMINATOR);
 }

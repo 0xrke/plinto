@@ -6,9 +6,11 @@ use crate::constants::{AUTHORITY_SEED, LAUNCH_SEED};
 use crate::dynamic_bonding_curve;
 use crate::errors::StockfloorError;
 use crate::events::{MigrationFeeHarvested, SurplusHarvested};
-use crate::external::{is_curve_complete, load_dbc_config, load_dbc_pool};
+use crate::external::{is_curve_complete, is_migration_complete, load_dbc_config, load_dbc_pool};
 use crate::state::Launch;
-use crate::token_utils::{assert_quote_mint_transferable, assert_vault_not_frozen};
+use crate::token_utils::{
+    assert_quote_mint_transferable, assert_vault_not_frozen, assert_vault_unencumbered,
+};
 
 /// Accounts shared by `harvest_migration_fee` and `harvest_surplus` (both move quote
 /// from the DBC quote vault into the floor vault, signed by the Authority).
@@ -74,7 +76,8 @@ pub struct HarvestQuoteFromDbc<'info> {
 }
 
 impl<'info> HarvestQuoteFromDbc<'info> {
-    fn preflight(&self) -> Result<()> {
+    /// Returns whether the DBC pool is fully migrated (latched into `Launch.migrated`).
+    fn preflight(&self) -> Result<bool> {
         assert_quote_mint_transferable(&self.quote_mint.to_account_info())?;
         assert_vault_not_frozen(&self.vault.to_account_info())?;
         let config = load_dbc_config(&self.config.to_account_info())?;
@@ -83,10 +86,13 @@ impl<'info> HarvestQuoteFromDbc<'info> {
             is_curve_complete(&pool, &config),
             StockfloorError::CurveNotComplete
         );
-        Ok(())
+        Ok(is_migration_complete(&pool))
     }
 
+    /// After the Authority-signed CPI: the vault must be unencumbered and must not have
+    /// lost quote. Returns `(delta, balance_after)`.
     fn vault_delta(&mut self, before: u64) -> Result<(u64, u64)> {
+        assert_vault_unencumbered(&self.vault.to_account_info(), &self.authority.key())?;
         self.vault.reload()?;
         let after = self.vault.amount;
         let delta = after
@@ -103,7 +109,7 @@ pub fn handle_harvest_migration_fee(ctx: Context<HarvestQuoteFromDbc>) -> Result
         !ctx.accounts.launch.migration_fee_harvested,
         StockfloorError::MigrationFeeAlreadyHarvested
     );
-    ctx.accounts.preflight()?;
+    let migrated = ctx.accounts.preflight()?;
 
     let accounts = &ctx.accounts;
     let config_key = accounts.launch.config;
@@ -135,6 +141,7 @@ pub fn handle_harvest_migration_fee(ctx: Context<HarvestQuoteFromDbc>) -> Result
     let (quote_amount, vault_after) = accounts.vault_delta(vault_before)?;
     let launch = &mut accounts.launch;
     launch.migration_fee_harvested = true;
+    launch.migrated |= migrated;
     launch.total_harvested_quote = launch.total_harvested_quote.saturating_add(quote_amount);
 
     emit!(MigrationFeeHarvested {
@@ -152,7 +159,7 @@ pub fn handle_harvest_surplus(ctx: Context<HarvestQuoteFromDbc>) -> Result<()> {
         !ctx.accounts.launch.surplus_harvested,
         StockfloorError::SurplusAlreadyHarvested
     );
-    ctx.accounts.preflight()?;
+    let migrated = ctx.accounts.preflight()?;
 
     let accounts = &ctx.accounts;
     let config_key = accounts.launch.config;
@@ -181,6 +188,7 @@ pub fn handle_harvest_surplus(ctx: Context<HarvestQuoteFromDbc>) -> Result<()> {
     let (quote_amount, vault_after) = accounts.vault_delta(vault_before)?;
     let launch = &mut accounts.launch;
     launch.surplus_harvested = true;
+    launch.migrated |= migrated;
     launch.total_harvested_quote = launch.total_harvested_quote.saturating_add(quote_amount);
 
     emit!(SurplusHarvested {

@@ -3,23 +3,30 @@ use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::constants::{AUTHORITY_SEED, LAUNCH_SEED, LAUNCH_VERSION};
+use crate::errors::StockfloorError;
 use crate::events::LaunchCreated;
 use crate::external::{load_dbc_config, validate_launch_config};
 use crate::state::Launch;
 
 /// Create the launch registry and the floor vault for a freshly created DBC config.
 ///
+/// The creator commits to the base mint of the launch's DBC pool here. DBC derives the
+/// pool from `(config, base_mint, quote_mint)` and pool creation needs the base mint
+/// keypair and the creator's signature, so exactly one pool can ever match, and
+/// `register_pool` can be permissionless: the creator cannot withhold registration.
+///
 /// Account order (clients must follow it):
-/// 0. `payer`                    signer, writable: pays rent for `launch` and `vault`
-/// 1. `creator`                  signer: recorded as the launch creator
-/// 2. `config`                   signer: the DBC config keypair (proves the caller created it)
-/// 3. `authority`                PDA `["authority", config]`
-/// 4. `launch`                   writable: PDA `["launch", config]`, created here
-/// 5. `quote_mint`               must equal `config.quote_mint`
-/// 6. `vault`                    writable: ATA(authority, quote_mint, quote_token_program)
-/// 7. `quote_token_program`      owner of `quote_mint` (Token or Token-2022)
-/// 8. `associated_token_program`
-/// 9. `system_program`
+///  0. `payer`                    signer, writable: pays rent for `launch` and `vault`
+///  1. `creator`                  signer: recorded as the launch creator
+///  2. `config`                   signer: the DBC config keypair (proves the caller created it)
+///  3. `authority`                PDA `["authority", config]`
+///  4. `launch`                   writable: PDA `["launch", config]`, created here
+///  5. `quote_mint`               must equal `config.quote_mint`
+///  6. `base_mint`                the base mint of the launch's DBC pool (may not exist yet)
+///  7. `vault`                    writable: ATA(authority, quote_mint, quote_token_program)
+///  8. `quote_token_program`      owner of `quote_mint` (Token or Token-2022)
+///  9. `associated_token_program`
+/// 10. `system_program`
 #[derive(Accounts)]
 pub struct CreateLaunch<'info> {
     #[account(mut)]
@@ -48,6 +55,9 @@ pub struct CreateLaunch<'info> {
     #[account(mint::token_program = quote_token_program)]
     pub quote_mint: Box<InterfaceAccount<'info, Mint>>,
 
+    /// CHECK: only its address is committed; `register_pool` validates the mint and its pool.
+    pub base_mint: UncheckedAccount<'info>,
+
     /// `init_if_needed` so that a third party pre-creating the ATA cannot block the launch.
     #[account(
         init_if_needed,
@@ -64,6 +74,11 @@ pub struct CreateLaunch<'info> {
 }
 
 pub fn handle_create_launch(ctx: Context<CreateLaunch>, exit_fee_bps: u16) -> Result<()> {
+    let base_mint = ctx.accounts.base_mint.key();
+    require!(
+        base_mint != Pubkey::default() && base_mint != ctx.accounts.quote_mint.key(),
+        StockfloorError::InvalidBaseMint
+    );
     let (migration_fee_percentage, migration_quote_threshold) = {
         let config = load_dbc_config(&ctx.accounts.config.to_account_info())?;
         validate_launch_config(
@@ -88,10 +103,11 @@ pub fn handle_create_launch(ctx: Context<CreateLaunch>, exit_fee_bps: u16) -> Re
     launch.exit_fee_bps = exit_fee_bps;
     launch.migration_fee_harvested = false;
     launch.surplus_harvested = false;
+    launch.migrated = false;
     launch.config = ctx.accounts.config.key();
     launch.creator = ctx.accounts.creator.key();
     launch.pool = Pubkey::default();
-    launch.base_mint = Pubkey::default();
+    launch.base_mint = base_mint;
     launch.quote_mint = ctx.accounts.quote_mint.key();
     launch.quote_token_program = quote_token_program;
     launch.vault = ctx.accounts.vault.key();
@@ -101,7 +117,7 @@ pub fn handle_create_launch(ctx: Context<CreateLaunch>, exit_fee_bps: u16) -> Re
     launch.total_redeemed_base = 0;
     launch.total_redeemed_quote = 0;
     launch.total_exit_fees = 0;
-    launch.reserved = [0u8; 64];
+    launch.reserved = [0u8; 63];
 
     emit!(LaunchCreated {
         launch: launch.key(),
@@ -109,6 +125,7 @@ pub fn handle_create_launch(ctx: Context<CreateLaunch>, exit_fee_bps: u16) -> Re
         creator: launch.creator,
         authority: ctx.accounts.authority.key(),
         quote_mint: launch.quote_mint,
+        base_mint,
         quote_token_program,
         vault: launch.vault,
         exit_fee_bps,

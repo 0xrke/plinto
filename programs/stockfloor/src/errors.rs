@@ -32,6 +32,22 @@ pub enum StockfloorError {
     ExitFeeTooHigh,
     #[msg("Quote mint does not match the DBC config quote mint")]
     QuoteMintMismatch,
+    #[msg("DBC config must use dynamic token supply (fixed supply is not supported)")]
+    FixedTokenSupplyNotAllowed,
+    #[msg("DBC config creator_trading_fee_percentage exceeds 30")]
+    CreatorTradingFeeTooHigh,
+    #[msg("DBC config base fee must be a fee scheduler with a cliff fee of at most 20%")]
+    CurveFeeTooHigh,
+    #[msg("DBC config must not enable the dynamic (volatility) fee")]
+    DynamicFeeNotAllowed,
+    #[msg("DBC config migrated_collect_fee_mode must be QuoteToken")]
+    MigratedCollectFeeModeNotQuote,
+    #[msg("DBC config token_update_authority must be Immutable")]
+    TokenUpdateAuthorityNotImmutable,
+    #[msg("DBC config pool_creation_fee must be 0")]
+    PoolCreationFeeNotZero,
+    #[msg("Base mint must not be the default pubkey or the quote mint")]
+    InvalidBaseMint,
 
     // ----- register_pool -----
     #[msg("Pool account is not a DBC VirtualPool (wrong owner, discriminator or size)")]
@@ -74,6 +90,8 @@ pub enum StockfloorError {
     PositionNftNotOwnedByAuthority,
     #[msg("Vault balance decreased during a harvest")]
     VaultDecreased,
+    #[msg("Vault token account has a delegate, close authority, foreign owner, CPI guard or required memo")]
+    VaultEncumbered,
 
     // ----- redeem -----
     #[msg("DBC pool migration to DAMM v2 is not complete")]

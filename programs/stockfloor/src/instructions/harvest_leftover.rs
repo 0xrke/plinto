@@ -8,13 +8,18 @@ use crate::constants::{AUTHORITY_SEED, LAUNCH_SEED};
 use crate::dynamic_bonding_curve;
 use crate::errors::StockfloorError;
 use crate::events::LeftoverHarvested;
-use crate::external::{load_dbc_config, load_dbc_pool, DBC_MIGRATION_PROGRESS_CREATED_POOL};
+use crate::external::{
+    is_migration_complete, load_dbc_config, load_dbc_pool, DBC_MIGRATION_PROGRESS_CREATED_POOL,
+};
 use crate::state::Launch;
 use crate::token_utils::burn_all_signed;
 
-/// Permissionless: if the config is fixed-supply, the DAMM v2 pool exists and the
-/// leftover was not withdrawn yet, CPI DBC `withdraw_leftover` into the Authority base
-/// ATA. Then burn everything the Authority base ATA holds (leftover, donations, dust).
+/// Permissionless: burn everything the Authority base ATA holds (donations, dust).
+///
+/// `create_launch` rejects fixed-supply configs, so DBC `withdraw_leftover` never applies
+/// to a StockFloor launch; the fixed-supply branch below is defensive only. If it ever
+/// ran, the DAMM v2 pool exists and the leftover was not withdrawn yet, it would CPI DBC
+/// `withdraw_leftover` into the Authority base ATA and burn it in the same instruction.
 ///
 /// Account order:
 ///  0. `payer`                     signer, writable (rent for the Authority base ATA if missing)
@@ -91,12 +96,15 @@ pub struct HarvestLeftover<'info> {
 
 pub fn handle_harvest_leftover(ctx: Context<HarvestLeftover>) -> Result<()> {
     let accounts = &ctx.accounts;
-    let leftover_applicable = {
+    let (leftover_applicable, migrated) = {
         let config = load_dbc_config(&accounts.config.to_account_info())?;
         let pool = load_dbc_pool(&accounts.pool.to_account_info())?;
-        config.fixed_token_supply_flag == 1
-            && pool.pool_state.migration_progress == DBC_MIGRATION_PROGRESS_CREATED_POOL
-            && pool.pool_state.is_withdraw_leftover == 0
+        (
+            config.fixed_token_supply_flag == 1
+                && pool.pool_state.migration_progress == DBC_MIGRATION_PROGRESS_CREATED_POOL
+                && pool.pool_state.is_withdraw_leftover == 0,
+            is_migration_complete(&pool),
+        )
     };
 
     let config_key = accounts.launch.config;
@@ -133,6 +141,7 @@ pub fn handle_harvest_leftover(ctx: Context<HarvestLeftover>) -> Result<()> {
     )?;
 
     let launch = &mut ctx.accounts.launch;
+    launch.migrated |= migrated;
     launch.total_burned_base = launch.total_burned_base.saturating_add(base_burned);
 
     emit!(LeftoverHarvested {

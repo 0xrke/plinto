@@ -7,26 +7,27 @@ use crate::events::PoolRegistered;
 use crate::external::{load_dbc_config, load_dbc_pool, DBC_POOL_TYPE_SPL_TOKEN};
 use crate::state::Launch;
 
-/// Record the canonical DBC virtual pool of a launch (once).
+/// Permissionless: record the canonical DBC virtual pool of a launch (once).
 ///
-/// Anyone can create DBC pools on any config, so the launch creator must sign and must
-/// be the pool creator. Pools other than the registered one are ignored forever.
+/// `create_launch` committed the base mint, and DBC derives the pool address from
+/// `(config, base_mint, quote_mint)`, so exactly one pool can match: the one created with
+/// the base mint keypair, and it must name the launch creator (DBC pool creation needs the
+/// creator's signature). Anyone can therefore register it, and the creator cannot hold the
+/// migration fee hostage by never registering. Other pools on the same config use other
+/// base mints and are ignored forever.
 ///
 /// Account order:
-/// 0. `creator`    signer: must equal `launch.creator` and `pool.creator`
-/// 1. `launch`     writable: PDA `["launch", config]`
-/// 2. `config`     `launch.config`
-/// 3. `pool`       DBC VirtualPool on `config`
-/// 4. `base_mint`  `pool.base_mint`, SPL Token mint without mint/freeze authority
+/// 0. `launch`     writable: PDA `["launch", config]`
+/// 1. `config`     `launch.config`
+/// 2. `pool`       DBC VirtualPool on `config` for `launch.base_mint`
+/// 3. `base_mint`  `launch.base_mint`, SPL Token mint without mint/freeze authority
+/// 4. `token_program`
 #[derive(Accounts)]
 pub struct RegisterPool<'info> {
-    pub creator: Signer<'info>,
-
     #[account(
         mut,
         seeds = [LAUNCH_SEED, launch.config.as_ref()],
         bump = launch.bump,
-        has_one = creator @ StockfloorError::PoolCreatorMismatch,
         constraint = !launch.is_pool_registered() @ StockfloorError::PoolAlreadyRegistered,
     )]
     pub launch: Box<Account<'info, Launch>>,
@@ -38,7 +39,10 @@ pub struct RegisterPool<'info> {
     /// CHECK: DBC VirtualPool; owner, discriminator, size and fields validated in the handler.
     pub pool: UncheckedAccount<'info>,
 
-    #[account(mint::token_program = token_program)]
+    #[account(
+        address = launch.base_mint @ StockfloorError::BaseMintMismatch,
+        mint::token_program = token_program,
+    )]
     pub base_mint: Box<Account<'info, Mint>>,
 
     pub token_program: Program<'info, Token>,
@@ -55,15 +59,16 @@ pub fn handle_register_pool(ctx: Context<RegisterPool>) -> Result<()> {
         launch.config,
         StockfloorError::PoolConfigMismatch
     );
-    require_keys_eq!(
-        pool.pool_state.creator,
-        launch.creator,
-        StockfloorError::PoolCreatorMismatch
-    );
+    // The committed base mint identifies the one DBC pool of this launch.
     require_keys_eq!(
         pool.pool_state.base_mint,
         base_mint.key(),
         StockfloorError::BaseMintMismatch
+    );
+    require_keys_eq!(
+        pool.pool_state.creator,
+        launch.creator,
+        StockfloorError::PoolCreatorMismatch
     );
     require!(
         pool.pool_state.pool_type == DBC_POOL_TYPE_SPL_TOKEN,
@@ -85,7 +90,6 @@ pub fn handle_register_pool(ctx: Context<RegisterPool>) -> Result<()> {
     );
 
     launch.pool = ctx.accounts.pool.key();
-    launch.base_mint = base_mint.key();
 
     emit!(PoolRegistered {
         launch: launch.key(),

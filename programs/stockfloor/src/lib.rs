@@ -38,7 +38,7 @@ pub mod stockfloor {
         instructions::create_launch::handle_create_launch(ctx, exit_fee_bps)
     }
 
-    /// Register the canonical DBC pool (creator signs, once).
+    /// Permissionless: register the DBC pool of the committed base mint (once).
     pub fn register_pool(ctx: Context<RegisterPool>) -> Result<()> {
         instructions::register_pool::handle_register_pool(ctx)
     }
@@ -73,7 +73,7 @@ pub mod stockfloor {
         instructions::redeem::handle_redeem(ctx, amount)
     }
 
-    /// View: vault balance, supply and exit fee (return data + event).
+    /// View: vault balance, supply, exit fee and floor per token (return data + event).
     pub fn floor(ctx: Context<FloorView>) -> Result<FloorInfo> {
         instructions::floor::handle_floor(ctx)
     }

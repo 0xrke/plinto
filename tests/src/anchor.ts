@@ -71,25 +71,32 @@ const EVENT_IX_TAG = Buffer.from([0xe4, 0x45, 0xa5, 0x2e, 0x51, 0xcb, 0x9a, 0x1d
 /**
  * Parse Anchor events emitted with `emit_cpi!` (DBC and DAMM v2 use it): they are not logged but
  * carried in inner instructions whose data is EVENT_IX_TAG + event discriminator + Borsh body.
- * `meta` is `TxSuccess.meta`. Inner instructions that do not decode with `program`'s event coder
- * are ignored (note: same-named events of different programs share a discriminator).
+ *
+ * Only inner instructions invoked on `program.programId` are considered: same-named events of
+ * different programs (DBC and DAMM v2 both define `EvtSwap2`) share a discriminator and must never
+ * be decoded with the wrong layout. An event-tagged instruction of that program that does not
+ * decode is a test error, not a silent skip.
  */
 export function parseCpiEvents(
   program: Program,
-  meta: { innerInstructions(): Array<Array<{ instruction(): { data(): Uint8Array } }>> },
+  res: {
+    accountKeys: PublicKey[];
+    meta: { innerInstructions(): Array<Array<{ instruction(): { programIdIndex(): number; data(): Uint8Array } }>> };
+  },
 ): Array<{ name: string; data: any }> {
   const coder = program.coder.events as BorshEventCoder;
   const out: Array<{ name: string; data: any }> = [];
-  for (const group of meta.innerInstructions()) {
+  for (const group of res.meta.innerInstructions()) {
     for (const inner of group) {
-      const data = Buffer.from(inner.instruction().data());
+      const ix = inner.instruction();
+      const programId = res.accountKeys[ix.programIdIndex()];
+      if (!programId) throw new Error(`inner instruction program index ${ix.programIdIndex()} out of range`);
+      if (!programId.equals(program.programId)) continue;
+      const data = Buffer.from(ix.data());
       if (data.length < 16 || !data.subarray(0, 8).equals(EVENT_IX_TAG)) continue;
-      try {
-        const ev = coder.decode(data.subarray(8).toString("base64"));
-        if (ev) out.push(ev);
-      } catch {
-        // not an event of this program
-      }
+      const ev = coder.decode(data.subarray(8).toString("base64"));
+      if (!ev) throw new Error(`undecodable ${program.idl.metadata?.name ?? programId.toBase58()} event in inner instruction`);
+      out.push(ev);
     }
   }
   return out;

@@ -5,8 +5,11 @@
 //! field offsets). Accounts are copied out with `bytemuck::pod_read_unaligned`, so
 //! decoding never depends on the alignment of account data in memory.
 //!
-//! Every decoder checks the owner program, the exact data length and the Anchor
-//! discriminator before reading anything.
+//! Every decoder checks the owner program, the Anchor discriminator and a minimum data
+//! length before reading anything. The length is a lower bound, not an exact size: a
+//! future DBC / DAMM v2 upgrade may grow an account (zero-copy layouts append fields),
+//! and other account types with the same size (`ConfigWithTransferHook`,
+//! `TransferHookPool`) are already rejected by their different discriminators.
 
 use anchor_lang::prelude::*;
 use anchor_lang::Discriminator;
@@ -28,6 +31,13 @@ pub const DBC_POOL_TYPE_SPL_TOKEN: u8 = 0;
 pub const DBC_MIGRATION_PROGRESS_CREATED_POOL: u8 = 3;
 /// DBC partner migration fee bit in `migration_fee_withdraw_status`.
 pub const DBC_PARTNER_MIGRATION_FEE_MASK: u8 = 0b100;
+/// DBC `BaseFeeMode::FeeSchedulerExponential` (0 = linear, 1 = exponential, 2 = rate limiter).
+/// For both scheduler modes the highest fee is `cliff_fee_numerator`.
+pub const DBC_BASE_FEE_MODE_FEE_SCHEDULER_EXPONENTIAL: u8 = 1;
+/// DBC `MigratedCollectFeeMode::QuoteToken` (DAMM v2 `OnlyB`).
+pub const DBC_MIGRATED_COLLECT_FEE_MODE_QUOTE_TOKEN: u8 = 0;
+/// DBC `TokenAuthorityOption::Immutable`.
+pub const DBC_TOKEN_AUTHORITY_IMMUTABLE: u8 = 1;
 
 /// Size of the zero-copy body (without the 8-byte discriminator), per vendored sources.
 pub const DBC_POOL_CONFIG_SIZE: usize = 1040;
@@ -49,7 +59,7 @@ fn decode<T: bytemuck::Pod>(
         return Err(error.into());
     }
     let data = info.try_borrow_data()?;
-    if data.len() != DISC_LEN + size || &data[..DISC_LEN] != discriminator {
+    if data.len() < DISC_LEN + size || &data[..DISC_LEN] != discriminator {
         return Err(error.into());
     }
     let value: T =
@@ -105,8 +115,14 @@ pub fn load_damm_position(info: &AccountInfo) -> Result<Box<DammPosition>> {
     )
 }
 
-/// Validation of a DBC config for a StockFloor launch (brief §5.3.1). Pure function
-/// over the decoded config so it can be unit tested.
+/// Validation of a DBC config for a StockFloor launch (brief §4 and §5.3.1). Pure
+/// function over the decoded config so it can be unit tested.
+///
+/// Besides the brief §5.3.1 list, it binds every config field that decides whether a
+/// launch really is StockFloor-shaped, so the `Launch` PDA stays a trustworthy marker:
+/// dynamic supply only, creator trading share <= 30%, a fee-scheduler base fee of at most
+/// 20% with no dynamic fee, quote-only LP fees after migration, immutable metadata and no
+/// pool creation fee. The quote mint allowlist and a minimum raise are UI/SDK policy.
 pub fn validate_launch_config(
     config: &PoolConfig,
     authority: &Pubkey,
@@ -163,6 +179,32 @@ pub fn validate_launch_config(
     }
     if config.token_type != DBC_TOKEN_TYPE_SPL_TOKEN {
         return Err(StockfloorError::BaseTokenTypeNotSplToken);
+    }
+    // Fixed supply leaves DBC leftover base in `mint.supply` after migration until
+    // `withdraw_leftover` + burn, which would underpay early redeemers.
+    if config.fixed_token_supply_flag != 0 {
+        return Err(StockfloorError::FixedTokenSupplyNotAllowed);
+    }
+    if config.creator_trading_fee_percentage > MAX_CREATOR_TRADING_FEE_PERCENTAGE {
+        return Err(StockfloorError::CreatorTradingFeeTooHigh);
+    }
+    let base_fee = &config.pool_fees.base_fee;
+    if base_fee.base_fee_mode > DBC_BASE_FEE_MODE_FEE_SCHEDULER_EXPONENTIAL
+        || base_fee.cliff_fee_numerator > MAX_CURVE_FEE_NUMERATOR
+    {
+        return Err(StockfloorError::CurveFeeTooHigh);
+    }
+    if config.pool_fees.dynamic_fee.initialized != 0 {
+        return Err(StockfloorError::DynamicFeeNotAllowed);
+    }
+    if config.migrated_collect_fee_mode != DBC_MIGRATED_COLLECT_FEE_MODE_QUOTE_TOKEN {
+        return Err(StockfloorError::MigratedCollectFeeModeNotQuote);
+    }
+    if config.token_update_authority != DBC_TOKEN_AUTHORITY_IMMUTABLE {
+        return Err(StockfloorError::TokenUpdateAuthorityNotImmutable);
+    }
+    if config.pool_creation_fee != 0 {
+        return Err(StockfloorError::PoolCreationFeeNotZero);
     }
     Ok(())
 }
@@ -239,6 +281,27 @@ pub(crate) mod tests {
         assert_eq!(offset_of!(PoolConfig, migration_sqrt_price), 272);
         assert_eq!(offset_of!(PoolConfig, locked_vesting_config), 288);
         assert_eq!(offset_of!(PoolConfig, pool_creation_fee), 360);
+        assert_eq!(
+            offset_of!(PoolConfig, pool_fees)
+                + offset_of!(dbc_types::PoolFeesConfig, base_fee)
+                + offset_of!(dbc_types::BaseFeeConfig, cliff_fee_numerator),
+            96
+        );
+        assert_eq!(
+            offset_of!(PoolConfig, pool_fees)
+                + offset_of!(dbc_types::PoolFeesConfig, base_fee)
+                + offset_of!(dbc_types::BaseFeeConfig, base_fee_mode),
+            122
+        );
+        assert_eq!(
+            offset_of!(PoolConfig, pool_fees)
+                + offset_of!(dbc_types::PoolFeesConfig, dynamic_fee)
+                + offset_of!(dbc_types::DynamicFeeConfig, initialized),
+            128
+        );
+        assert_eq!(offset_of!(PoolConfig, creator_trading_fee_percentage), 237);
+        assert_eq!(offset_of!(PoolConfig, token_update_authority), 238);
+        assert_eq!(offset_of!(PoolConfig, migrated_collect_fee_mode), 352);
         assert_eq!(offset_of!(PoolConfig, sqrt_start_price), 384);
         assert_eq!(offset_of!(PoolConfig, curve), 400);
 
@@ -403,9 +466,49 @@ pub(crate) mod tests {
                 "locked_vesting_config",
                 offset_of!(PoolConfig, locked_vesting_config),
             ),
+            ("pool_fees", offset_of!(PoolConfig, pool_fees)),
+            (
+                "creator_trading_fee_percentage",
+                offset_of!(PoolConfig, creator_trading_fee_percentage),
+            ),
+            (
+                "token_update_authority",
+                offset_of!(PoolConfig, token_update_authority),
+            ),
+            (
+                "migrated_collect_fee_mode",
+                offset_of!(PoolConfig, migrated_collect_fee_mode),
+            ),
+            (
+                "pool_creation_fee",
+                offset_of!(PoolConfig, pool_creation_fee),
+            ),
         ] {
             assert_eq!(cfg[field], off, "PoolConfig.{field}");
         }
+        let (pf, _) = struct_offsets("PoolFeesConfig", &types);
+        assert_eq!(
+            pf["base_fee"],
+            offset_of!(dbc_types::PoolFeesConfig, base_fee)
+        );
+        assert_eq!(
+            pf["dynamic_fee"],
+            offset_of!(dbc_types::PoolFeesConfig, dynamic_fee)
+        );
+        let (bf, _) = struct_offsets("BaseFeeConfig", &types);
+        assert_eq!(
+            bf["cliff_fee_numerator"],
+            offset_of!(dbc_types::BaseFeeConfig, cliff_fee_numerator)
+        );
+        assert_eq!(
+            bf["base_fee_mode"],
+            offset_of!(dbc_types::BaseFeeConfig, base_fee_mode)
+        );
+        let (df, _) = struct_offsets("DynamicFeeConfig", &types);
+        assert_eq!(
+            df["initialized"],
+            offset_of!(dbc_types::DynamicFeeConfig, initialized)
+        );
 
         let (vp, vp_size) = struct_offsets("VirtualPool", &types);
         assert_eq!(vp_size, DBC_VIRTUAL_POOL_SIZE);
@@ -497,6 +600,8 @@ pub(crate) mod tests {
         c.token_decimal = 6;
         c.creator_trading_fee_percentage = 30;
         c.migration_quote_threshold = 1_000_000_000;
+        c.pool_fees.base_fee.cliff_fee_numerator = 10_000_000; // 1%
+        c.token_update_authority = DBC_TOKEN_AUTHORITY_IMMUTABLE;
         c
     }
 
@@ -513,6 +618,14 @@ pub(crate) mod tests {
             c2.migration_fee_percentage = pct;
             assert_eq!(validate_launch_config(&c2, &a, &q, 200), Ok(()));
         }
+        // Boundaries of the StockFloor-shape bounds are inclusive.
+        let mut c3 = valid_config(a, q);
+        c3.creator_trading_fee_percentage = 0;
+        c3.pool_fees.base_fee.cliff_fee_numerator = crate::constants::MAX_CURVE_FEE_NUMERATOR;
+        c3.pool_fees.base_fee.base_fee_mode = DBC_BASE_FEE_MODE_FEE_SCHEDULER_EXPONENTIAL;
+        assert_eq!(validate_launch_config(&c3, &a, &q, 200), Ok(()));
+        c3.creator_trading_fee_percentage = crate::constants::MAX_CREATOR_TRADING_FEE_PERCENTAGE;
+        assert_eq!(validate_launch_config(&c3, &a, &q, 200), Ok(()));
     }
 
     #[test]
@@ -603,6 +716,50 @@ pub(crate) mod tests {
                 StockfloorError::BaseTokenTypeNotSplToken,
             ),
             (|c, o| c.quote_mint = o, StockfloorError::QuoteMintMismatch),
+            (
+                |c, _| c.fixed_token_supply_flag = 1,
+                StockfloorError::FixedTokenSupplyNotAllowed,
+            ),
+            (
+                |c, _| c.creator_trading_fee_percentage = 31,
+                StockfloorError::CreatorTradingFeeTooHigh,
+            ),
+            (
+                |c, _| c.creator_trading_fee_percentage = 100,
+                StockfloorError::CreatorTradingFeeTooHigh,
+            ),
+            (
+                |c, _| c.pool_fees.base_fee.cliff_fee_numerator = 200_000_001,
+                StockfloorError::CurveFeeTooHigh,
+            ),
+            (
+                |c, _| c.pool_fees.base_fee.base_fee_mode = 2, // rate limiter
+                StockfloorError::CurveFeeTooHigh,
+            ),
+            (
+                |c, _| c.pool_fees.dynamic_fee.initialized = 1,
+                StockfloorError::DynamicFeeNotAllowed,
+            ),
+            (
+                |c, _| c.migrated_collect_fee_mode = 1,
+                StockfloorError::MigratedCollectFeeModeNotQuote,
+            ),
+            (
+                |c, _| c.migrated_collect_fee_mode = 2, // compounding
+                StockfloorError::MigratedCollectFeeModeNotQuote,
+            ),
+            (
+                |c, _| c.token_update_authority = 0, // creator can update metadata
+                StockfloorError::TokenUpdateAuthorityNotImmutable,
+            ),
+            (
+                |c, _| c.token_update_authority = 2,
+                StockfloorError::TokenUpdateAuthorityNotImmutable,
+            ),
+            (
+                |c, _| c.pool_creation_fee = 1_000_000,
+                StockfloorError::PoolCreationFeeNotZero,
+            ),
         ];
         for (i, (mutate, expected)) in cases.into_iter().enumerate() {
             let mut c = valid_config(a, q);
@@ -670,8 +827,26 @@ pub(crate) mod tests {
         });
         assert_eq!(err, StockfloorError::InvalidDbcConfig.into());
 
-        // Wrong size (ConfigWithTransferHook is 1120 bytes).
+        // Too short (truncated account).
         let mut data = account_bytes(PoolConfig::DISCRIMINATOR, &cfg);
+        data.truncate(data.len() - 1);
+        let err = with_info(key, DBC_PROGRAM_ID, &mut data, |i| {
+            load_dbc_config(i).unwrap_err()
+        });
+        assert_eq!(err, StockfloorError::InvalidDbcConfig.into());
+
+        // Longer than today's layout with the right discriminator (a future DBC upgrade
+        // appending fields) still decodes the known prefix.
+        let mut data = account_bytes(PoolConfig::DISCRIMINATOR, &cfg);
+        data.extend_from_slice(&[0xAAu8; 80]);
+        let decoded = with_info(key, DBC_PROGRAM_ID, &mut data, |i| {
+            load_dbc_config(i).unwrap()
+        });
+        assert_eq!(decoded.fee_claimer, a);
+
+        // ConfigWithTransferHook (1120 bytes) has its own discriminator and is rejected.
+        let th_cfg_disc = [40u8, 220, 194, 251, 41, 199, 123, 253]; // ConfigWithTransferHook (IDL)
+        let mut data = account_bytes(&th_cfg_disc, &cfg);
         data.extend_from_slice(&[0u8; 80]);
         let err = with_info(key, DBC_PROGRAM_ID, &mut data, |i| {
             load_dbc_config(i).unwrap_err()
@@ -699,6 +874,20 @@ pub(crate) mod tests {
 
         let th_disc = [237u8, 219, 184, 23, 42, 189, 169, 35]; // TransferHookPool
         let mut data = account_bytes(&th_disc, &pool);
+        let err = with_info(key, DBC_PROGRAM_ID, &mut data, |i| {
+            load_dbc_pool(i).unwrap_err()
+        });
+        assert_eq!(err, StockfloorError::InvalidDbcPool.into());
+
+        // A grown VirtualPool (future layout) decodes; a truncated one does not.
+        let mut data = account_bytes(VirtualPool::DISCRIMINATOR, &pool);
+        data.extend_from_slice(&[0u8; 64]);
+        let decoded = with_info(key, DBC_PROGRAM_ID, &mut data, |i| {
+            load_dbc_pool(i).unwrap()
+        });
+        assert!(is_migration_complete(&decoded));
+        let mut data = account_bytes(VirtualPool::DISCRIMINATOR, &pool);
+        data.truncate(8 + 300);
         let err = with_info(key, DBC_PROGRAM_ID, &mut data, |i| {
             load_dbc_pool(i).unwrap_err()
         });

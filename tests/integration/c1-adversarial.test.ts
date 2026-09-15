@@ -1,9 +1,9 @@
 /**
  * First adversarial tests for checkpoint C1 on the mainnet fork (real stockfloor program, DBC 0.2.1,
  * DAMM v2 0.2.4, Token-2022, SPYx). Stage-specific rejections of the main flow (redeem before
- * migration / before harvest_migration_fee, harvest_migration_fee twice, register_pool by a
- * non-creator or of a second pool) are in c1-lifecycle.test.ts; this file covers what needs a
- * dedicated setup:
+ * migration / before harvest_migration_fee, harvest_migration_fee twice, register_pool of a second
+ * pool) are in c1-lifecycle.test.ts, and the M1 review regressions in review-regressions.test.ts;
+ * this file covers what needs a dedicated setup:
  *
  * - a random signer cannot redirect any harvest: every destination is pinned to the vault or the
  *   Authority's own base ATA (substitutions fail), and when it cranks honestly the vault receives
@@ -161,6 +161,13 @@ describe("C1 adversarial: a random signer cannot redirect any harvest", () => {
       // the ATA-create CPI references ATA(other authority, base mint), which is not in the
       // transaction, so the runtime rejects it with MissingAccount (verified from the logs).
       ["authority = another launch's authority", { authority: L2.authority }, /MissingAccount/],
+      // With ATA(other authority, base mint) in the transaction the ATA is created (payer pays) and the
+      // program's own seeds check on the Authority rejects the substitution; the tx rolls back.
+      [
+        "authority = another launch's authority, with its base ATA included",
+        { authority: L2.authority, authorityBaseAccount: splAta(L2.authority, L1.keys.baseMint) },
+        "ConstraintSeeds",
+      ],
     ];
     for (const [label, overrides, expected] of cases) {
       const f = fork.sendExpectFail([await harvestCurveFeesIx({ payer: a, keys: L1.keys, overrides })], [attacker]);
@@ -203,6 +210,11 @@ describe("C1 adversarial: a random signer cannot redirect any harvest", () => {
       ["vault = non-ATA SPYx account owned by the Authority", { vault: authorityOwnedQuote }, "ConstraintAddress"],
       ["position NFT account not owned by the Authority", { positionNftAccount: attackerQuote }, "PositionNftNotOwnedByAuthority"],
       ["authority = another launch's authority", { authority: L2.authority }, /MissingAccount/], // see harvest_curve_fees
+      [
+        "authority = another launch's authority, with its base ATA included",
+        { authority: L2.authority, authorityBaseAccount: splAta(L2.authority, L1.keys.baseMint) },
+        "ConstraintSeeds",
+      ],
     ];
     for (const [label, overrides, expected] of lpCases) {
       f = fork.sendExpectFail([await harvestLpFeesIx(lpArgs(L1, m1, a, overrides))], [attacker]);

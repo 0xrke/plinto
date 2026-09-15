@@ -14,13 +14,13 @@ use crate::token_utils::{assert_quote_mint_transferable, assert_vault_not_frozen
 
 /// Burn `amount` base tokens and receive `floor(vault * amount / supply)` minus the exit
 /// fee in the quote asset. Only after the DBC pool migrated to DAMM v2 and the partner
-/// migration fee is in the vault.
+/// migration fee is in the vault. The migration check latches `launch.migrated`.
 ///
 /// Account order:
 ///  0. `holder`                signer: owner of `holder_base_account`
 ///  1. `launch`                writable
 ///  2. `authority`             PDA `["authority", config]` (vault owner)
-///  3. `pool`                  `launch.pool` (read to check migration status)
+///  3. `pool`                  `launch.pool` (decoded only while `launch.migrated` is false)
 ///  4. `base_mint`             writable, `launch.base_mint`
 ///  5. `holder_base_account`   writable, base token account owned by `holder`
 ///  6. `vault`                 writable, `launch.vault`
@@ -89,12 +89,15 @@ pub fn handle_redeem(ctx: Context<Redeem>, amount: u64) -> Result<()> {
         StockfloorError::DestinationIsVault
     );
 
-    {
+    // DBC state is decoded only until the migration has been seen once (then latched in
+    // `Launch.migrated`), so a later DBC layout change cannot lock redemptions.
+    if !ctx.accounts.launch.migrated {
         let pool = load_dbc_pool(&ctx.accounts.pool.to_account_info())?;
         require!(
             is_migration_complete(&pool),
             StockfloorError::MigrationNotComplete
         );
+        ctx.accounts.launch.migrated = true;
     }
     require!(
         ctx.accounts.launch.migration_fee_harvested,

@@ -69,6 +69,7 @@ import {
   createLaunchIx,
   decodeFloorReturn,
   deriveAuthorityBaseAccount,
+  expectedFloorQ64,
   deriveLaunch,
   deriveStockfloorAuthority,
   deriveVault,
@@ -115,7 +116,7 @@ const json = (v: unknown) => JSON.stringify(v, (_k, x) => (typeof x === "bigint"
 
 /** Decode the single DBC EvtSwap2 of a swap transaction and derive the partner fee share. */
 function dbcSwap(res: TxSuccess) {
-  const evs = parseCpiEvents(dbcProgram(), res.meta).filter((e) => e.name.toLowerCase() === "evtswap2");
+  const evs = parseCpiEvents(dbcProgram(), res).filter((e) => e.name.toLowerCase() === "evtswap2");
   expect(evs.length).toBe(1);
   const r = evs[0].data.swapResult;
   const trading = bnToBig(r.tradingFee); // total fee minus protocol (and referral) fee
@@ -137,7 +138,7 @@ function dbcSwap(res: TxSuccess) {
 }
 
 function dammSwap(res: TxSuccess) {
-  const evs = parseCpiEvents(dammProgram(), res.meta).filter((e) => e.name.toLowerCase() === "evtswap2");
+  const evs = parseCpiEvents(dammProgram(), res).filter((e) => e.name.toLowerCase() === "evtswap2");
   expect(evs.length).toBe(1);
   const r = evs[0].data.swapResult;
   return {
@@ -347,9 +348,9 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
 
   // ---------------------------------------------------------------- 3. create_launch + register_pool
 
-  it("3a. create_launch validates the config and creates the Launch registry and the empty floor vault", async () => {
+  it("3a. create_launch validates the config, commits the base mint and creates the Launch registry and the empty floor vault", async () => {
     const res = fork.send(
-      [await createLaunchIx({ payer: partner.publicKey, creator: creator.publicKey, config, exitFeeBps: EXIT_FEE_BPS })],
+      [await createLaunchIx({ payer: partner.publicKey, creator: creator.publicKey, config, baseMint: keys.baseMint, exitFeeBps: EXIT_FEE_BPS })],
       [partner, creator, configKp],
     );
     const L = fetchLaunch(fork, config);
@@ -360,53 +361,52 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     expect(L.quoteTokenProgram.equals(TOKEN_2022_PROGRAM_ID)).toBe(true);
     expect(L.vault.equals(vault)).toBe(true);
     expect(L.pool.equals(PublicKey.default)).toBe(true);
+    expect(L.baseMint.equals(keys.baseMint)).toBe(true); // committed: identifies the one DBC pool of this launch
+    expect(L.migrated).toBe(false);
     expect(L.migrationFeeHarvested).toBe(false);
     expect(fork.mustGetAccount(launchPk).owner.equals(STOCKFLOOR_PROGRAM_ID)).toBe(true);
     expect(tokenAccountOwner(fork, vault).equals(authority)).toBe(true);
     expect(tokenAmount(fork, vault)).toBe(0n);
     const ev = parseEvents(stockfloorProgram(), res.logs).find((e) => e.name === "launchCreated");
     expect(ev?.data.migrationFeePercentage).toBe(VAULT_SHARE_PCT);
+    expect(ev!.data.baseMint.equals(keys.baseMint)).toBe(true);
     expect(bnToBig(ev!.data.migrationQuoteThreshold)).toBe(threshold);
     log.cu = { createLaunch: res.computeUnits };
   });
 
-  it("3b. adversarial: register_pool by a non-creator, or of a second pool on the same config, is rejected", async () => {
-    const outsider = fork.newWallet(1);
-    // The outsider signs for the canonical pool.
-    let f = fork.sendExpectFail([await registerPoolIx({ creator: outsider.publicKey, config, pool: keys.pool, baseMint: keys.baseMint })], [outsider]);
-    expect(errName(f)).toBe("PoolCreatorMismatch");
-    // The rogue pool's own creator signs for the rogue pool.
-    f = fork.sendExpectFail(
-      [await registerPoolIx({ creator: rogue.creator.publicKey, config, pool: rogue.keys.pool, baseMint: rogue.keys.baseMint })],
-      [rogue.creator],
-    );
-    expect(errName(f)).toBe("PoolCreatorMismatch");
-    // The launch creator signs for the rogue pool (pool.creator != launch.creator).
-    f = fork.sendExpectFail([await registerPoolIx({ creator: creator.publicKey, config, pool: rogue.keys.pool, baseMint: rogue.keys.baseMint })], [creator]);
-    expect(errName(f)).toBe("PoolCreatorMismatch");
-    // The canonical pool with the rogue base mint.
-    f = fork.sendExpectFail([await registerPoolIx({ creator: creator.publicKey, config, pool: keys.pool, baseMint: rogue.keys.baseMint })], [creator]);
+  it("3b. adversarial: a second pool on the same config can never be registered, whoever sends register_pool", async () => {
+    // The rogue pool with its own base mint, sent by the rogue creator.
+    let f = fork.sendExpectFail([await registerPoolIx({ config, pool: rogue.keys.pool, baseMint: rogue.keys.baseMint })], [rogue.creator]);
     expect(errName(f)).toBe("BaseMintMismatch");
+    // The rogue pool with the committed base mint account, sent by the launch creator.
+    f = fork.sendExpectFail([await registerPoolIx({ config, pool: rogue.keys.pool, baseMint: keys.baseMint })], [creator]);
+    expect(errName(f)).toBe("BaseMintMismatch");
+    // The canonical pool with the rogue base mint.
+    f = fork.sendExpectFail([await registerPoolIx({ config, pool: keys.pool, baseMint: rogue.keys.baseMint })], [cranker()]);
+    expect(errName(f)).toBe("BaseMintMismatch");
+    // Not a DBC pool at all (the DBC config account).
+    f = fork.sendExpectFail([await registerPoolIx({ config, pool: config, baseMint: keys.baseMint })], [cranker()]);
+    expect(errName(f)).toBe("InvalidDbcPool");
     expect(fetchLaunch(fork, config).pool.equals(PublicKey.default)).toBe(true);
   });
 
-  it("3c. register_pool records the canonical pool; floor invariants tracking starts", async () => {
+  it("3c. register_pool by a random key (permissionless) records the canonical pool; floor invariants tracking starts", async () => {
     tracker = new FloorTracker(fork, vault, keys.baseMint, authority, SPYX_MINT, authorityBase);
     tracker.trackBase(keys.baseVault);
     tracker.start("launch created");
     const res = await tracker.step("register_pool", "no-outflow", async () =>
-      fork.send([await registerPoolIx({ creator: creator.publicKey, config, pool: keys.pool, baseMint: keys.baseMint })], [creator]),
+      fork.send([await registerPoolIx({ config, pool: keys.pool, baseMint: keys.baseMint })], [cranker()]),
     );
     const L = fetchLaunch(fork, config);
     expect(L.pool.equals(keys.pool)).toBe(true);
     expect(L.baseMint.equals(keys.baseMint)).toBe(true);
     expect(parseEvents(stockfloorProgram(), res.logs).some((e) => e.name === "poolRegistered")).toBe(true);
 
-    const f = fork.sendExpectFail([await registerPoolIx({ creator: creator.publicKey, config, pool: keys.pool, baseMint: keys.baseMint })], [creator]);
+    const f = fork.sendExpectFail([await registerPoolIx({ config, pool: keys.pool, baseMint: keys.baseMint })], [creator]);
     expect(errName(f)).toBe("PoolAlreadyRegistered");
 
     const view = decodeFloorReturn(fork.send([await floorIx({ config, baseMint: keys.baseMint })], [cranker()]));
-    expect(view).toEqual({ vaultRaw: 0n, supply: mintSupply(fork, keys.baseMint), exitFeeBps: EXIT_FEE_BPS });
+    expect(view).toEqual({ vaultRaw: 0n, supply: mintSupply(fork, keys.baseMint), exitFeeBps: EXIT_FEE_BPS, floorQ64: 0n });
   });
 
   // ---------------------------------------------------------------- 4. trades on the curve
@@ -634,6 +634,7 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     expect(fetchVirtualPool(fork, keys.pool).migrationFeeWithdrawStatus & PARTNER_MIGRATION_FEE_MASK).toBe(PARTNER_MIGRATION_FEE_MASK);
     const L = fetchLaunch(fork, config);
     expect(L.migrationFeeHarvested).toBe(true);
+    expect(L.migrated).toBe(true); // latched: the pool was migrated when the fee was harvested
     const ev = parseEvents(stockfloorProgram(), res.logs).find((e) => e.name === "migrationFeeHarvested");
     expect(bnToBig(ev!.data.quoteAmount)).toBe(expected);
     expect(bnToBig(ev!.data.vaultBalance)).toBe(tokenAmount(fork, vault));
@@ -671,6 +672,11 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     const v0 = tokenAmount(fork, vault);
     const res = await tracker.step("harvest_surplus", "no-outflow", async () => fork.send([await harvestSurplusIx({ keys })], [cranker()]));
     expect(tokenAmount(fork, vault) - v0).toBe(expected);
+    // Tie the (rounding-only) amount to DBC's own number: the partner surplus DBC reports transferring.
+    const dbcEvents = parseCpiEvents(dbcProgram(), res).filter((e) => e.name.toLowerCase() === "evtpartnerwithdrawsurplus");
+    expect(dbcEvents.length).toBe(1);
+    expect(dbcEvents[0].data.pool.equals(keys.pool)).toBe(true);
+    expect(bnToBig(dbcEvents[0].data.surplusAmount)).toBe(tokenAmount(fork, vault) - v0);
     expect(fetchVirtualPool(fork, keys.pool).isPartnerWithdrawSurplus).toBe(1);
     expect(fetchLaunch(fork, config).surplusHarvested).toBe(true);
     const ev = parseEvents(stockfloorProgram(), res.logs).find((e) => e.name === "surplusHarvested");
@@ -802,7 +808,10 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
 
   it("11. several holders redeem; each payout, fee and burn is exact and the floor rises", async () => {
     const view = decodeFloorReturn(fork.send([await floorIx({ config, baseMint: keys.baseMint })], [cranker()]));
-    expect(view).toEqual({ vaultRaw: tokenAmount(fork, vault), supply: mintSupply(fork, keys.baseMint), exitFeeBps: EXIT_FEE_BPS });
+    const V0 = tokenAmount(fork, vault);
+    const S0 = mintSupply(fork, keys.baseMint);
+    expect(view).toEqual({ vaultRaw: V0, supply: S0, exitFeeBps: EXIT_FEE_BPS, floorQ64: expectedFloorQ64(V0, S0) });
+    expect(view.floorQ64).toBeGreaterThan(0n);
     expect(view.vaultRaw).toBe(Object.values(harvested).reduce((a, b) => a + b, 0n));
 
     // Adversarial basics: dust redemption (net 0) and more than the balance.

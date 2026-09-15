@@ -5,9 +5,11 @@ use anchor_spl::token_interface::TokenAccount;
 use crate::constants::LAUNCH_SEED;
 use crate::errors::StockfloorError;
 use crate::events::FloorSnapshot;
+use crate::math::floor_q64;
 use crate::state::{FloorInfo, Launch};
 
 /// Read-only view (use with `simulateTransaction`): returns `FloorInfo` via return data
+/// (34 bytes: vault_raw u64, supply u64, exit_fee_bps u16, floor_q64 u128, little endian)
 /// and emits `FloorSnapshot`.
 ///
 /// Account order:
@@ -48,16 +50,19 @@ pub fn handle_floor(ctx: Context<FloorView>) -> Result<FloorInfo> {
         0
     };
 
+    let vault_raw = ctx.accounts.vault.amount;
     let result = FloorInfo {
-        vault_raw: ctx.accounts.vault.amount,
+        vault_raw,
         supply,
         exit_fee_bps: launch.exit_fee_bps,
+        floor_q64: floor_q64(vault_raw, supply).unwrap_or(0),
     };
     emit!(FloorSnapshot {
         launch: launch.key(),
         vault_raw: result.vault_raw,
         supply: result.supply,
         exit_fee_bps: result.exit_fee_bps,
+        floor_q64: result.floor_q64,
     });
     Ok(result)
 }

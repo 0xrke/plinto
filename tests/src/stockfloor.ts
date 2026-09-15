@@ -57,6 +57,8 @@ export async function createLaunchIx(a: {
   payer: PublicKey;
   creator: PublicKey;
   config: PublicKey;
+  /** Base mint of the launch's DBC pool (committed; the mint may not exist yet). */
+  baseMint: PublicKey;
   exitFeeBps: number;
   quoteMint?: PublicKey;
   quoteTokenProgram?: PublicKey;
@@ -73,6 +75,7 @@ export async function createLaunchIx(a: {
       authority: deriveStockfloorAuthority(a.config),
       launch: deriveLaunch(a.config),
       quoteMint,
+      baseMint: a.baseMint,
       vault: deriveVault(a.config, quoteMint, quoteTokenProgram),
       quoteTokenProgram,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -82,8 +85,8 @@ export async function createLaunchIx(a: {
     .instruction();
 }
 
+/** Permissionless: any fee payer can send it. */
 export async function registerPoolIx(a: {
-  creator: PublicKey;
   config: PublicKey;
   pool: PublicKey;
   baseMint: PublicKey;
@@ -92,7 +95,6 @@ export async function registerPoolIx(a: {
   return stockfloorProgram()
     .methods.registerPool()
     .accountsStrict({
-      creator: a.creator,
       launch: deriveLaunch(a.config),
       config: a.config,
       pool: a.pool,
@@ -275,12 +277,28 @@ export function fetchLaunch(fork: Fork, config: PublicKey): any {
   return stockfloorProgram().coder.accounts.decode("launch", acc.data);
 }
 
-/** `FloorInfo { vault_raw: u64, supply: u64, exit_fee_bps: u16 }` from the `floor` return data. */
-export function decodeFloorReturn(res: TxSuccess): { vaultRaw: bigint; supply: bigint; exitFeeBps: number } {
+export interface FloorView {
+  vaultRaw: bigint;
+  supply: bigint;
+  exitFeeBps: number;
+  /** Floor per token, Q64.64 raw quote per raw base: `(vault << 64) / supply`, 0 when supply is 0. */
+  floorQ64: bigint;
+}
+
+/** `FloorInfo { vault_raw: u64, supply: u64, exit_fee_bps: u16, floor_q64: u128 }` from the `floor` return data. */
+export function decodeFloorReturn(res: TxSuccess): FloorView {
   const rd = res.meta.returnData();
   const programId = new PublicKey(rd.programId());
   if (!programId.equals(STOCKFLOOR_PROGRAM_ID)) throw new Error(`unexpected return data program ${programId.toBase58()}`);
   const b = Buffer.from(rd.data());
-  if (b.length !== 18) throw new Error(`unexpected FloorInfo length ${b.length}`);
-  return { vaultRaw: b.readBigUInt64LE(0), supply: b.readBigUInt64LE(8), exitFeeBps: b.readUInt16LE(16) };
+  if (b.length !== 34) throw new Error(`unexpected FloorInfo length ${b.length}`);
+  return {
+    vaultRaw: b.readBigUInt64LE(0),
+    supply: b.readBigUInt64LE(8),
+    exitFeeBps: b.readUInt16LE(16),
+    floorQ64: b.readBigUInt64LE(18) | (b.readBigUInt64LE(26) << 64n),
+  };
 }
+
+/** Independent restatement of the on-chain floor per token (Q64.64). */
+export const expectedFloorQ64 = (vaultRaw: bigint, supply: bigint): bigint => (supply === 0n ? 0n : (vaultRaw << 64n) / supply);
