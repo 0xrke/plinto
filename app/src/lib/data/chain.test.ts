@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {
   LAUNCH_OFFSETS,
+  PARTNER_MIGRATION_FEE_MASK,
   QUOTE_ALLOWLIST,
   STOCKFLOOR_PROGRAM_ID,
   SYSVAR_CLOCK,
@@ -73,6 +74,28 @@ describe("toLaunchSummary", () => {
     const cfg = state.dbcConfig;
     const { partnerMigrationFee } = getMigrationFeeDistribution(cfg.migrationQuoteThreshold, cfg.migrationFeePercentage, cfg.creatorMigrationFeePercentage);
     expect(toLaunchSummary(withFees, null, price)!.projectedAtGraduation!.vaultQuoteRaw).toBe(481_750n + partnerMigrationFee);
+  });
+
+  it("does not add the migration fee again once it was harvested before migration", () => {
+    // Crank order: harvest_migration_fee runs on a complete curve, before migrate. The vault then
+    // already holds the fee while the SDK phase is still "graduating".
+    const { state, built } = launchState({ phase: "graduating" });
+    const fee = built.curve.partnerMigrationFee;
+    const harvested: LaunchState = {
+      ...state,
+      vaultBalance: 481_750n + fee,
+      launch: { ...state.launch, migrationFeeHarvested: true },
+      dbcPool: { ...state.dbcPool!, migrationFeeWithdrawStatus: state.dbcPool!.migrationFeeWithdrawStatus | PARTNER_MIGRATION_FEE_MASK },
+    };
+    const s = toLaunchSummary(harvested, null, price)!;
+    expect(s.phase).toBe("graduating");
+    expect(s.projectedAtGraduation).toEqual({ vaultQuoteRaw: 481_750n + fee, baseSupplyRaw: built.preview.baseSupplyAtGraduationRaw });
+
+    // Either signal alone (the Launch flag, or the DBC partner withdraw bit) means the fee left DBC.
+    const flagOnly: LaunchState = { ...harvested, dbcPool: state.dbcPool };
+    expect(toLaunchSummary(flagOnly, null, price)!.projectedAtGraduation!.vaultQuoteRaw).toBe(481_750n + fee);
+    const bitOnly: LaunchState = { ...harvested, launch: state.launch };
+    expect(toLaunchSummary(bitOnly, null, price)!.projectedAtGraduation!.vaultQuoteRaw).toBe(481_750n + fee);
   });
 
   it("maps SDK phases to the three UI phases and keeps the redeemable flag", () => {

@@ -4,6 +4,7 @@ import {
   LAUNCH_ACCOUNT_SIZE,
   LAUNCH_DISCRIMINATOR,
   LAUNCH_OFFSETS,
+  PARTNER_MIGRATION_FEE_MASK,
   QUOTE_ALLOWLIST,
   STOCKFLOOR_PROGRAM_ID,
   SYSVAR_CLOCK,
@@ -91,9 +92,13 @@ export function toLaunchSummary(state: LaunchState, meta: TokenMetadata | null, 
   let projectedAtGraduation: LaunchSummary["projectedAtGraduation"] = null;
   if (phase !== "graduated") {
     const { partnerMigrationFee } = getMigrationFeeDistribution(cfg.migrationQuoteThreshold, cfg.migrationFeePercentage, cfg.creatorMigrationFeePercentage);
+    // harvest_migration_fee only needs a complete curve, so it can land before migration. Once the
+    // Launch flag or the DBC partner withdraw bit is set, the vault balance already holds the fee.
+    const feeStillInDbc =
+      !state.launch.migrationFeeHarvested && (state.dbcPool.migrationFeeWithdrawStatus & PARTNER_MIGRATION_FEE_MASK) === 0;
     projectedAtGraduation = {
       // Harvested curve fees already sit in the vault; the partner migration fee joins them.
-      vaultQuoteRaw: state.vaultBalance + partnerMigrationFee,
+      vaultQuoteRaw: state.vaultBalance + (feeStillInDbc ? partnerMigrationFee : 0n),
       baseSupplyRaw: cfg.swapBaseAmount + cfg.migrationBaseThreshold,
     };
   }

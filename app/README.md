@@ -59,7 +59,8 @@ Environment:
   become the UI's `graduated` (redeem opens only with `migrationFeeHarvested`). Price from the DBC curve
   sqrt price before migration and the DAMM v2 pool after; floor = vault ÷ supply; ScaledUiAmount
   multiplier from the quote mint at the cluster clock; preset from the config's price ratio; vault share =
-  the DBC migration fee percentage; the graduation projection = vault now + partner migration fee over
+  the DBC migration fee percentage; the graduation projection = vault now + partner migration fee (added only while the fee is still in
+  DBC: the Launch flag and the DBC partner withdraw bit are both unset) over
   `swap_base_amount + migration_base_threshold` (equals the launch composer preview). Name, symbol and
   image come from the Metaplex metadata account (cached; metadata is immutable).
 - Launches quoted in a mint outside the allowlist, or without a DBC pool yet, are not shown.
