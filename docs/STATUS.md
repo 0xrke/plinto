@@ -1,39 +1,32 @@
-# Status — 2026-09-15 ~15:40 ET
+# Status — 2026-09-16 ~19:20 ET (2026-09-15 ET evening)
 
 ## Current milestone
-**C1 reached, awaiting the user's OK.** Meanwhile continuing with local-only work: M2 (program hardening + remaining adversarial/property tests), M3 (SDK chain client + scripts), M4 (web wiring), M5 (docs draft). Nothing touches mainnet.
+M2–M5 done. **Waiting on the user for C1 OK and for the C2 decisions + funding below.** Nothing has touched mainnet.
 
 ## Done (with test results)
-- **M0** repo setup (Anchor 1.0.2 + pnpm workspace, keys in `keys/`, Surfpool 1.5.0, IDLs, vendor sources).
-- **M1 / C1** on a LiteSVM mainnet fork (real DBC 0.2.1, DAMM v2, Token-2022 binaries; real SPYx mint and DBC token badge):
-  - SPYx-quoted DBC config built by the SDK, `fee_claimer` = `leftover_receiver` = stockfloor Authority PDA → pool → `create_launch` + `register_pool` → 4 buys / 2 sells → `harvest_curve_fees` (+481,750 raw exactly) → curve completion (PartialFill) → `migration_damm_v2` → `harvest_migration_fee` (+65,673,160 raw = 50% of the 131,346,320 raw ≈ $1,000 threshold, exact) → DAMM v2 swaps → `harvest_lp_fees` (+681,460 exact) → 4 redemptions with exact net/fee → floor invariants checked after all 26 steps.
-  - Evidence: `docs/research/c1-evidence.md`, `docs/research/m1-spike.md`, `docs/research/dbc-facts.md`, `docs/research/program-design.md`.
-  - Independent review (security + evidence): C1 verdict YES from both. 15 findings, all fixed with regression tests except the deferred items below.
-- **Test run (`pnpm test`, rebuilt binaries, 2026-09-15 22:27 local): ALL STEPS PASSED.**
-  - Rust unit + property (`cargo test -p stockfloor`): 40 passed
-  - Typecheck SDK + fork tests: pass
-  - SDK unit + property: 93 passed
-  - Fork integration (LiteSVM): 76 passed (C1 lifecycle 20, adversarial 16, review regressions 11, SDK presets on fork 7, stockfloor smoke 1 with 43 checks, spike 21)
-  - Web app: 58 passed
-- **SDK math** (presets, threshold conversion, preview, config builder validated against a port of DBC `create_config` checks and against the real DBC on the fork).
-- **Web app scaffold** on mock data: `/`, `/create` (live preview), `/t/[mint]` (floor meter, max-loss buy label, redeem panel, disclosures). `next build` passes.
-
-## In progress
-- M2: vault-authority PDA split, simplify `harvest_leftover`, remaining fork tests (200 bps split bound, random multi-holder redeem property test, second position donation), program-design doc refresh.
-- M3: SDK chain client (stockfloor + DBC + DAMM builders, fetchers, Jupiter), `create-launch` / `crank` / `redeem` scripts, Surfpool live-fork run.
-- M4: wire the web app to the SDK against a local Surfpool fork.
-- M5: README / demo script draft.
+- **M0** repo setup. **M1 / C1** full lifecycle on a LiteSVM mainnet fork (see `docs/research/c1-evidence.md`).
+- **M2** program hardening: two-PDA split (claimer signs external CPIs, vault authority owns the vault and signs only redeem), `burn_claimer_base`, `sync_migration` latch, on-chain enforcement of the StockFloor config shape, post-CPI vault integrity checks. Fork tests for CU budgets (every transaction ≤ 200k CU), redemption splits, LP positions, a fast-check property run (40 runs, 959 actions) and instruction-level error paths.
+- **M3** SDK chain client: instruction builders for all 10 instructions, `Launch`/DBC/DAMM decoders, exact bigint ports of the DBC and DAMM v2 swap math, launch composer (all transactions ≤ 1232 bytes), `planCrank`/`runCrank`, Jupiter price + Ultra helpers (mainnet-only, mocked in tests), CLI scripts (`create-launch`, `buy`, `sell`, `crank`, `redeem`, `status`) with the mainnet send guard.
+- **M4** web app wired to chain: `ChainDataSource` + `ChainLaunchActions` (create, curve buy/sell, DAMM v2 trades, redeem, permissionless crank), local-fork faucet route (loopback + surfnet guard), transaction progress states, honest labels (presale and market buy both show max loss), upgrade-authority disclosure read from chain.
+- **M5** docs: `README.md` (pitch, mechanics, DBC configuration table, floor math, architecture, security, parameters, testing, run-locally, prior art, disclosures), `docs/architecture.md`, `docs/demo-script.md`.
+- **C2 rehearsal on a live Surfpool mainnet fork** (`docs/research/surfpool-e2e.md`, report `scripts/e2e/reports/`): the whole planned mainnet sequence ran through the CLI — deploy, launch, buys, graduation crank, DAMM trade, LP fee harvest, redemptions. All quotes exact, 494 mainnet-equivalent transactions, none sent to mainnet (verified: 0 of 969 local signatures exist on mainnet).
+- **Independent reviews** (program security, SDK/scripts, app+docs): no critical or high findings; 25 medium/low findings, 24 fixed with regression tests, 1 deferred (transfer-hook support, documented).
+- **Test run (`pnpm test`, own verification, rebuilt binaries): ALL STEPS PASSED — 523 tests.** Rust unit + property 43, SDK 210, LiteSVM fork integration 112, web app 158. Also verified in a **fresh clone without `keys/`** (95 s).
 
 ## Blocked on user
-1. **C1 OK** — review `docs/research/c1-evidence.md` and confirm; work continues locally in the meantime.
-2. (Later, C2) Fund the deployer `BBU1tTr4BTrEeVfNG4wWLmrmyhDHdeLZeny5C5FsdstV` for the mainnet deploy and the demo launch; exact amounts will be computed before asking. Organizer question (main track + bounty) is on the user.
+1. **C1 OK** (evidence: `docs/research/c1-evidence.md`).
+2. **C2 approval + funding.** Deployer `BBU1tTr4BTrEeVfNG4wWLmrmyhDHdeLZeny5C5FsdstV` needs **2.70 SOL** (or 5.05 SOL to keep headroom for one program upgrade); demo wallets need **0.10 SOL and 0.0802 SPYx (~$61)** in total — the addresses and per-wallet amounts are in `docs/research/surfpool-e2e.md` §7. The C2 run sends **494 mainnet transactions** (480 deploy writes + 14 lifecycle), listed in §9.
+3. **C2 decisions:** which mainnet RPC to use; where to host the token metadata JSON/image (hosting is publishing → needs the OK); whether to upload the program IDL on-chain (+0.03–0.12 SOL); keep the upgrade authority for now (recommended while the transfer-hook limitation stands) or revoke at C3.
+4. **License** for the repository (`package.json` says MIT, there is no LICENSE file), and a check that redistributing the Meteora mainnet binaries and IDLs in `tests/fixtures/` and `idls/` is acceptable (their sources are under a Meteora non-commercial licence).
+5. Organizer question: whether one project may enter both the main track and the DBC bounty.
 
-## Next
-M2/M3 in parallel → M4 → independent review → C2 request.
+## Next (local, while waiting)
+- Let the `/create` form set a small threshold so the C2 demo can be driven from the UI.
+- Re-run the app end-to-end against a local Surfpool fork after the latest app changes.
+- Judge-lens pass over README and the demo script; prepare the C2 runbook so the mainnet run is one approved command sequence.
 
 ## Risks / surprises
-- SPYx issuer controls: a pause or a future transfer hook blocks swaps, harvests, migration and redeem (atomic, clean errors, funds stay put). The permanent delegate can move vault funds. Disclose.
-- DBC/DAMM v2 are upgradeable by Meteora. Mitigated by the migration latch, relaxed decoders, the post-CPI vault check and (M2) the vault-authority split.
-- The DBC config fee claimer and LP NFT owner is a PDA; the only mainnet precedent found is for `claim_trading_fee` (program `BLANKpB…`). Our migration-fee path is proven on the fork only until C2.
-- LiteSVM fidelity (feature set, CU limits) is not mainnet; a Surfpool live-fork run is planned before C2.
-- Prices per token are tiny (≈$1.5e-6 at 1B supply); the UI handles small-number formatting.
+- SPYx issuer controls (pause, freeze, permanent delegate, a future transfer hook) can block or drain; disclosed in the app and README. A transfer hook would freeze the vault until a program upgrade.
+- DBC and DAMM v2 remain upgradeable by Meteora; mitigated by the migration latch, relaxed decoders, post-CPI vault checks and the two-PDA split.
+- Between migration and the migration-fee harvest the floor reads low, so the crank must run right after migration in the demo.
+- LiteSVM and Surfpool feature snapshots lag mainnet slightly; the rehearsal found no behavioural difference.
