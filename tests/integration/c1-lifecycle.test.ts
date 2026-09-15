@@ -379,6 +379,14 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     expect(L.claimerBump).toBe(authorityPda(config)[1]);
     expect(L.vaultAuthorityBump).toBe(vaultAuthorityPda(config)[1]);
     expect(L.version).toBe(2);
+    // Raw layout v2 (docs/research/program-design.md §3): the documented offsets for memcmp filters.
+    const raw = fork.mustGetAccount(launchPk).data;
+    expect(raw.length).toBe(351);
+    expect([raw[8], raw[10], raw[11], raw.readUInt16LE(12)]).toEqual([2, authorityPda(config)[1], vaultAuthorityPda(config)[1], EXIT_FEE_BPS]);
+    expect(new PublicKey(raw.subarray(17, 49)).equals(config) && new PublicKey(raw.subarray(49, 81)).equals(creator.publicKey)).toBe(true);
+    expect(new PublicKey(raw.subarray(113, 145)).equals(keys.baseMint) && new PublicKey(raw.subarray(145, 177)).equals(SPYX_MINT)).toBe(true);
+    expect(new PublicKey(raw.subarray(209, 241)).equals(vault)).toBe(true);
+    expect(raw.subarray(289, 351).every((x) => x === 0)).toBe(true);
     expect(tokenAccountOwner(fork, vault).equals(vaultAuthority)).toBe(true);
     expect(tokenAmount(fork, vault)).toBe(0n);
     const ev = parseEvents(stockfloorProgram(), res.logs).find((e) => e.name === "launchCreated");

@@ -111,16 +111,24 @@ async function setup(): Promise<World> {
     createAta(fork, h, h.publicKey, L.keys.baseMint, TOKEN_PROGRAM_ID);
   }
   fork.warp(60);
+  // The two traders start with base bought on DAMM v2, so every holder can redeem and sell.
+  for (const t of traders) {
+    fork.send(
+      [await dammSwap2Ix({ keys: g.migration.dammKeys, payer: t.publicKey, inputTokenAccount: spyxAta(t.publicKey), outputTokenAccount: splAta(t.publicKey, L.keys.baseMint), amount0: L.threshold / 4n, amount1: 0n, swapMode: 0 })],
+      [t],
+    );
+  }
   const tracker = new FloorTracker(fork, trackerAccounts(L));
   tracker.trackBase(L.keys.baseVault, g.migration.tokenAVault, ...holders.map((h) => splAta(h.publicKey, L.keys.baseMint)));
   tracker.start("run start");
   return { fork, L, migration: g.migration, holders, cranker, tracker, vault: tokenAmount(fork, L.vault), supply: mintSupply(fork, L.keys.baseMint), netOut: 0n };
 }
 
-const stats: Record<string, { ok: number; rejected: number }> = {};
-const count = (kind: string, ok: boolean) => {
-  stats[kind] ??= { ok: 0, rejected: 0 };
+const stats: Record<string, { ok: number; rejected: number; reasons: Record<string, number> }> = {};
+const count = (kind: string, ok: boolean, res?: TxResult) => {
+  stats[kind] ??= { ok: 0, rejected: 0, reasons: {} };
   stats[kind][ok ? "ok" : "rejected"]++;
+  if (!ok && res) stats[kind].reasons[errOf(res)] = (stats[kind].reasons[errOf(res)] ?? 0) + 1;
 };
 
 /** Apply one action, checking its exact effect against the model; the tracker checks the invariants. */
@@ -150,7 +158,7 @@ async function apply(w: World, a: Action, i: number): Promise<void> {
       await w.tracker.step(label, valid ? "redeem" : "no-outflow", async () => {
         r = fork.sendTx([await redeemIx({ holder: h.publicKey, keys: L.keys, amount })], [h]);
       }, valid ? { vaultOut: net, feeRetained: fee } : {});
-      count(a.kind, valid);
+      count(a.kind, valid, r);
       if (!valid) {
         unchanged(r!, amount === 0n ? ["ZeroAmount"] : amount > balance ? ["InsufficientBaseBalance"] : ["NothingToRedeem"]);
         return;
@@ -235,7 +243,7 @@ async function apply(w: World, a: Action, i: number): Promise<void> {
       await w.tracker.step(label, "no-outflow", async () => {
         r = fork.sendTx([await harvestSurplusIx({ keys: L.keys })], [w.cranker]);
       });
-      count(a.kind, !already);
+      count(a.kind, !already, r);
       if (already) return unchanged(r!, ["SurplusAlreadyHarvested"]);
       expect(r!.ok, `${label}: ${errOf(r!)}`).toBe(true);
       w.vault += expected;
@@ -255,7 +263,7 @@ async function apply(w: World, a: Action, i: number): Promise<void> {
       });
       // A swap DAMM v2 refuses (e.g. a zero or dust amount) must change nothing, which the tracker and
       // the model check below; accepted swaps never touch the vault or the supply.
-      count(a.kind, r!.ok);
+      count(a.kind, r!.ok, r);
       return;
     }
     case "warp":
