@@ -161,7 +161,7 @@ without the `stockfloor` program.
 | `harvest_migration_fee` | **+65,673,160** | = `T − ceil(T × 50 / 100)`, the SDK preview |
 | Curve fees of the completing buy | +490,326 | |
 | `harvest_surplus` | +0 | surplus is 1 raw: rounding dust in DBC 0.2.1 |
-| `harvest_leftover` burns a base-token donation to the claimer | unchanged | supply falls by 7,074,133,429,318 raw |
+| `harvest_leftover` (renamed `burn_claimer_base` in M2) burns a base-token donation to the claimer | unchanged | supply falls by 7,074,133,429,318 raw |
 | 4 DAMM v2 swaps, then `harvest_lp_fees` | +681,460 | from DAMM v2 position state |
 | Vault before redemptions | **67,326,696** | supply 992,925,866,570,678 raw |
 | 4 holders redeem | −18,231,206 paid out | 372,067 in exit fees stays in the vault |
@@ -386,19 +386,19 @@ fixed by the program.
 
 | Instruction | Caller | What it does | Key guards (error names) |
 |---|---|---|---|
-| `create_launch(exit_fee_bps)` | Creator; **the DBC config keypair must sign** | Validates the DBC config shape, commits the base mint, creates `Launch` and the empty vault | `InvalidDbcConfig`, `FeeClaimerNotAuthority`, `LeftoverReceiverNotAuthority`, `MigrationFeePercentageOutOfRange`, `CreatorMigrationFeeNotZero`, `LiquidityNotFullyPartnerLocked`, `LiquidityVestingNotAllowed`, `LockedVestingNotAllowed`, `CollectFeeModeNotQuote`, `MigratedCollectFeeModeNotQuote`, `MigrationOptionNotDammV2`, `BaseTokenTypeNotSplToken`, `FixedTokenSupplyNotAllowed`, `CreatorTradingFeeTooHigh`, `CurveFeeTooHigh`, `DynamicFeeNotAllowed`, `TokenUpdateAuthorityNotImmutable`, `PoolCreationFeeNotZero`, `ExitFeeTooHigh`, `QuoteMintMismatch`, `InvalidBaseMint` |
+| `create_launch(exit_fee_bps)` | Creator; **the DBC config keypair must sign** | Validates the DBC config shape, commits the base mint, creates `Launch` and the empty vault | `InvalidDbcConfig`, `FeeClaimerMismatch`, `LeftoverReceiverMismatch`, `MigrationFeePercentageOutOfRange`, `CreatorMigrationFeeNotZero`, `LiquidityNotFullyPartnerLocked`, `LiquidityVestingNotAllowed`, `LockedVestingNotAllowed`, `CollectFeeModeNotQuote`, `MigratedCollectFeeModeNotQuote`, `MigrationOptionNotDammV2`, `BaseTokenTypeNotSplToken`, `FixedTokenSupplyNotAllowed`, `CreatorTradingFeeTooHigh`, `CurveFeeTooHigh`, `DynamicFeeNotAllowed`, `TokenUpdateAuthorityNotImmutable`, `PoolCreationFeeNotZero`, `ExitFeeTooHigh`, `QuoteMintMismatch`, `InvalidBaseMint`, `VaultEncumbered` (pre-created vault) |
 | `register_pool()` | Anyone | Records the one DBC pool of the committed base mint | `PoolAlreadyRegistered`, `InvalidDbcPool`, `PoolConfigMismatch`, `BaseMintMismatch`, `PoolTypeNotSplToken`, `BaseMintDecimalsMismatch`, `BaseMintAuthorityNotRevoked`, `BaseMintHasFreezeAuthority` |
 | `harvest_curve_fees()` | Anyone | CPI DBC `claim_trading_fee` (claimer signs): SPYx into the vault, any base burned | `PoolNotRegistered`, pinned pool/vault, `QuoteMintPaused`, `QuoteMintTransferHookUnsupported`, `VaultFrozen`, `VaultDecreased`, `VaultEncumbered` |
 | `harvest_migration_fee()` | Anyone, once | CPI DBC `withdraw_migration_fee(0)` into the vault. Opens redemption together with migration | `CurveNotComplete`, `MigrationFeeAlreadyHarvested`, plus the checks above |
 | `harvest_surplus()` | Anyone, once | CPI DBC `partner_withdraw_surplus` into the vault | `CurveNotComplete`, `SurplusAlreadyHarvested` |
-| `harvest_leftover()` | Anyone | Burns whatever the claimer base ATA holds. DBC `withdraw_leftover` cannot apply because fixed supply is rejected (the M2 plan simplifies this instruction) | pinned pool and base ATA |
-| `harvest_lp_fees()` | Anyone | CPI DAMM v2 `claim_position_fee` for a position whose NFT the claimer owns: SPYx into the vault, base burned | `InvalidDammPool`, `InvalidDammPosition`, `PositionPoolMismatch`, `DammPoolMintMismatch`, `PositionNftNotOwnedByAuthority`, vault checks |
+| `burn_claimer_base()` (M2; replaces `harvest_leftover`) | Anyone | Burns whatever the claimer base ATA holds, for example donated base tokens. DBC `withdraw_leftover` never applies, because fixed supply is rejected | canonical claimer ATA, `BaseMintMismatch` |
+| `harvest_lp_fees()` | Anyone | CPI DAMM v2 `claim_position_fee` for a position whose NFT the claimer owns: SPYx into the vault, base burned | `InvalidDammPool`, `InvalidDammPosition`, `PositionPoolMismatch`, `DammPoolMintMismatch`, `PositionNftNotOwnedByClaimer`, vault checks |
 | `redeem(amount)` | Any holder | Burns `amount`, pays `net` from the vault (vault authority signs) | `MigrationNotComplete`, `MigrationFeeNotHarvested`, `ZeroAmount`, `InsufficientBaseBalance`, `NothingToRedeem`, `QuoteMintPaused`, `QuoteMintTransferHookUnsupported`, `VaultFrozen`, `DestinationIsVault`, post-conditions `VaultBalanceMismatch`, `SupplyMismatch`, `FloorDecreased` |
 | `floor()` | Anyone (simulate) | Returns `{vault_raw, supply, exit_fee_bps, floor_q64}` as return data and emits `FloorSnapshot` | `FloorAccountMismatch` |
 
 Crank order after the curve completes: `harvest_curve_fees` (again, for the completing buy),
-`harvest_migration_fee`, `harvest_surplus`, `migration_damm_v2` (DBC), `harvest_leftover`, then
-`harvest_lp_fees` periodically.
+`harvest_migration_fee`, `harvest_surplus`, `migration_damm_v2` (DBC), then `harvest_lp_fees`
+periodically. `burn_claimer_base` is only needed when someone sends base tokens to the claimer.
 
 ---
 
@@ -523,7 +523,7 @@ The 76 fork tests break down as follows:
   mainnet ELFs of DBC, DAMM v2, Token-2022, SPL Token, ATA and Metaplex Token Metadata. They were dumped from
   mainnet program data by `tests/fixtures/dump.ts`. The files are **byte-identical to the deployed programs**:
   sha256 values are in `tests/fixtures/manifest.json`, and a reviewer re-checked them against live program
-  data. The DBC binary matches source 0.2.1 and DAMM v2 matches 0.2.4.
+  data. Version-specific error strings identify the DBC binary as the 0.2.1 line and DAMM v2 as 0.2.4.
 - **Real mainnet accounts.** The fixtures include the SPYx mint, the DBC and DAMM v2 token badges for SPYx, the
   DBC pool authority (migration pays DAMM v2 rent from it), the DAMM v2 pool authority and the DAMM v2
   migration configs. They were dumped at slots 447,312,190–447,312,193 and take 6.6 MB.
@@ -539,7 +539,7 @@ The 76 fork tests break down as follows:
 
 **Covered:**
 - **The full lifecycle.** SDK-built SPYx config, pool, `create_launch`, `register_pool`, buys and sells, curve
-  fee harvest, PartialFill completion, migration, migration fee, surplus, leftover burn, DAMM v2 trades, LP fee
+  fee harvest, PartialFill completion, migration, migration fee, surplus, donation burn, DAMM v2 trades, LP fee
   harvest, and four redemptions, each exact to the raw unit.
 - **Adversarial.**
   - Redeem before migration, and before the fee harvest.
