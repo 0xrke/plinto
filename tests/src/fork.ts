@@ -97,6 +97,9 @@ export function loadManifest(): FixtureManifest {
 
 interface InnerLiteSvm {
   sendLegacyTransaction(bytes: Uint8Array): TransactionMetadata | FailedTransactionMetadata;
+  simulateLegacyTransaction(bytes: Uint8Array): { meta(): TransactionMetadata } | FailedTransactionMetadata;
+  getSigverify(): boolean;
+  setSigverify(sigverify: boolean): void;
 }
 
 export class Fork {
@@ -243,8 +246,12 @@ export class Fork {
 
   // ---------------------------------------------------------------- transactions
 
-  /** Build, sign and process a legacy transaction. Never throws on program failure. */
-  sendTx(ixs: TransactionInstruction[], signers: Keypair[], opts: SendOptions = {}): TxResult {
+  private get inner(): InnerLiteSvm {
+    return (this.svm as unknown as { inner: InnerLiteSvm }).inner;
+  }
+
+  /** Compile and sign a legacy transaction; `forged` signers keep an all-zero signature. */
+  private buildTx(ixs: TransactionInstruction[], signers: Keypair[], opts: SendOptions, forged = false): { bytes: Uint8Array; accountKeys: PublicKey[] } {
     if (signers.length === 0) throw new Error("at least one signer (fee payer) is required");
     const tx = new Transaction();
     const cu = opts.computeUnits ?? 1_400_000;
@@ -252,11 +259,52 @@ export class Fork {
     tx.add(...ixs);
     tx.feePayer = opts.feePayer ?? signers[0].publicKey;
     tx.recentBlockhash = this.svm.latestBlockhash();
-    tx.sign(...dedupeSigners(signers));
-    const bytes = tx.serialize();
+    if (forged) tx.partialSign(...dedupeSigners(signers));
+    else tx.sign(...dedupeSigners(signers));
+    const bytes = tx.serialize(forged ? { requireAllSignatures: false, verifySignatures: false } : undefined);
     const accountKeys = VersionedTransaction.deserialize(bytes).message.staticAccountKeys;
-    const inner = (this.svm as unknown as { inner: InnerLiteSvm }).inner;
-    const res = inner.sendLegacyTransaction(bytes);
+    return { bytes, accountKeys };
+  }
+
+  /**
+   * Simulate a legacy transaction (no state change): returns the compute units it would consume, or
+   * the failure.
+   */
+  simulateTx(ixs: TransactionInstruction[], signers: Keypair[], opts: SendOptions = {}): { ok: true; computeUnits: bigint; logs: string[] } | TxFailure {
+    const { bytes, accountKeys } = this.buildTx(ixs, signers, opts);
+    const res = this.inner.simulateLegacyTransaction(bytes);
+    if (res instanceof FailedTransactionMetadata) {
+      return { ok: false, logs: res.meta().logs(), error: res.err().toString(), meta: res, accountKeys };
+    }
+    return { ok: true, computeUnits: res.meta().computeUnitsConsumed(), logs: res.meta().logs() };
+  }
+
+  /**
+   * Process a transaction in which some signer accounts carry NO valid signature (for example a
+   * program PDA marked `isSigner` in an instruction): LiteSVM signature verification is switched off
+   * for this one transaction. This emulates "a program that received this key's signer privilege
+   * through a CPI" without writing such a program. Only `signers` actually sign.
+   */
+  sendTxForgedSigners(ixs: TransactionInstruction[], signers: Keypair[], opts: SendOptions = {}): TxResult {
+    const { bytes, accountKeys } = this.buildTx(ixs, signers, opts, true);
+    const inner = this.inner;
+    const previous = inner.getSigverify();
+    inner.setSigverify(false);
+    try {
+      return this.processBytes(bytes, accountKeys);
+    } finally {
+      inner.setSigverify(previous);
+    }
+  }
+
+  /** Build, sign and process a legacy transaction. Never throws on program failure. */
+  sendTx(ixs: TransactionInstruction[], signers: Keypair[], opts: SendOptions = {}): TxResult {
+    const { bytes, accountKeys } = this.buildTx(ixs, signers, opts);
+    return this.processBytes(bytes, accountKeys);
+  }
+
+  private processBytes(bytes: Uint8Array, accountKeys: PublicKey[]): TxResult {
+    const res = this.inner.sendLegacyTransaction(bytes);
     this.svm.expireBlockhash();
     if (res instanceof FailedTransactionMetadata) {
       return { ok: false, logs: res.meta().logs(), error: res.err().toString(), meta: res, accountKeys };
