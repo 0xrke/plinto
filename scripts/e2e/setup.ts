@@ -7,6 +7,7 @@
  *   tsx scripts/e2e/setup.ts fund <keys/x.json|pubkey> --sol 1 [--spyx-raw N]
  *   tsx scripts/e2e/setup.ts pubkey keys/x.json
  *   tsx scripts/e2e/setup.ts check-rent                       # local Rent sysvar still equals mainnet's
+ *   tsx scripts/e2e/setup.ts relay-check                      # no local signature exists on mainnet
  *
  * Why the Rent sysvar is copied: Surfpool 1.5.0 (litesvm 0.14) ships lamports_per_byte_year 6960,
  * mainnet now uses 5080 (2026-09-16), so every rent-exempt balance created on the fork would be
@@ -114,6 +115,28 @@ main(async () => {
           `surfnet rent sysvar drifted from mainnet (${local.raw} vs ${mainnet.raw})`,
         );
       console.log("surfnet rent sysvar still equals mainnet's");
+      return;
+    }
+    case "relay-check": {
+      // Every signature this surfnet executed must be unknown to mainnet (read-only lookup).
+      const res = await rpcCall<{ value: Array<{ signature: string }> }>(
+        rpc,
+        "surfnet_getLocalSignatures",
+        [100_000],
+      );
+      const sigs = res.value.map((v) => v.signature);
+      let found = 0;
+      for (let i = 0; i < sigs.length; i += 100) {
+        const r = await mainnetRead<{ value: unknown[] }>(
+          "getSignatureStatuses",
+          [sigs.slice(i, i + 100), { searchTransactionHistory: true }],
+        );
+        found += r.value.filter((v) => v !== null).length;
+      }
+      console.log(
+        `mainnet relay check: ${found} of ${sigs.length} local signatures exist on mainnet (expected 0)`,
+      );
+      if (found !== 0) throw new Error("a local signature exists on mainnet");
       return;
     }
     case "token-programs": {

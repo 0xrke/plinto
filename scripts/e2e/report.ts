@@ -421,6 +421,18 @@ main(async () => {
     return { role, start, end, net: end - start };
   });
 
+  const spyxNet = -sum(spyxFlow.map((f) => f.net));
+  // SPYx held by the DAMM v2 token B vault (reserves plus unclaimed protocol fees).
+  const dammVaultAcc = state.migrated
+    ? await reader.getAccountInfo(
+        dammV2TokenVaultPda(state.damm.pool, state.keys.quoteMint),
+      )
+    : null;
+  const dammQuote =
+    dammVaultAcc && dammVaultAcc.data.length >= 72
+      ? Buffer.from(dammVaultAcc.data).readBigUInt64LE(64)
+      : 0n;
+
   // ------------------------------------------------------------ checks
   const cliExact = ledger.steps.flatMap((s) =>
     (s.cliJson as Array<Record<string, unknown>>)
@@ -825,11 +837,19 @@ main(async () => {
       ]),
     ),
     "",
-    `Total: ${fmtSol(totalSol, 2)} SOL (${usd(lamportsUsd(totalSol))}) and ${rawToUnits(totalSpyx, 8)} SPYx raw units = ${((Number(totalSpyx) / 1e8) * multiplier).toFixed(6)} SPYx in wallets (${usd(spyxRawUsd(totalSpyx))}, about ${usd(spyxRawUsd(totalSpyx) * 1.01)} of USDC through Jupiter).`,
+    `Total: ${fmtSol(totalSol, 2)} SOL (${usd(lamportsUsd(totalSol))}) and ${fmtInt(totalSpyx)} raw SPYx (CLI units ${rawToUnits(totalSpyx, 8)}; ${((Number(totalSpyx) / 1e8) * multiplier).toFixed(6)} SPYx as wallets display it) (${usd(spyxRawUsd(totalSpyx))}, about ${usd(spyxRawUsd(totalSpyx) * 1.01)} of USDC through Jupiter).`,
     "",
     `SPYx flow of the demo launch (raw): ${spyxFlow.map((f) => `${f.role} ${fmtInt(f.start)} -> ${fmtInt(f.end)} (${f.net >= 0n ? "+" : ""}${fmtInt(f.net)})`).join("; ")}.`,
     "",
+    `Where the net ${fmtInt(spyxNet)} raw SPYx (${usd(spyxRawUsd(spyxNet))}) of the demo ends up: floor vault ${fmtInt(state.vaultBalance)} raw (redeemable by the remaining holders, including the creator), DAMM v2 pool token B ${fmtInt(dammQuote)} raw (permanently locked liquidity that holders can still sell into), and ${fmtInt(spyxNet - state.vaultBalance - dammQuote)} raw of curve trading fees to the protocol and the creator plus the DBC protocol migration fee.`,
+    "",
   );
+  if (upgradeMeasured) {
+    md.push(
+      `Optional upgrade headroom for the deployer: an upgrade with an ELF of the current size needs ${fmtInt(upgradeMeasured.bufferPeak + upgradeMeasured.fees)} lamports (${fmtSol(upgradeMeasured.bufferPeak + upgradeMeasured.fees, 4)} SOL) available at once; Upgrade refunds the buffer, so the net cost is the fees (${fmtInt(upgradeMeasured.fees)} lamports). An ELF above max-len also pays rent for the extension.`,
+      "",
+    );
+  }
   writeFileSync(join(dir, "report.md"), md.join("\n") + "\n");
 
   function lamportsUsd(l: bigint): number {
