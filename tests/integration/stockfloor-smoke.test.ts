@@ -1,13 +1,10 @@
-// Seed for the stockfloor fork integration tests (written by the program-core agent).
+// StockFloor fork smoke test (written by the program-core agent as a seed, moved here from
+// programs/stockfloor/fork-smoke/ by the C1 integration agent).
 //
-// It drives every stockfloor instruction against the real DBC 0.2.1, DAMM v2 0.2.4,
-// Token-2022 and SPYx fixtures through the LiteSVM harness in tests/src. It passed on
-// 2026-09-15 ("ALL SMOKE CHECKS PASSED", 43 checks) with target/deploy/stockfloor.so built by
-// `bash scripts/build-programs.sh -p stockfloor`.
-//
-// It lives here because this agent does not own tests/. To run it, copy it to
-// tests/integration/stockfloor-smoke.test.ts and run `pnpm --filter @stockfloor/tests test`.
-// The integration-test agent should split it into proper describe/it blocks.
+// It drives every stockfloor instruction against the real DBC 0.2.1, DAMM v2 0.2.4, Token-2022
+// and SPYx fixtures through the LiteSVM harness in tests/src, using the harness config builder
+// (tests/src/dbc.ts stockfloorConfigParameters) rather than the SDK, and checks 43 conditions
+// including many error paths. The structured C1 flow is integration/c1-lifecycle.test.ts.
 import { BN } from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import { createTransferInstruction } from "@solana/spl-token";
