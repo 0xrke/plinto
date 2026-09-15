@@ -1,5 +1,8 @@
 /**
- * @stockfloor/sdk: floor math, quote allowlist, PDAs, and DBC launch parameters.
+ * @stockfloor/sdk: floor math, quote allowlist, PDAs, DBC launch parameters, and the chain client
+ * (instruction builders, decoders, fetchers, quotes, launch composer, crank, senders, Jupiter).
+ *
+ * Browser-safe: nothing here uses the filesystem. Node-only helpers live in `@stockfloor/sdk/node`.
  */
 export * from "./math";
 export * from "./allowlist";
@@ -28,3 +31,26 @@ export {
   assertCurveCanComplete,
   validateDbcConfigParams,
 } from "./dbc/validateConfig";
+
+// Chain client
+export * from "./bytes";
+export * from "./addresses";
+export * from "./chain";
+export * from "./idl";
+export * from "./token";
+export * from "./transaction";
+export * from "./stockfloor/accounts";
+export * from "./stockfloor/instructions";
+export * from "./dbc/accounts";
+export * from "./dbc/instructions";
+export * from "./dbc/swapQuote";
+export * from "./damm/accounts";
+export * from "./damm/instructions";
+export * from "./damm/swapQuote";
+export * from "./launchState";
+export * from "./launch";
+export * from "./trade";
+export * from "./crank";
+export * from "./sender";
+export * from "./guard";
+export * from "./jupiter";
