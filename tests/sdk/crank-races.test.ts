@@ -108,6 +108,8 @@ describe("SDK crank races and failures on the LiteSVM fork", () => {
     expect(res.steps[1]!.errorName).toBe("MigrationFeeAlreadyHarvested");
     expect(res.remaining).toEqual([]);
     const s = await state(L);
+    // harvest_surplus ran after the keeper's migration and latched it, so no sync_migration was needed.
+    expect(s.launch.migrated).toBe(true);
     expect(s.phase).toBe("redeemable");
     const mig = planCrank(s0).find((a) => a.kind === "harvest_migration_fee")!;
     const curve = planCrank(s0).find((a) => a.kind === "harvest_curve_fees")!;
@@ -155,7 +157,8 @@ describe("SDK crank races and failures on the LiteSVM fork", () => {
     expect(all.errors).toEqual([]);
     const byLaunch = new Map(all.results.map((r) => [r.launch.toBase58(), r]));
     expect(byLaunch.get(presale.toBase58())!.steps).toEqual([]);
-    expect(byLaunch.get(graduating.toBase58())!.steps.map((s) => s.action.kind)).toEqual(["harvest_curve_fees", "harvest_migration_fee", "harvest_surplus", "migrate"]);
+    expect(byLaunch.get(graduating.toBase58())!.steps.map((s) => s.action.kind)).toEqual(["harvest_curve_fees", "harvest_migration_fee", "harvest_surplus", "migrate", "sync_migration"]);
+    expect((await state(graduating)).launch.migrated).toBe(true);
     expect(byLaunch.get(withFees.toBase58())!.steps.map((s) => s.action.kind)).toEqual(["harvest_curve_fees"]);
     for (const r of all.results) expect(r.remaining).toEqual([]);
     expect((await state(graduating)).phase).toBe("redeemable");

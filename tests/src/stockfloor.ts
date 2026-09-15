@@ -174,6 +174,18 @@ export const harvestMigrationFeeIx = (a: { keys: DbcPoolKeys; overrides?: Accoun
 export const harvestSurplusIx = (a: { keys: DbcPoolKeys; overrides?: AccountOverrides }) =>
   harvestQuoteFromDbcIx("harvestSurplus", a);
 
+/** Permissionless: latches Launch.migrated once the registered DBC pool migrated (idempotent). No payer account. */
+export async function syncMigrationIx(a: { config: PublicKey; pool: PublicKey; overrides?: AccountOverrides }): Promise<TransactionInstruction> {
+  return stockfloorProgram()
+    .methods.syncMigration()
+    .accountsStrict({
+      launch: deriveLaunch(a.config),
+      pool: a.pool,
+      ...a.overrides,
+    })
+    .instruction();
+}
+
 /** Permissionless: burns the claimer's base ATA balance (the ATA must exist). No payer account. */
 export async function burnClaimerBaseIx(a: { config: PublicKey; baseMint: PublicKey; overrides?: AccountOverrides }): Promise<TransactionInstruction> {
   return stockfloorProgram()

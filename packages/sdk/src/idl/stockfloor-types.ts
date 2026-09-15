@@ -1141,6 +1141,52 @@ export type Stockfloor = {
         }
       ],
       "args": []
+    },
+    {
+      "name": "syncMigration",
+      "docs": [
+        "Permissionless: latch `Launch.migrated` once the DBC pool migrated (idempotent)."
+      ],
+      "discriminator": [
+        225,
+        231,
+        95,
+        199,
+        32,
+        239,
+        236,
+        87
+      ],
+      "accounts": [
+        {
+          "name": "launch",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  97,
+                  117,
+                  110,
+                  99,
+                  104
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "launch.config",
+                "account": "launch"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool"
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
@@ -1235,6 +1281,19 @@ export type Stockfloor = {
         107,
         89,
         212
+      ]
+    },
+    {
+      "name": "migrationLatched",
+      "discriminator": [
+        232,
+        38,
+        47,
+        224,
+        253,
+        56,
+        5,
+        20
       ]
     },
     {
@@ -1761,8 +1820,9 @@ export type Stockfloor = {
             "name": "migrated",
             "docs": [
               "Latched to `true` the first time this program sees the registered DBC pool fully",
-              "migrated to DAMM v2 (`harvest_migration_fee`, `harvest_surplus` or the first `redeem`). Once set, `redeem` never decodes DBC state again, so a later",
-              "DBC upgrade that changes the VirtualPool layout cannot lock redemptions."
+              "migrated to DAMM v2 (`sync_migration`, `harvest_migration_fee`, `harvest_surplus` or the",
+              "first `redeem`). Once set, `redeem` never decodes DBC state again, so a later DBC upgrade",
+              "that changes the VirtualPool layout cannot lock redemptions."
             ],
             "type": "bool"
           },
@@ -1982,6 +2042,25 @@ export type Stockfloor = {
           {
             "name": "vaultBalance",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "migrationLatched",
+      "docs": [
+        "`Launch.migrated` latched by `sync_migration` (the harvests and `redeem` latch without an event)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "launch",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "type": "pubkey"
           }
         ]
       }

@@ -182,6 +182,14 @@ export function harvestSurplusIx(a: { keys: LaunchKeys }): TransactionInstructio
   return harvestDbcQuoteIx("harvest_surplus", a.keys);
 }
 
+/**
+ * Latches `Launch.migrated` once the registered DBC pool migrated to DAMM v2 (idempotent, no payer
+ * account). After it, `redeem` never decodes the upgradeable DBC pool again.
+ */
+export function syncMigrationIx(a: { config: PublicKey; pool: PublicKey }): TransactionInstruction {
+  return ix([w(launchPda(a.config)[0]), r(a.pool)], data("sync_migration"));
+}
+
 /** Burns the claimer base ATA balance; the ATA must exist. */
 export function burnClaimerBaseIx(a: { config: PublicKey; baseMint: PublicKey }): TransactionInstruction {
   return ix(

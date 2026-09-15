@@ -41,8 +41,10 @@ import {
   harvestLpFeesIx,
   harvestMigrationFeeIx,
   harvestSurplusIx,
+  fetchLaunch,
   redeemIx,
   registerPoolIx,
+  syncMigrationIx,
 } from "../src/stockfloor.js";
 import { createAta, mintSupply, splAta, spyxAta, tokenAmount } from "../src/token.js";
 
@@ -52,7 +54,7 @@ import { createAta, mintSupply, splAta, spyxAta, tokenAmount } from "../src/toke
  * every extra search iteration costs about 1,500 CU and happens with probability 1/2, so each limit
  * leaves at least ~16 iterations (24,000 CU) above the smallest measurement of a transaction that
  * searches (create_launch has the most: claimer, vault authority, launch, vault ATA). Transactions
- * that only use stored bumps (register_pool, harvest_migration_fee, harvest_surplus, floor, redeem)
+ * that only use stored bumps (register_pool, sync_migration, harvest_migration_fee, harvest_surplus, floor, redeem)
  * measure the same units on every run. Every limit, DBC's migration included, is at most 200,000 CU.
  */
 export const LIMITS = {
@@ -66,6 +68,7 @@ export const LIMITS = {
   "stockfloor harvest_curve_fees": 80_000,
   "DBC swap2 (PartialFill completion)": 60_000,
   "DBC migration_damm_v2": 200_000,
+  "stockfloor sync_migration": 20_000,
   "stockfloor harvest_migration_fee": 60_000,
   "stockfloor harvest_surplus": 60_000,
   "stockfloor burn_claimer_base (empty)": 40_000,
@@ -173,6 +176,9 @@ describe("lifecycle under production compute-unit limits", () => {
     tracker.trackBase(m.tokenAVault);
     await tracker.step("migration_damm_v2", "no-outflow", () => meter("DBC migration_damm_v2", [m.ix], [cranker, m.firstPositionNftMint, m.secondPositionNftMint]));
     const dk: DammPoolKeys = { pool: m.dammPool, tokenAMint: keys.baseMint, tokenBMint: SPYX_MINT, tokenAVault: m.tokenAVault, tokenBVault: m.tokenBVault, tokenAProgram: TOKEN_PROGRAM_ID, tokenBProgram: TOKEN_2022_PROGRAM_ID };
+    // The crank latches the migration right after it (decodes the DBC pool once).
+    await tracker.step("sync_migration", "no-outflow", async () => meter("stockfloor sync_migration", [await syncMigrationIx({ config, pool: keys.pool })], [cranker]));
+    expect(fetchLaunch(fork, config).migrated).toBe(true);
 
     v0 = tokenAmount(fork, vault);
     await tracker.step("harvest_migration_fee", "no-outflow", async () => meter("stockfloor harvest_migration_fee", [await harvestMigrationFeeIx({ keys })], [cranker]));

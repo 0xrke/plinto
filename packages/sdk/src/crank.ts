@@ -6,6 +6,13 @@
  * plans again until nothing is due. A failed action is re-planned against fresh state: when
  * another cranker or a Meteora keeper already did it, it is no longer due and is recorded as
  * skipped; when it is still due, the error is recorded and that action is not retried in this run.
+ *
+ * Grief resistance: anyone can create DAMM v2 positions owned by the claimer (DAMM v2
+ * `create_position` takes an arbitrary owner) on a pool they control and make each accrue a few raw
+ * of fees with one swap. By default the plan therefore harvests only positions on the launch's own
+ * migrated DAMM v2 pool, only when a position's pending quote fee is worth at least
+ * `defaultMinLpFeeQuote` (0.00001 quote token, far above a harvest transaction's cost for the
+ * allowlisted stocks), and at most `maxLpHarvests` positions per plan (largest first).
  */
 import { PublicKey, type TransactionInstruction } from "@solana/web3.js";
 import { anchorErrorFromLogs, TransactionFailedError, type TxSender } from "./chain";
@@ -20,6 +27,7 @@ import {
   harvestSurplusIx,
   launchKeysFromAccount,
   registerPoolIx,
+  syncMigrationIx,
 } from "./stockfloor/instructions";
 import { CU_LIMITS } from "./transaction";
 
@@ -29,6 +37,7 @@ export type CrankAction =
   | { kind: "harvest_migration_fee"; expectedQuote: bigint }
   | { kind: "harvest_surplus"; expectedQuote: bigint }
   | { kind: "migrate"; dammConfig: PublicKey; dammPool: PublicKey }
+  | { kind: "sync_migration" }
   | { kind: "harvest_lp_fees"; dammPool: PublicKey; position: PublicKey; positionNftAccount: PublicKey; pendingQuote: bigint; pendingBase: bigint }
   | { kind: "burn_claimer_base"; amount: bigint };
 
@@ -38,16 +47,39 @@ export type CrankActionKind = CrankAction["kind"];
 export type CrankInput = Pick<
   LaunchState,
   "launch" | "keys" | "dbcConfig" | "dbcPool" | "curveComplete" | "claimerBaseBalance" | "positions" | "damm" | "partnerSurplus"
->;
+> &
+  Partial<Pick<LaunchState, "quoteMint">>;
 
 export interface PlanCrankOptions {
   /** Harvest curve fees only when the partner quote fee is at least this (default 1 raw). */
   minCurveFeeQuote?: bigint;
-  /** Harvest LP fees only when a position's pending quote fee is at least this (default 1 raw). */
+  /**
+   * Harvest a position's LP fees only when its pending quote fee is at least this (raw). Default
+   * `defaultMinLpFeeQuote(quote decimals)`: 0.00001 quote token (1,000 raw for 8-decimal xStocks).
+   */
   minLpFeeQuote?: bigint;
+  /**
+   * Harvest a position whose pending quote fee is below `minLpFeeQuote` when its pending base fee
+   * (burned) is at least this (raw). Default: never (base-only fees alone do not trigger a harvest;
+   * the launch's own pool collects fees in quote only).
+   */
+  minLpFeeBase?: bigint;
+  /** Also harvest claimer-held positions on other DAMM v2 pools with the launch mints. Default false. */
+  includeForeignPositions?: boolean;
+  /** At most this many `harvest_lp_fees` actions per plan, largest pending quote first. Default 4. */
+  maxLpHarvests?: number;
   /** Skip migration (leave it to Meteora keepers). Default false. */
   skipMigration?: boolean;
 }
+
+/** Default LP fee harvest minimum: 0.00001 of the quote token in raw units (at least 1 raw). */
+export function defaultMinLpFeeQuote(quoteDecimals: number): bigint {
+  return 10n ** BigInt(Math.max(0, quoteDecimals - 5));
+}
+
+/** xStocks use 8 decimals; used when the plan input carries no quote mint. */
+const DEFAULT_QUOTE_DECIMALS = 8;
+const DEFAULT_MAX_LP_HARVESTS = 4;
 
 /** A stable identity of an action (used to avoid retrying the same failing action). */
 export function crankActionKey(a: CrankAction): string {
@@ -90,12 +122,24 @@ export function planCrank(s: CrankInput, opts: PlanCrankOptions = {}): CrankActi
     }
   }
 
+  // Latch Launch.migrated as soon as DBC reports the migration, so redeem stops decoding the
+  // upgradeable DBC pool. harvest_migration_fee / harvest_surplus planned above latch it too when
+  // they run after the migration; runCrank re-plans after each of them and then drops this action.
+  if (pool.isMigrated === 1 && !L.migrated && L.poolRegistered) {
+    actions.push({ kind: "sync_migration" });
+  }
+
   if (pool.isMigrated === 1 || L.migrated) {
-    const minLp = opts.minLpFeeQuote ?? 1n;
-    for (const p of s.positions) {
-      if (p.pending.b >= minLp || p.pending.a > 0n) {
-        actions.push({ kind: "harvest_lp_fees", dammPool: p.dammPool, position: p.position, positionNftAccount: p.positionNftAccount, pendingQuote: p.pending.b, pendingBase: p.pending.a });
-      }
+    const minLp = opts.minLpFeeQuote ?? defaultMinLpFeeQuote(s.quoteMint?.decimals ?? DEFAULT_QUOTE_DECIMALS);
+    const minBase = opts.minLpFeeBase;
+    const maxLp = opts.maxLpHarvests ?? DEFAULT_MAX_LP_HARVESTS;
+    const due = s.positions
+      .filter((p) => opts.includeForeignPositions || p.dammPool.equals(s.damm.pool))
+      .filter((p) => p.pending.b >= minLp || (minBase !== undefined && p.pending.a >= minBase && p.pending.a > 0n))
+      .sort((x, y) => (x.pending.b === y.pending.b ? 0 : x.pending.b > y.pending.b ? -1 : 1))
+      .slice(0, Math.max(0, maxLp));
+    for (const p of due) {
+      actions.push({ kind: "harvest_lp_fees", dammPool: p.dammPool, position: p.position, positionNftAccount: p.positionNftAccount, pendingQuote: p.pending.b, pendingBase: p.pending.a });
     }
   }
 
@@ -130,6 +174,8 @@ export function buildCrankAction(state: LaunchState, action: CrankAction, payer:
       return { instructions: [harvestMigrationFeeIx({ keys })], signers: [], computeUnitLimit: CU_LIMITS.harvestMigrationFee };
     case "harvest_surplus":
       return { instructions: [harvestSurplusIx({ keys })], signers: [], computeUnitLimit: CU_LIMITS.harvestSurplus };
+    case "sync_migration":
+      return { instructions: [syncMigrationIx({ config: L.config, pool: keys.pool })], signers: [], computeUnitLimit: CU_LIMITS.syncMigration };
     case "migrate": {
       const m = dbcMigrationDammV2Ix({
         keys: dbcPoolKeys({ config: L.config, baseMint: L.baseMint, quoteMint: L.quoteMint, quoteTokenProgram: L.quoteTokenProgram }),

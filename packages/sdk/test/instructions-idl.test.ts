@@ -34,6 +34,8 @@ import {
   harvestMigrationFeeIx,
   harvestSurplusIx,
   launchKeysFromAccount,
+  launchPda,
+  syncMigrationIx,
   redeemIx,
   registerPoolIx,
   STOCKFLOOR_IDL,
@@ -136,6 +138,14 @@ describe("stockfloor instruction builders match target/idl/stockfloor.json", () 
     expectMatchesIdl(STOCKFLOOR_IDL, "harvest_surplus", s, ctx);
     // The vault is the vault authority's quote ATA; the claimer is authorityPda.
     expect(m.keys[1]!.pubkey.equals(authorityPda(k.config)[0])).toBe(true);
+  });
+
+  it("sync_migration (no payer, no signer: launch and the registered DBC pool)", () => {
+    const k = launchKeys();
+    const ix = syncMigrationIx({ config: k.config, pool: k.pool });
+    expectMatchesIdl(STOCKFLOOR_IDL, "sync_migration", ix, { "launch.config": k.config });
+    expect(ix.keys.map((m) => m.pubkey.toBase58())).toEqual([launchPda(k.config)[0].toBase58(), k.pool.toBase58()]);
+    expect(Buffer.from(ix.data).equals(coder().encode("syncMigration", {}))).toBe(true);
   });
 
   it("burn_claimer_base", () => {

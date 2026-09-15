@@ -18,6 +18,7 @@ export const CU_LIMITS = {
   harvestCurveFees: 80_000,
   harvestMigrationFee: 60_000,
   harvestSurplus: 60_000,
+  syncMigration: 20_000,
   burnClaimerBase: 40_000,
   harvestLpFees: 100_000,
   floor: 15_000,

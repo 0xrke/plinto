@@ -4,7 +4,7 @@
  *
  *   compose launch (2 legacy txs <= 1232 bytes, creator first buy) -> curve buys and sells from SDK
  *   quotes -> runCrank (curve fees) -> PartialFill completion -> planCrank / buildCrankAction
- *   (curve fees, migration fee, surplus, migration) -> DAMM v2 trades from SDK quotes -> runCrank
+ *   (curve fees, migration fee, surplus, migration, sync_migration) -> DAMM v2 trades from SDK quotes -> runCrank
  *   (LP fees + base donation burn) -> SDK redemptions -> idempotent crank.
  *
  * Test setup uses cheatcodes only to fund wallets with SOL and SPYx. Every amount an SDK preview or
@@ -256,7 +256,17 @@ describe("SDK product flow on the LiteSVM mainnet fork (SDK APIs only)", () => {
     }
     // Migration needs 3 signatures and still fits a legacy transaction.
     expect(cranker.sent.find((t) => t.label === "migrate")!.size).toBeLessThanOrEqual(1232);
+    // Both one-shot harvests ran before the migration, so neither latched Launch.migrated: the next
+    // plan is sync_migration alone, and after it redeem never decodes the DBC pool again.
+    const migrated = await state();
+    expect(migrated.migrated).toBe(true);
+    expect(migrated.launch.migrated).toBe(false);
+    expect(planCrank(migrated)).toEqual([{ kind: "sync_migration" }]);
+    const sync = buildCrankAction(migrated, { kind: "sync_migration" }, cranker.payer);
+    await cranker.send(sync.instructions, { signers: sync.signers, computeUnitLimit: sync.computeUnitLimit, label: "sync_migration" });
     const s = await state();
+    expect(s.vaultBalance).toBe(migrated.vaultBalance);
+    expect(s.launch.migrated).toBe(true);
     expect(s.phase).toBe("redeemable");
     expect(s.migrated).toBe(true);
     expect(s.launch.migrationFeeHarvested && s.launch.surplusHarvested).toBe(true);
