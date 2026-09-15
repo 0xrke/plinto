@@ -383,20 +383,22 @@ Operational notes for C2:
 
 ## 10. Local replay of §9
 
-**Passed:** run `replay-20260915T220310Z`, `bash scripts/e2e/replay-doc-commands.sh`, 2026-09-16.
+**Passed:** run `replay-20260915T230348Z`, `bash scripts/e2e/replay-doc-commands.sh`, 2026-09-16 (re-run after the
+review fixes; an earlier replay of the M2 binary, `replay-20260915T220310Z`, passed the same way).
 
 Every command block above ran verbatim, with two changes: `MAINNET_RPC_URL=http://127.0.0.1:8899`, and `--use-rpc`
 appended to `solana program deploy`. The demo wallets were funded by cheatcodes with the plan +10%.
-- **Pre-flight:** printed the stockfloor.so sha256, SOL and SPYx balances, and `solana rent 504877` = 2.51860812 SOL. It
+- **Pre-flight:** printed the stockfloor.so sha256, SOL and SPYx balances, and `solana rent 504877` = 2.5654254 SOL. It
   printed "program id is free". `spl-token balance` fails for the cranker, which has no SPYx ATA; `|| true` covers
   that.
-- **Deploy:** `solana program show` reported authority `BBU1tTr4…` and data length 495,616. `solana program dump` +
+- **Deploy:** `solana program show` reported authority `BBU1tTr4…` and data length 504,832. `solana program dump` +
   `cmp` printed "deployed ELF matches".
-- **SDK CLI:** ran in guard mode `mainnet-override` (both switches set, loopback URL). Threshold 6,557,938 raw at
-  $758.10; the completing buy was PartialFill.
-- **Outcome:** all 6 quotes `exact: true`; final phase `redeemable`, vault 2,039,340 raw, supply 606,444,122,020,960,
-  floor view = state.
-- **Relay check:** 0 of 493 local signatures exist on mainnet.
+- **SDK CLI:** ran in guard mode `mainnet-override` (both switches set, loopback URL). Threshold 6,562,459 raw at
+  $757.58; the completing buy was PartialFill; the graduation crank ran `harvest_curve_fees`,
+  `harvest_migration_fee`, `harvest_surplus`, `migrate` and `sync_migration`.
+- **Outcome:** all 6 quotes `exact: true`; final phase `redeemable`, vault 2,040,745 raw, supply 606,444,152,116,264,
+  floor view = state, nothing due on the crank.
+- **Relay check:** 0 of 502 local signatures exist on mainnet.
 
 ## Decisions
 
