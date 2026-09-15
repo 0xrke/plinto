@@ -1,5 +1,5 @@
 import type { Connection } from "@solana/web3.js";
-import { DATA_SOURCE, MAINNET_SEND_SWITCHES, RPC_URL, WS_URL } from "../config";
+import { CLUSTER_SETTINGS, DATA_SOURCE, RPC_URL, WS_URL } from "../config";
 import { getClusterInfo } from "../chain/cluster";
 import { createConnection, createReader } from "../chain/connection";
 import { JupiterPriceProvider } from "../chain/prices";
@@ -36,7 +36,7 @@ export function createBackend(kind = DATA_SOURCE, rpcUrl = RPC_URL, wsUrl = WS_U
     actions: new ChainLaunchActions({
       reader,
       createSender: connectionSenderFactory(connection),
-      cluster: () => getClusterInfo(rpcUrl, MAINNET_SEND_SWITCHES),
+      cluster: () => getClusterInfo(rpcUrl, CLUSTER_SETTINGS),
     }),
   };
 }

@@ -11,6 +11,8 @@ import { isLoopbackRpcUrl } from "@stockfloor/sdk";
  * STOCKFLOOR_ALLOW_MAINNET   "1" is the other one (the variable the CLI also requires); next.config.ts
  *                            inlines it at build time. Mainnet sends need both (checkpoint C2 only);
  *                            otherwise the app sends only to a loopback surfnet or local validator.
+ * NEXT_PUBLIC_PRIORITY_FEE_MICROLAMPORTS  Priority fee per compute unit for app transactions. Default:
+ *                            100000 on mainnet, 0 on local clusters.
  */
 export const DEFAULT_RPC_URL = "http://127.0.0.1:8899";
 
@@ -23,10 +25,21 @@ export type DataSourceKind = "mock" | "chain";
 export const DATA_SOURCE: DataSourceKind =
   process.env.NEXT_PUBLIC_DATA_SOURCE === "chain" ? "chain" : "mock";
 
-/** Both mainnet send switches (see lib/chain/cluster.ts); each alone keeps mainnet sends refused. */
-export const MAINNET_SEND_SWITCHES: { allowMainnetFlag: boolean; allowMainnetEnv: string | undefined } = {
+/** A non-negative integer setting, or undefined when unset or invalid. */
+export function parseMicroLamports(value: string | undefined): number | undefined {
+  if (value === undefined || !/^\d+$/.test(value.trim())) return undefined;
+  const n = Number(value.trim());
+  return Number.isSafeInteger(n) ? n : undefined;
+}
+
+/**
+ * Cluster settings (see lib/chain/cluster.ts): both mainnet send switches, each alone keeps mainnet
+ * sends refused, and the optional priority fee override.
+ */
+export const CLUSTER_SETTINGS: { allowMainnetFlag: boolean; allowMainnetEnv: string | undefined; priorityFeeMicroLamports?: number } = {
   allowMainnetFlag: process.env.NEXT_PUBLIC_ALLOW_MAINNET === "1",
   allowMainnetEnv: process.env.STOCKFLOOR_ALLOW_MAINNET || undefined,
+  priorityFeeMicroLamports: parseMicroLamports(process.env.NEXT_PUBLIC_PRIORITY_FEE_MICROLAMPORTS),
 };
 
 /** True when the RPC host is loopback (127.0.0.1, localhost, ::1): a local fork or validator. */

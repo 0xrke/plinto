@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { Keypair, PublicKey, Transaction, type Connection } from "@solana/web3.js";
+import { ComputeBudgetProgram, Keypair, PublicKey, Transaction, type Connection } from "@solana/web3.js";
 import {
   DBC_PROGRAM_ID,
   MAINNET_GENESIS_HASH,
@@ -191,6 +191,20 @@ describe("ChainLaunchActions.createLaunch", () => {
     expect(again.ok).toBe(false);
   });
 
+  it("adds the mainnet priority fee to every launch transaction, and none on the local fork", async () => {
+    const priceOf = (tx: Transaction) => {
+      const ix = tx.instructions.find((i) => i.programId.equals(ComputeBudgetProgram.programId) && i.data[0] === 3);
+      return ix ? new DataView(ix.data.buffer, ix.data.byteOffset + 1, 8).getBigUint64(0, true) : null;
+    };
+    const mainnet = setup({ cluster: mainnetOpen });
+    expect((await mainnet.actions.createLaunch(launchInput(), mainnet.wallet)).ok).toBe(true);
+    expect(mainnet.sent.map(priceOf)).toEqual([100_000n, 100_000n]);
+
+    const local = setup();
+    expect((await local.actions.createLaunch(launchInput(), local.wallet)).ok).toBe(true);
+    expect(local.sent.map(priceOf)).toEqual([null, null]);
+  });
+
   it("reports a wallet rejection and a refused send guard without sending", async () => {
     const rejected = setup({ reject: true });
     const r = await rejected.actions.createLaunch(launchInput(), rejected.wallet);
@@ -273,6 +287,20 @@ describe("ChainLaunchActions.trade", () => {
     expect(flow.status).toBe("succeeded");
     expect(flow.steps[0]!.label).toBe(`Buy $${t.summary.symbol} with SPYx on the bonding curve`);
     expect(flow.result).toMatch(/^Paid 0\.30\d+ SPYx, received [\d,]+(\.\d+)? \$/);
+  });
+
+  it("sends trades and redemptions with the mainnet priority fee, and without one on the local fork", async () => {
+    const { state } = launchState({ quoteReserve: 20_000_000n });
+    for (const [cluster, price] of [[mainnetOpen, 100_000], [localFork, 0]] as const) {
+      const t = tradeSetup(state, { cluster, quote: 100_000_000n, onSend: (_l, b) => void (b.base += 1n) });
+      const r = await t.actions.trade({ launch: t.summary, side: "buy", payToken: "QUOTE", amountRaw: 1_000_000n, slippageBps: 100 }, t.wallet);
+      expect(r.ok).toBe(true);
+      expect(t.sends[0]!.opts?.computeUnitPriceMicroLamports).toBe(price);
+    }
+    const redeemable = launchState({ phase: "redeemable" }).state;
+    const t = tradeSetup(redeemable, { cluster: mainnetOpen, base: 10n ** 12n });
+    expect((await t.actions.redeem({ launch: t.summary, amountRaw: 10n ** 12n }, t.wallet)).ok).toBe(true);
+    expect(t.sends[0]!.opts?.computeUnitPriceMicroLamports).toBe(100_000);
   });
 
   it("refuses USDC/SOL routing on a local fork and trades beyond the wallet balance", async () => {
@@ -364,6 +392,16 @@ describe("ChainLaunchActions.redeem", () => {
 });
 
 describe("ChainLaunchActions.crank", () => {
+  it("passes the mainnet priority fee to the SDK crank", async () => {
+    const { state } = launchState({ phase: "graduating" });
+    const t = tradeSetup(state, { cluster: mainnetOpen });
+    const runCrank = vi.fn(async () => ({ launch: state.address, steps: [], remaining: [], finalState: state }));
+    const actions = new ChainLaunchActions({ reader: t.reader, createSender: () => ({}) as TxSender, cluster: async () => mainnetOpen, fetchState: async () => state, runCrank: runCrank as never });
+    expect((await actions.crank(t.summary, t.wallet)).ok).toBe(true);
+    expect(runCrank.mock.calls[0]).toBeDefined();
+    expect((runCrank.mock.calls[0] as unknown[])[2]).toMatchObject({ computeUnitPriceMicroLamports: 100_000 });
+  });
+
   it("reports when nothing is due without asking the wallet", async () => {
     const t = tradeSetup(launchState().state);
     const rec = recordFlow();
@@ -409,6 +447,8 @@ describe("ChainLaunchActions.crank", () => {
       "Migrate the pool to Meteora DAMM v2",
     ]);
     expect(flow.result).toBe("2 crank transactions confirmed, 1 skipped.");
+    // Local fork: no priority fee.
+    expect(runCrank.mock.calls[0]![2]).toMatchObject({ computeUnitPriceMicroLamports: 0 });
 
     runCrank.mockImplementationOnce(async (sender: TxSender, _ref: unknown, opts: { onStep?: (s: unknown) => void }) => {
       const [action] = planCrank(state);

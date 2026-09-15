@@ -29,7 +29,16 @@ export interface ClusterInfo {
   jupiterRouting: boolean;
   /** Surfpool cheatcode faucet (local fork only). */
   faucet: boolean;
+  /**
+   * Priority fee for every app transaction, micro-lamports per compute unit: the
+   * NEXT_PUBLIC_PRIORITY_FEE_MICROLAMPORTS override, else 100,000 on mainnet (the C2 rehearsal value)
+   * and 0 on local clusters.
+   */
+  priorityFeeMicroLamports: number;
 }
+
+/** Default mainnet priority fee (micro-lamports per CU), the value the C2 rehearsal measured and chose. */
+export const MAINNET_PRIORITY_FEE_MICROLAMPORTS = 100_000;
 
 export type ProbeFn = (rpcUrl: string) => Promise<ClusterProbe>;
 
@@ -42,6 +51,8 @@ export interface ClusterSettings {
   allowMainnetFlag: boolean;
   /** STOCKFLOOR_ALLOW_MAINNET, inlined at build time by next.config.ts: the same env switch the CLI requires. */
   allowMainnetEnv: string | undefined;
+  /** NEXT_PUBLIC_PRIORITY_FEE_MICROLAMPORTS; undefined picks the default for the cluster kind. */
+  priorityFeeMicroLamports?: number;
 }
 
 export const LOCKED_CLUSTER_SETTINGS: ClusterSettings = { allowMainnetFlag: false, allowMainnetEnv: undefined };
@@ -89,6 +100,7 @@ export function classifyCluster(rpcUrl: string, probe: ClusterProbe, settings: C
     sendGuard,
     jupiterRouting: kind === "mainnet",
     faucet: kind === "local-fork",
+    priorityFeeMicroLamports: settings.priorityFeeMicroLamports ?? (kind === "mainnet" ? MAINNET_PRIORITY_FEE_MICROLAMPORTS : 0),
   };
 }
 
@@ -100,7 +112,7 @@ const cache = new Map<string, Promise<ClusterInfo>>();
  * Failed probes are not cached, so a surfnet started after page load is picked up on retry.
  */
 export function getClusterInfo(rpcUrl: string, settings: ClusterSettings = LOCKED_CLUSTER_SETTINGS, probe: ProbeFn = probeCluster): Promise<ClusterInfo> {
-  const key = `${rpcUrl}|${settings.allowMainnetFlag ? 1 : 0}|${settings.allowMainnetEnv === "1" ? 1 : 0}`;
+  const key = `${rpcUrl}|${settings.allowMainnetFlag ? 1 : 0}|${settings.allowMainnetEnv === "1" ? 1 : 0}|${settings.priorityFeeMicroLamports ?? "default"}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const pending = probe(rpcUrl).then((p) => {

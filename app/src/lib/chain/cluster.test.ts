@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MAINNET_GENESIS_HASH } from "@stockfloor/sdk";
-import { classifyCluster, getClusterInfo, resetClusterCache } from "./cluster";
+import { parseMicroLamports } from "../config";
+import { LOCKED_CLUSTER_SETTINGS, MAINNET_PRIORITY_FEE_MICROLAMPORTS, classifyCluster, getClusterInfo, resetClusterCache } from "./cluster";
 
 const surfnet = { genesisHash: MAINNET_GENESIS_HASH, surfnetVersion: "1.5.0", surfnetMethodOk: true };
 const validator = { genesisHash: "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG", surfnetVersion: null, surfnetMethodOk: false };
@@ -58,6 +59,19 @@ describe("classifyCluster", () => {
     expect(classifyCluster(url, mainnetProbe, { allowMainnetFlag: true, allowMainnetEnv: "true" }).sendGuard.allowed).toBe(false);
     // Like the CLI guard, a half-set override also refuses a local surfnet, so a misconfiguration is noticed.
     expect(classifyCluster("http://127.0.0.1:28899", surfnet, { allowMainnetFlag: true, allowMainnetEnv: undefined }).sendGuard.allowed).toBe(false);
+  });
+
+  it("priority fee: 100,000 micro-lamports per CU on mainnet, 0 locally, or the configured override", () => {
+    const url = "https://api.mainnet-beta.solana.com";
+    expect(classifyCluster(url, mainnetProbe).priorityFeeMicroLamports).toBe(MAINNET_PRIORITY_FEE_MICROLAMPORTS);
+    expect(MAINNET_PRIORITY_FEE_MICROLAMPORTS).toBe(100_000);
+    expect(classifyCluster("http://127.0.0.1:28899", surfnet).priorityFeeMicroLamports).toBe(0);
+    expect(classifyCluster("http://localhost:8899", validator).priorityFeeMicroLamports).toBe(0);
+    expect(classifyCluster(url, mainnetProbe, { allowMainnetFlag: true, allowMainnetEnv: "1", priorityFeeMicroLamports: 250_000 }).priorityFeeMicroLamports).toBe(250_000);
+    expect(classifyCluster("http://127.0.0.1:28899", surfnet, { ...LOCKED_CLUSTER_SETTINGS, priorityFeeMicroLamports: 5 }).priorityFeeMicroLamports).toBe(5);
+    expect([parseMicroLamports("100000"), parseMicroLamports(" 0 "), parseMicroLamports("-1"), parseMicroLamports("1.5"), parseMicroLamports(""), parseMicroLamports(undefined)]).toEqual([
+      100_000, 0, undefined, undefined, undefined, undefined,
+    ]);
   });
 
   it("unreachable or unknown clusters may not send", () => {

@@ -70,23 +70,24 @@ const LAUNCH_STEP_LABELS: Record<string, string> = {
   first_buy: "First buy on the bonding curve",
 };
 
+/**
+ * Labels per crank action kind. A lookup with a readable fallback (not an exhaustive switch), so an SDK
+ * that adds a crank action still type-checks and shows a sensible label.
+ */
+const CRANK_ACTION_LABELS: Record<string, string> = {
+  register_pool: "Register the DBC pool",
+  harvest_curve_fees: "Harvest curve trading fees into the vault",
+  harvest_migration_fee: "Harvest the migration fee into the vault",
+  harvest_surplus: "Harvest the curve surplus into the vault",
+  migrate: "Migrate the pool to Meteora DAMM v2",
+  sync_migration: "Record the migration on the launch",
+  harvest_lp_fees: "Harvest DAMM v2 LP fees into the vault",
+  burn_claimer_base: "Burn base tokens held by the claimer",
+};
+
 export function crankActionLabel(a: Pick<CrankAction, "kind">): string {
-  switch (a.kind) {
-    case "register_pool":
-      return "Register the DBC pool";
-    case "harvest_curve_fees":
-      return "Harvest curve trading fees into the vault";
-    case "harvest_migration_fee":
-      return "Harvest the migration fee into the vault";
-    case "harvest_surplus":
-      return "Harvest the curve surplus into the vault";
-    case "migrate":
-      return "Migrate the pool to Meteora DAMM v2";
-    case "harvest_lp_fees":
-      return "Harvest DAMM v2 LP fees into the vault";
-    case "burn_claimer_base":
-      return "Burn base tokens held by the claimer";
-  }
+  const kind: string = a.kind;
+  return CRANK_ACTION_LABELS[kind] ?? `Crank step: ${kind.replace(/_/g, " ")}`;
 }
 
 interface LaunchSession {
@@ -94,6 +95,8 @@ interface LaunchSession {
   built: BuiltLaunch;
   completed: Set<string>;
   signatures: string[];
+  /** Priority fee the transactions were sized with (micro-lamports per CU). */
+  priorityFeeMicroLamports: number;
 }
 
 function lamportsLabel(lamports: bigint): string {
@@ -181,7 +184,12 @@ export class ChainLaunchActions implements LaunchActions {
         },
         run: async () => {
           active = t.label;
-          const res = await this.sender(w, dispatch, () => active).send(t.instructions, { signers: t.signers, computeUnitLimit: t.computeUnitLimit, label: t.label });
+          const res = await this.sender(w, dispatch, () => active).send(t.instructions, {
+            signers: t.signers,
+            computeUnitLimit: t.computeUnitLimit,
+            computeUnitPriceMicroLamports: s.priorityFeeMicroLamports,
+            label: t.label,
+          });
           s.signatures.push(res.signature);
           return { signature: res.signature };
         },
@@ -209,10 +217,13 @@ export class ChainLaunchActions implements LaunchActions {
     // The on-chain multiplier at the cluster clock is authoritative for the threshold conversion.
     const multiplier = effectiveMintMultiplier(mint, clock.unixTimestamp);
     const firstBuy = firstBuyQuoteRaw && firstBuyQuoteRaw > 0n ? { quoteAmount: firstBuyQuoteRaw, slippageBps: 100 } : undefined;
+    const priorityFeeMicroLamports = cluster.priorityFeeMicroLamports;
     const built = buildLaunchTransactions({ ...input, quoteMultiplier: multiplier }, w.publicKey, {
       quoteTokenProgram: tokenProgram,
       firstBuy,
       nowUnixSeconds: clock.unixTimestamp,
+      // Size accounting includes the SetComputeUnitPrice instruction the sender adds.
+      computeUnitPriceMicroLamports: priorityFeeMicroLamports,
     });
     await this.requireLamports(w, MIN_LAUNCH_LAMPORTS, cluster, "Launching");
     if (firstBuy) {
@@ -228,6 +239,7 @@ export class ChainLaunchActions implements LaunchActions {
       built,
       completed: new Set(),
       signatures: [],
+      priorityFeeMicroLamports,
     };
   }
 
@@ -253,11 +265,11 @@ export class ChainLaunchActions implements LaunchActions {
       await this.requireLamports(w, MIN_TRADE_LAMPORTS, cluster, "Trading");
 
       if (payToken === "QUOTE") {
-        const outcome = await this.directTrade(state, launch, w, side, request.amountRaw, request.slippageBps, dispatch, signatures, true);
+        const outcome = await this.directTrade(state, launch, w, side, request.amountRaw, request.slippageBps, dispatch, signatures, true, cluster.priorityFeeMicroLamports);
         dispatch({ type: "finish", result: outcome.summary });
         return { ok: true, value: outcome.value, signatures };
       }
-      return await this.routedTrade(state, launch, w, request, dispatch, signatures);
+      return await this.routedTrade(state, launch, w, request, dispatch, signatures, cluster.priorityFeeMicroLamports);
     } catch (e) {
       const error = friendlyError(e);
       dispatch({ type: "fail", error });
@@ -276,6 +288,7 @@ export class ChainLaunchActions implements LaunchActions {
     dispatch: FlowDispatch,
     signatures: string[],
     startFlow: boolean,
+    priorityFeeMicroLamports: number,
     stepId = "swap",
   ): Promise<{ value: TradeOutcome; summary: string }> {
     const reader = this.deps.reader;
@@ -305,7 +318,11 @@ export class ChainLaunchActions implements LaunchActions {
           id: stepId,
           label,
           run: async () => {
-            const res = await this.sender(w, dispatch, () => active).send(trade.instructions, { computeUnitLimit: trade.computeUnitLimit, label: `${side} ${trade.quote.venue}` });
+            const res = await this.sender(w, dispatch, () => active).send(trade.instructions, {
+              computeUnitLimit: trade.computeUnitLimit,
+              computeUnitPriceMicroLamports: priorityFeeMicroLamports,
+              label: `${side} ${trade.quote.venue}`,
+            });
             signatures.push(res.signature);
             return { signature: res.signature };
           },
@@ -341,6 +358,7 @@ export class ChainLaunchActions implements LaunchActions {
     request: TradeRequest,
     dispatch: FlowDispatch,
     signatures: string[],
+    priorityFeeMicroLamports: number,
   ): Promise<ActionResult<TradeOutcome>> {
     const payMint = request.payToken === "USDC" ? USDC_MINT : WSOL_MINT;
     const quoteMint = state.keys.quoteMint.toBase58();
@@ -409,7 +427,7 @@ export class ChainLaunchActions implements LaunchActions {
         friendlyError,
       );
       const fresh = await this.freshState(launch);
-      const outcome = await this.directTrade(fresh, launch, w, "buy", routed, request.slippageBps, dispatch, signatures, false);
+      const outcome = await this.directTrade(fresh, launch, w, "buy", routed, request.slippageBps, dispatch, signatures, false, priorityFeeMicroLamports);
       dispatch({ type: "finish", result: outcome.summary });
       return { ok: true, value: outcome.value, signatures };
     }
@@ -421,7 +439,7 @@ export class ChainLaunchActions implements LaunchActions {
         { id: "jupiter", label: `Swap ${q} to ${request.payToken} via Jupiter` },
       ],
     });
-    const sold = await this.directTrade(state, launch, w, "sell", request.amountRaw, request.slippageBps, dispatch, signatures, false);
+    const sold = await this.directTrade(state, launch, w, "sell", request.amountRaw, request.slippageBps, dispatch, signatures, false, priorityFeeMicroLamports);
     await runSteps(
       [
         {
@@ -477,7 +495,11 @@ export class ChainLaunchActions implements LaunchActions {
             id: "redeem",
             label,
             run: async () => {
-              const res = await this.sender(w, dispatch, () => active).send(built.instructions, { computeUnitLimit: built.computeUnitLimit, label: "redeem" });
+              const res = await this.sender(w, dispatch, () => active).send(built.instructions, {
+                computeUnitLimit: built.computeUnitLimit,
+                computeUnitPriceMicroLamports: cluster.priorityFeeMicroLamports,
+                label: "redeem",
+              });
               signatures.push(res.signature);
               return { signature: res.signature };
             },
@@ -538,6 +560,7 @@ export class ChainLaunchActions implements LaunchActions {
       let skipped = 0;
       let failed = 0;
       const result = await this.crankRunner(proxy, { launch: state.address }, {
+        computeUnitPriceMicroLamports: cluster.priorityFeeMicroLamports,
         onStep: (step) => {
           const id = activeId ?? crankActionKey(step.action);
           stepsSnapshot.set(id, "finished");
