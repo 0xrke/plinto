@@ -38,6 +38,21 @@ describe("txFlowReducer", () => {
     expect(play([{ type: "step-phase", id: "a", phase: "signing" }], s)).toBe(s);
   });
 
+  it("a non-terminal step failure keeps the flow running so later steps still report", () => {
+    let s = play([
+      { type: "start", steps: two },
+      { type: "step-started", id: "a" },
+      { type: "step-failed", id: "a", error: "QuoteMintPaused", terminal: false },
+    ]);
+    expect(s.status).toBe("running");
+    expect(s.steps[0]).toMatchObject({ status: "failed", error: "QuoteMintPaused" });
+    s = play([{ type: "step-started", id: "b" }, { type: "step-succeeded", id: "b", signature: "sigB" }], s);
+    expect(s.steps[1]).toMatchObject({ status: "done", signature: "sigB" });
+    // A failed step still blocks success; the runner ends the flow with a summary error.
+    expect(play([{ type: "finish", result: "done" }], s).status).toBe("running");
+    expect(play([{ type: "fail", error: "1 crank step failed." }], s)).toMatchObject({ status: "failed", error: "1 crank step failed." });
+  });
+
   it("fails at a step and resumes from it, keeping finished steps", () => {
     let s = play([
       { type: "start", steps: two },

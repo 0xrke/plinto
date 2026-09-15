@@ -44,7 +44,11 @@ export type TxFlowEvent =
   | { type: "step-phase"; id: string; phase: StepPhase }
   | { type: "step-succeeded"; id: string; signature?: string; detail?: string }
   | { type: "step-skipped"; id: string; detail?: string }
-  | { type: "step-failed"; id: string; error: string }
+  /**
+   * A step failed. By default the flow fails with it; `terminal: false` marks only the step failed and
+   * keeps the flow running (the crank moves on to the next due action and reports at the end).
+   */
+  | { type: "step-failed"; id: string; error: string; terminal?: boolean }
   /** Add steps discovered while running (crank re-planning). Existing ids are left untouched. */
   | { type: "steps-added"; steps: Array<{ id: string; label: string }> }
   /** Mark every still-pending step skipped (the rest is no longer needed). */
@@ -121,6 +125,7 @@ export function txFlowReducer(state: TxFlowState, event: TxFlowEvent): TxFlowSta
         s.status === "active" || s.status === "pending" ? { id: s.id, label: s.label, status: "failed", error: event.error } : null,
       );
       if (next === state) return state;
+      if (event.terminal === false) return next;
       return { ...next, status: "failed", error: event.error };
     }
     case "fail":

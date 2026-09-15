@@ -30,7 +30,7 @@ import {
   type TxSender,
 } from "@stockfloor/sdk";
 import type { ClusterInfo } from "../chain/cluster";
-import { UserFacingError, friendlyError } from "../chain/errors";
+import { UserFacingError, friendlyError, isWalletRejection } from "../chain/errors";
 import { ultraSwap } from "../chain/jupiterRoute";
 import { noopDispatch, runSteps, type FlowDispatch, type StepPhase, type StepRunner } from "../chain/txFlow";
 import { requireSigningWallet, type SenderFactory, type SigningWallet } from "../chain/walletSender";
@@ -568,50 +568,79 @@ export class ChainLaunchActions implements LaunchActions {
       let activeId: string | null = null;
       const stepsSnapshot = new Map<string, "pending" | "finished">(plan.map((a) => [crankActionKey(a), "pending"]));
       const inner = this.sender(w, dispatch, () => activeId);
+      // Set when the user rejects a wallet prompt: the run stops instead of prompting for the next action.
+      let cancelled: unknown = null;
+      const guard = () => {
+        if (cancelled) throw new CrankCancelledError();
+      };
       // A TxSender proxy: runCrank labels every send with the action kind, which marks the step active.
+      // After a wallet rejection every call fails, so runCrank neither prompts again nor keeps going (its
+      // re-read after the failed send throws).
       const proxy: TxSender = {
         payer: inner.payer,
-        getAccountInfo: (k) => inner.getAccountInfo(k),
-        getMultipleAccountsInfo: (k) => inner.getMultipleAccountsInfo(k),
-        getProgramAccounts: (p, f) => inner.getProgramAccounts(p, f),
-        getTokenAccountsByOwner: (o, p) => inner.getTokenAccountsByOwner(o, p),
-        simulate: (i, p) => inner.simulate(i, p),
+        getAccountInfo: async (k) => (guard(), inner.getAccountInfo(k)),
+        getMultipleAccountsInfo: async (k) => (guard(), inner.getMultipleAccountsInfo(k)),
+        getProgramAccounts: async (p, f) => (guard(), inner.getProgramAccounts(p, f)),
+        getTokenAccountsByOwner: async (o, p) => (guard(), inner.getTokenAccountsByOwner(o, p)),
+        simulate: async (i, p) => (guard(), inner.simulate(i, p)),
         send: async (ixs, sendOpts?: SendOptions) => {
+          guard();
           const kind = sendOpts?.label ?? "crank";
           activeId = this.nextCrankStepId(kind, dispatch, stepsSnapshot);
           dispatch({ type: "step-started", id: activeId, phase: "preparing" });
-          return inner.send(ixs, sendOpts);
+          try {
+            return await inner.send(ixs, sendOpts);
+          } catch (e) {
+            if (isWalletRejection(e)) cancelled = e;
+            throw e;
+          }
         },
       };
       let executed = 0;
       let skipped = 0;
       let failed = 0;
-      const result = await this.crankRunner(proxy, { launch: state.address }, {
-        computeUnitPriceMicroLamports: cluster.priorityFeeMicroLamports,
-        onStep: (step) => {
-          const id = activeId ?? crankActionKey(step.action);
-          stepsSnapshot.set(id, "finished");
-          if (step.status === "executed") {
-            executed++;
-            if (step.signature) signatures.push(step.signature);
-            dispatch({ type: "step-succeeded", id, signature: step.signature });
-          } else if (step.status === "skipped") {
-            skipped++;
-            dispatch({ type: "step-skipped", id, detail: "Already done by someone else" });
-          } else {
-            failed++;
-            dispatch({ type: "step-failed", id, error: friendlyError({ message: step.reason ?? "failed", errorName: step.errorName ?? null, name: "TransactionFailedError" }) });
-          }
-          activeId = null;
-        },
-      });
+      let result: Awaited<ReturnType<typeof runCrank>> | null = null;
+      try {
+        result = await this.crankRunner(proxy, { launch: state.address }, {
+          computeUnitPriceMicroLamports: cluster.priorityFeeMicroLamports,
+          onStep: (step) => {
+            const id = activeId ?? crankActionKey(step.action);
+            stepsSnapshot.set(id, "finished");
+            if (step.status === "executed") {
+              executed++;
+              if (step.signature) signatures.push(step.signature);
+              dispatch({ type: "step-succeeded", id, signature: step.signature });
+            } else if (step.status === "skipped") {
+              skipped++;
+              dispatch({ type: "step-skipped", id, detail: "Already done by someone else" });
+            } else {
+              failed++;
+              // Not terminal: runCrank moves on to the next due action, whose progress must still show.
+              const error = cancelled
+                ? friendlyError(cancelled)
+                : friendlyError({ message: step.reason ?? "failed", errorName: step.errorName ?? null, name: "TransactionFailedError" });
+              dispatch({ type: "step-failed", id, error, terminal: false });
+            }
+            activeId = null;
+          },
+        });
+      } catch (e) {
+        if (!cancelled) throw e;
+      }
+      if (cancelled) {
+        const error = friendlyError(cancelled);
+        dispatch({ type: "skip-pending", detail: "Not run: cancelled in your wallet" });
+        dispatch({ type: "fail", error });
+        return { ok: false, error, signatures };
+      }
       if (failed > 0) {
         const error = `${failed} crank step${failed === 1 ? "" : "s"} failed. Finished steps are kept; run the crank again to retry.`;
+        dispatch({ type: "skip-pending", detail: "Not run" });
         dispatch({ type: "fail", error });
         return { ok: false, error, signatures };
       }
       dispatch({ type: "skip-pending", detail: "No longer due" });
-      const remaining = result.remaining.length;
+      const remaining = result?.remaining.length ?? 0;
       dispatch({
         type: "finish",
         result: `${executed} crank transaction${executed === 1 ? "" : "s"} confirmed${skipped ? `, ${skipped} skipped` : ""}.${remaining ? ` ${remaining} action(s) still due.` : ""}`,
@@ -650,6 +679,14 @@ export function withMinimumOut(trade: BuiltTrade, minAmountOut: bigint): BuiltTr
   const instructions = trade.instructions.slice();
   instructions[index] = new TransactionInstruction({ programId: swap.programId, keys: swap.keys, data: data as never });
   return { ...trade, minAmountOut, instructions };
+}
+
+/** Thrown by the crank sender proxy once the user rejected a wallet prompt. */
+class CrankCancelledError extends Error {
+  constructor() {
+    super("The crank was cancelled in the wallet.");
+    this.name = "CrankCancelledError";
+  }
 }
 
 function capitalize(s: string): string {

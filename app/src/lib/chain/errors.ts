@@ -47,6 +47,12 @@ function messageOf(e: unknown): string {
   }
 }
 
+/** The user declined the wallet prompt (wallet adapter rejection or EIP-1193 style code 4001). */
+export function isWalletRejection(e: unknown): boolean {
+  const code = (e as { code?: unknown })?.code ?? (e as { error?: { code?: unknown } })?.error?.code;
+  return code === 4001 || /user rejected|rejected the request|user denied|request was declined/.test(messageOf(e).toLowerCase());
+}
+
 /**
  * Turn anything thrown by a wallet, the RPC, the SDK or a program into one sentence a user can act
  * on. Unknown failures keep their first line so nothing is hidden.
@@ -57,8 +63,7 @@ export function friendlyError(e: unknown): string {
   const message = messageOf(e);
   const lower = message.toLowerCase();
 
-  const code = (e as { code?: unknown })?.code ?? (e as { error?: { code?: unknown } })?.error?.code;
-  if (/user rejected|rejected the request|user denied|request was declined/.test(lower) || code === 4001) {
+  if (isWalletRejection(e)) {
     return "You rejected the request in your wallet. Nothing was sent.";
   }
   if (name === "WalletNotConnectedError") return "Connect a wallet to continue.";

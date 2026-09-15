@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LaunchInputError, TradeUnavailableError, TransactionFailedError } from "@stockfloor/sdk";
-import { UserFacingError, friendlyError } from "./errors";
+import { UserFacingError, friendlyError, isWalletRejection } from "./errors";
 
 function txError(errorName: string | null, logs: string[] = [], message = "transaction failed") {
   return new TransactionFailedError(message, logs, errorName, errorName ? 6000 : null, "label");
@@ -17,6 +17,7 @@ describe("friendlyError", () => {
     expect(friendlyError({ code: 4001, message: "denied" })).toBe("You rejected the request in your wallet. Nothing was sent.");
     const other = Object.assign(new Error("Ledger locked"), { name: "WalletSignTransactionError" });
     expect(friendlyError(other)).toBe("Your wallet could not sign the transaction: Ledger locked.");
+    expect([isWalletRejection(rejected), isWalletRejection({ code: 4001 }), isWalletRejection(other), isWalletRejection(null)]).toEqual([true, true, false, false]);
   });
 
   it("maps StockFloor, DBC and DAMM v2 program errors by name", () => {

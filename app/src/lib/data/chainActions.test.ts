@@ -450,6 +450,91 @@ describe("ChainLaunchActions.crank", () => {
     expect((runCrank.mock.calls[0] as unknown[])[2]).toMatchObject({ computeUnitPriceMicroLamports: 100_000 });
   });
 
+  /** A crank runner with the SDK's failure semantics: a failed send re-reads the launch through the sender, is recorded, and the run moves on. */
+  function sdkLikeRunCrank(state: LaunchState) {
+    return vi.fn(async (sender: TxSender, _ref: unknown, opts: { onStep?: (s: unknown) => void }) => {
+      for (const action of planCrank(state)) {
+        try {
+          const res = await sender.send([], { label: action.kind });
+          opts.onStep?.({ action, status: "executed", signature: res.signature });
+        } catch (e) {
+          // runCrank re-reads the launch through the sender (fetchLaunchState); here the action is still due.
+          await sender.getMultipleAccountsInfo([state.address]);
+          opts.onStep?.({ action, status: "failed", reason: e instanceof Error ? e.message : String(e), errorName: null });
+        }
+      }
+      return { launch: state.address, steps: [], remaining: [] as unknown[], finalState: state };
+    });
+  }
+
+  it("stops asking the wallet after the user rejects a crank step", async () => {
+    const { state } = launchState({ phase: "graduating" });
+    expect(planCrank(state)).toHaveLength(3);
+    const t = tradeSetup(state);
+    let prompts = 0;
+    const runCrank = sdkLikeRunCrank(state);
+    const actions = new ChainLaunchActions({
+      reader: t.reader,
+      createSender: (w, onPhase) =>
+        ({
+          payer: w.publicKey,
+          getAccountInfo: (k: PublicKey) => t.reader.getAccountInfo(k),
+          getMultipleAccountsInfo: (k: PublicKey[]) => t.reader.getMultipleAccountsInfo(k),
+          getProgramAccounts: () => t.reader.getProgramAccounts(PublicKey.default),
+          getTokenAccountsByOwner: () => t.reader.getTokenAccountsByOwner(),
+          simulate: () => t.reader.simulate(),
+          send: async () => {
+            prompts++;
+            onPhase("signing");
+            throw Object.assign(new Error("User rejected the request."), { name: "WalletSignTransactionError" });
+          },
+        }) as TxSender,
+      cluster: async () => localFork,
+      fetchState: async () => state,
+      runCrank: runCrank as never,
+    });
+    const rec = recordFlow();
+    const r = await actions.crank(t.summary, t.wallet, { dispatch: rec.dispatch });
+    expect(prompts).toBe(1);
+    expect(r).toMatchObject({ ok: false, error: "You rejected the request in your wallet. Nothing was sent.", signatures: [] });
+    const flow = rec.state();
+    expect(flow.status).toBe("failed");
+    expect(flow.steps.map((s) => s.status)).toEqual(["failed", "skipped", "skipped"]);
+    expect(flow.steps[1]!.detail).toBe("Not run: cancelled in your wallet");
+  });
+
+  it("keeps the progress list live after a failed crank step, so later signatures show", async () => {
+    const { state } = launchState({ phase: "graduating" });
+    const t = tradeSetup(state);
+    const runCrank = vi.fn(async (sender: TxSender, _ref: unknown, opts: { onStep?: (s: unknown) => void }) => {
+      const [first, second, third] = planCrank(state);
+      await sender.send([], { label: first!.kind });
+      opts.onStep?.({ action: first, status: "failed", reason: "harvest_migration_fee failed: QuoteMintPaused (6052)", errorName: "QuoteMintPaused" });
+      await sender.send([], { label: second!.kind });
+      opts.onStep?.({ action: second, status: "executed", signature: "surplus-sig" });
+      await sender.send([], { label: third!.kind });
+      opts.onStep?.({ action: third, status: "executed", signature: "migrate-sig" });
+      return { launch: state.address, steps: [], remaining: [first], finalState: state };
+    });
+    const actions = new ChainLaunchActions({
+      reader: t.reader,
+      createSender: (w) => ({ ...({} as TxSender), payer: w.publicKey, send: async () => ({ signature: "x", logs: [] }) }) as TxSender,
+      cluster: async () => localFork,
+      fetchState: async () => state,
+      runCrank: runCrank as never,
+    });
+    const rec = recordFlow();
+    const r = await actions.crank(t.summary, t.wallet, { dispatch: rec.dispatch });
+    expect(r).toMatchObject({ ok: false, error: "1 crank step failed. Finished steps are kept; run the crank again to retry.", signatures: ["surplus-sig", "migrate-sig"] });
+    const flow = rec.state();
+    expect(flow.status).toBe("failed");
+    expect(flow.steps.map((s) => [s.id, s.status, s.signature])).toEqual([
+      ["harvest_migration_fee", "failed", undefined],
+      ["harvest_surplus", "done", "surplus-sig"],
+      ["migrate", "done", "migrate-sig"],
+    ]);
+  });
+
   it("reports when nothing is due without asking the wallet", async () => {
     const t = tradeSetup(launchState().state);
     const rec = recordFlow();
