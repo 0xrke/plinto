@@ -219,7 +219,7 @@ export class ChainLaunchActions implements LaunchActions {
       const balance = await getAtaBalance(reader, w.publicKey, quoteMint, tokenProgram);
       if (balance < firstBuy.quoteAmount) {
         throw new UserFacingError(
-          `Your first buy needs ${formatTokenAmount(firstBuy.quoteAmount, mint.decimals, { multiplier, maxFractionDigits: 8 })} ${input.quote.symbol}; your wallet holds ${formatTokenAmount(balance, mint.decimals, { multiplier, maxFractionDigits: 8 })}.${cluster.faucet ? " Use the local faucet in the header." : ""}`,
+          `Your first buy needs ${formatTokenAmount(firstBuy.quoteAmount, mint.decimals, { multiplier, maxFractionDigits: 8 })} ${input.quote.symbol}; your wallet holds ${formatTokenAmount(balance, mint.decimals, { multiplier, maxFractionDigits: 8 })} ${input.quote.symbol}.${cluster.faucet ? " Use the local faucet in the header." : ""}`,
         );
       }
     }
@@ -458,7 +458,7 @@ export class ChainLaunchActions implements LaunchActions {
       const balance = await getAtaBalance(reader, w.publicKey, baseMint, TOKEN_PROGRAM_ID);
       if (balance < request.amountRaw) {
         throw new UserFacingError(
-          `You want to redeem ${formatTokenAmount(request.amountRaw, launch.baseDecimals)} $${launch.symbol} but hold ${formatTokenAmount(balance, launch.baseDecimals)}.`,
+          `You want to redeem ${formatTokenAmount(request.amountRaw, launch.baseDecimals)} $${launch.symbol} but hold ${formatTokenAmount(balance, launch.baseDecimals)} $${launch.symbol}.`,
         );
       }
       // Throws TradeUnavailableError with the reason when redeem is not open or pays nothing.
