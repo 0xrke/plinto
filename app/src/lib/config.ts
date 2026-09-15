@@ -7,8 +7,10 @@ import { isLoopbackRpcUrl } from "@stockfloor/sdk";
  *                            Defaults to a local mainnet fork (Surfpool) at http://127.0.0.1:8899.
  * NEXT_PUBLIC_WS_URL         Optional WebSocket endpoint. Default: web3.js derives it (RPC port + 1).
  * NEXT_PUBLIC_DATA_SOURCE    "mock" (default, design work and tests) or "chain" (on-chain launches).
- * NEXT_PUBLIC_ALLOW_MAINNET  "1" enables sending transactions through a non-loopback RPC (checkpoint C2
- *                            only). Without it the app sends only to a loopback surfnet or local validator.
+ * NEXT_PUBLIC_ALLOW_MAINNET  "1" is one of the two switches for sending through a non-loopback RPC.
+ * STOCKFLOOR_ALLOW_MAINNET   "1" is the other one (the variable the CLI also requires); next.config.ts
+ *                            inlines it at build time. Mainnet sends need both (checkpoint C2 only);
+ *                            otherwise the app sends only to a loopback surfnet or local validator.
  */
 export const DEFAULT_RPC_URL = "http://127.0.0.1:8899";
 
@@ -21,7 +23,11 @@ export type DataSourceKind = "mock" | "chain";
 export const DATA_SOURCE: DataSourceKind =
   process.env.NEXT_PUBLIC_DATA_SOURCE === "chain" ? "chain" : "mock";
 
-export const ALLOW_MAINNET_SENDS: boolean = process.env.NEXT_PUBLIC_ALLOW_MAINNET === "1";
+/** Both mainnet send switches (see lib/chain/cluster.ts); each alone keeps mainnet sends refused. */
+export const MAINNET_SEND_SWITCHES: { allowMainnetFlag: boolean; allowMainnetEnv: string | undefined } = {
+  allowMainnetFlag: process.env.NEXT_PUBLIC_ALLOW_MAINNET === "1",
+  allowMainnetEnv: process.env.STOCKFLOOR_ALLOW_MAINNET || undefined,
+};
 
 /** True when the RPC host is loopback (127.0.0.1, localhost, ::1): a local fork or validator. */
 export function isLocalRpcUrl(url: string): boolean {

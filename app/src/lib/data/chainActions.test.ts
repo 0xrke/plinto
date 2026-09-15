@@ -27,9 +27,9 @@ import { ChainLaunchActions, MIN_LAUNCH_LAMPORTS } from "./chainActions";
 import type { WalletSigner } from "./types";
 
 const surfnetProbe = { genesisHash: MAINNET_GENESIS_HASH, surfnetVersion: "1.5.0", surfnetMethodOk: true };
-const localFork = classifyCluster("http://127.0.0.1:28899", surfnetProbe, false);
-const mainnetOpen = classifyCluster("https://api.mainnet-beta.solana.com", { ...surfnetProbe, surfnetVersion: null, surfnetMethodOk: false }, true);
-const mainnetLocked = classifyCluster("https://api.mainnet-beta.solana.com", { ...surfnetProbe, surfnetVersion: null, surfnetMethodOk: false }, false);
+const localFork = classifyCluster("http://127.0.0.1:28899", surfnetProbe);
+const mainnetOpen = classifyCluster("https://api.mainnet-beta.solana.com", { ...surfnetProbe, surfnetVersion: null, surfnetMethodOk: false }, { allowMainnetFlag: true, allowMainnetEnv: "1" });
+const mainnetLocked = classifyCluster("https://api.mainnet-beta.solana.com", { ...surfnetProbe, surfnetVersion: null, surfnetMethodOk: false });
 
 function keypairWallet(kp: Keypair, opts: { reject?: boolean } = {}): WalletSigner {
   return {

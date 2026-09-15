@@ -51,7 +51,7 @@ function wallet(): WalletContextState {
 
 function Providers({ children, dataSource }: { children: ReactNode; dataSource: LaunchDataSource }) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const localFork = classifyCluster("http://127.0.0.1:28899", { genesisHash: MAINNET_GENESIS_HASH, surfnetVersion: "1.5.0", surfnetMethodOk: true }, false);
+  const localFork = classifyCluster("http://127.0.0.1:28899", { genesisHash: MAINNET_GENESIS_HASH, surfnetVersion: "1.5.0", surfnetMethodOk: true });
   return (
     <QueryClientProvider client={queryClient}>
       <WalletContext.Provider value={wallet()}>

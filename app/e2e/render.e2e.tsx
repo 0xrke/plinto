@@ -67,7 +67,7 @@ function App({ children, wallet = walletState }: { children: ReactNode; wallet?:
   return (
     <QueryClientProvider client={queryClient}>
       <WalletContext.Provider value={wallet}>
-        <DataProvider dataSource={backend.dataSource} actions={backend.actions} cluster={() => getClusterInfo(RPC, false)}>
+        <DataProvider dataSource={backend.dataSource} actions={backend.actions} cluster={() => getClusterInfo(RPC)}>
           <AttestationProvider>{children}</AttestationProvider>
         </DataProvider>
       </WalletContext.Provider>

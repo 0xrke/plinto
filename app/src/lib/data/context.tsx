@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useReducer, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { ALLOW_MAINNET_SENDS, POLL_MS, RPC_URL } from "../config";
+import { MAINNET_SEND_SWITCHES, POLL_MS, RPC_URL } from "../config";
 import { getClusterInfo, type ClusterInfo } from "../chain/cluster";
 import { IDLE_FLOW, txFlowReducer } from "../chain/txFlow";
 import type { LaunchActions, LaunchDataSource } from "./types";
@@ -107,7 +107,7 @@ export function useCluster() {
   const { dataSource, cluster } = useData();
   return useQuery({
     queryKey: ["cluster", RPC_URL],
-    queryFn: () => (cluster ? cluster() : getClusterInfo(RPC_URL, ALLOW_MAINNET_SENDS)),
+    queryFn: () => (cluster ? cluster() : getClusterInfo(RPC_URL, MAINNET_SEND_SWITCHES)),
     enabled: dataSource.kind === "chain",
     staleTime: 60_000,
     retry: 1,

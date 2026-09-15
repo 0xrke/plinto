@@ -26,7 +26,8 @@ Environment:
 | `NEXT_PUBLIC_DATA_SOURCE` | `mock` | `mock` (design work, tests) or `chain` (on-chain launches through the SDK) |
 | `NEXT_PUBLIC_RPC_URL` | `http://127.0.0.1:8899` | RPC for reads, the wallet connection and sends |
 | `NEXT_PUBLIC_WS_URL` | RPC port + 1 | WebSocket endpoint, only if it is not the RPC port + 1 |
-| `NEXT_PUBLIC_ALLOW_MAINNET` | unset | `1` enables sending through a non-loopback RPC (checkpoint C2 only). Without it the app sends only to a loopback surfnet or local validator |
+| `NEXT_PUBLIC_ALLOW_MAINNET` | unset | First mainnet send switch. Sending through a non-loopback RPC needs `1` here **and** `STOCKFLOOR_ALLOW_MAINNET=1` (checkpoint C2 only), the same two-switch rule as the CLI (`--allow-mainnet` + `STOCKFLOOR_ALLOW_MAINNET=1`). With neither, the app sends only to a loopback surfnet or local validator; with only one, it sends nowhere and says which switch is missing |
+| `STOCKFLOOR_ALLOW_MAINNET` | unset | Second mainnet send switch, read at build time by `next.config.ts` and inlined into the bundle |
 | `STOCKFLOOR_RPC_URL` | `NEXT_PUBLIC_RPC_URL` | Server-side RPC for the route handlers (faucet, JSON API) |
 | `STOCKFLOOR_NEXT_DIST_DIR` | `.next` | Build directory, so several builds can coexist in one checkout |
 
@@ -80,7 +81,7 @@ wallet) → progress through the transaction flow state machine (`src/lib/chain/
 links) → errors mapped to one sentence (`src/lib/chain/errors.ts`: wallet rejection, StockFloor IDL
 messages, DBC/DAMM slippage and liquidity, missing SOL, expired blockhash, unreachable RPC).
 
-| Action | Local fork (Surfpool) | Mainnet (`NEXT_PUBLIC_ALLOW_MAINNET=1`) |
+| Action | Local fork (Surfpool) | Mainnet (`NEXT_PUBLIC_ALLOW_MAINNET=1` and `STOCKFLOOR_ALLOW_MAINNET=1`) |
 |---|---|---|
 | Create launch | SDK `buildLaunchTransactions` (tx1 config + `create_launch`, tx2 pool + `register_pool` + first buy when it fits, tx3 otherwise), config and base mint keypairs generated in memory. A failed attempt can be retried from the failed step with the same keypairs; steps already on chain are detected and not resent | same |
 | Presale buy / sell | DBC `swap2` with the quote asset, exact SDK quote and 1% slippage floor; a buy that crosses the migration price becomes PartialFill | USDC/SOL → quote via Jupiter Ultra, then the curve buy with the routed amount (two transactions); quote asset directly as on the fork |
