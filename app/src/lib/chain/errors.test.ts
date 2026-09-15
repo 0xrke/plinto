@@ -46,6 +46,9 @@ describe("friendlyError", () => {
     expect(friendlyError(new TradeUnavailableError("redeem opens after migration and the migration-fee harvest (phase: presale)"))).toBe(
       "Redeem opens after migration and the migration-fee harvest (phase: presale).",
     );
+    expect(friendlyError(new TradeUnavailableError("the redemption would pay nothing (NothingToRedeem)"))).toBe(
+      "This amount is too small: the redemption would pay nothing.",
+    );
     expect(friendlyError(new Error("something odd\nstack line"))).toBe("something odd.");
     expect(friendlyError("plain")).toBe("plain.");
   });

@@ -66,7 +66,10 @@ export function friendlyError(e: unknown): string {
     return `Your wallet could not sign the transaction: ${message || "unknown wallet error"}.`;
   }
   if (e instanceof LaunchInputError) return `Invalid launch parameters: ${message}`;
-  if (e instanceof TradeUnavailableError) return capitalize(message.replace(/\(NothingToRedeem\)/, "").trim()) + ".";
+  if (e instanceof TradeUnavailableError) {
+    if (message.includes("NothingToRedeem")) return OVERRIDES.NothingToRedeem!;
+    return capitalize(message.trim()) + ".";
+  }
 
   if (e instanceof TransactionFailedError || (e as { errorName?: unknown })?.errorName !== undefined) {
     const errorName = (e as { errorName?: string | null }).errorName ?? null;
