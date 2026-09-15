@@ -68,10 +68,8 @@ mod tests {
         assert_eq!(damm_event_authority, DAMM_V2_EVENT_AUTHORITY);
     }
 
-    #[test]
-    fn limits_are_sane() {
-        assert!(MAX_EXIT_FEE_BPS as u64 <= crate::math::BPS_DENOMINATOR);
-        assert!(MIN_MIGRATION_FEE_PERCENTAGE <= MAX_MIGRATION_FEE_PERCENTAGE);
-        assert!(MAX_MIGRATION_FEE_PERCENTAGE < 100);
-    }
+    // Compile-time sanity checks of the limits.
+    const _: () = assert!(MAX_EXIT_FEE_BPS as u64 <= crate::math::BPS_DENOMINATOR);
+    const _: () = assert!(MIN_MIGRATION_FEE_PERCENTAGE <= MAX_MIGRATION_FEE_PERCENTAGE);
+    const _: () = assert!(MAX_MIGRATION_FEE_PERCENTAGE < 100);
 }

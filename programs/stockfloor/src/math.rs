@@ -346,7 +346,7 @@ mod tests {
         );
 
         let q = compute_redeem(max, max, max, 500).unwrap();
-        let expected_fee = ((max as u128 * 500 + 9_999) / 10_000) as u64;
+        let expected_fee = (max as u128 * 500).div_ceil(10_000) as u64;
         assert_eq!(q.gross, max);
         assert_eq!(q.fee, expected_fee);
         assert_eq!(q.net, max - expected_fee);
@@ -356,7 +356,7 @@ mod tests {
 
         let q = compute_redeem(max, 1, 1, 10_000 - 1).unwrap();
         assert_eq!(q.gross, max);
-        assert_eq!(q.fee, ((max as u128 * 9_999 + 9_999) / 10_000) as u64);
+        assert_eq!(q.fee, (max as u128 * 9_999).div_ceil(10_000) as u64);
 
         assert_eq!(
             compute_redeem(1, max, max - 1, 0),
@@ -496,7 +496,7 @@ mod tests {
         #[test]
         fn prop_formula_exact((v, s, a) in state_strategy(), bps in bps_strategy()) {
             let gross = ((v as u128) * (a as u128) / (s as u128)) as u64;
-            let fee = (((gross as u128) * (bps as u128) + 9_999) / 10_000) as u64;
+            let fee = ((gross as u128) * (bps as u128)).div_ceil(10_000) as u64;
             let net = gross - fee;
             match compute_redeem(v, s, a, bps) {
                 Ok(q) => {

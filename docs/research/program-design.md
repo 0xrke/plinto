@@ -7,7 +7,7 @@ Source: `programs/stockfloor/src/`. IDL: `target/idl/stockfloor.json` (after a b
 
 | Check | Command | Result (2026-09-15) |
 |---|---|---|
-| Unit + property tests (math, config validation, account decoding, IDL layout cross-checks, Token-2022 checks) | `cargo test -p stockfloor` | 39 passed, 0 failed |
+| Unit + property tests (math, config validation, account decoding, IDL layout cross-checks, Token-2022 checks) | `cargo test -p stockfloor` | 38 passed, 0 failed |
 | SBF build + IDL | `bash scripts/build-programs.sh -p stockfloor` | `target/deploy/stockfloor.so` (≈460 KB), `target/idl/stockfloor.json`, no warnings |
 | End-to-end smoke on the LiteSVM mainnet fork (real DBC 0.2.1, DAMM v2 0.2.4, Token-2022, SPYx + badge) | seed file `programs/stockfloor/fork-smoke/stockfloor-smoke.test.ts` (copy to `tests/integration/` and run `pnpm --filter @stockfloor/tests test`) | 43 checks passed: every instruction, every harvest, redeem math to the raw unit, events, return data, 23 rejection paths including paused SPYx |
 

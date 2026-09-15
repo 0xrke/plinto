@@ -14,7 +14,7 @@ use crate::state::{FloorInfo, Launch};
 /// 0. `launch`
 /// 1. `vault`      `launch.vault`
 /// 2. `base_mint`  `launch.base_mint`; before `register_pool` pass any account
-///                 (e.g. the system program) and `supply` is reported as 0
+///    (e.g. the system program) and `supply` is reported as 0
 #[derive(Accounts)]
 pub struct FloorView<'info> {
     #[account(seeds = [LAUNCH_SEED, launch.config.as_ref()], bump = launch.bump)]
