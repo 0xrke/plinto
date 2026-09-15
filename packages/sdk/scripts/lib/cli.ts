@@ -12,6 +12,7 @@ import {
   evaluateSendGuard,
   fetchLaunchState,
   findQuoteAsset,
+  isLoopbackRpcUrl,
   probeCluster,
   type LaunchRef,
   type LaunchState,
@@ -122,8 +123,11 @@ export function connectionFor(url: string): Connection {
 
 export async function guardDecision(args: Args): Promise<SendGuardDecision> {
   const url = rpcUrl(args);
-  const probe = await probeCluster(url);
-  return evaluateSendGuard({ rpcUrl: url, probe, allowMainnetFlag: bool(args, "allow-mainnet"), allowMainnetEnv: process.env.STOCKFLOOR_ALLOW_MAINNET });
+  const input = { rpcUrl: url, allowMainnetFlag: bool(args, "allow-mainnet"), allowMainnetEnv: process.env.STOCKFLOOR_ALLOW_MAINNET };
+  // Without the full override a non-loopback RPC is refused outright: do not even probe it.
+  const overridden = input.allowMainnetFlag && input.allowMainnetEnv === "1";
+  const probe = overridden || isLoopbackRpcUrl(url) ? await probeCluster(url) : { genesisHash: null, surfnetVersion: null, surfnetMethodOk: false };
+  return evaluateSendGuard({ ...input, probe });
 }
 
 export interface SendingContext {
