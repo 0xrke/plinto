@@ -102,13 +102,12 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
         <h2 id={`${id}-heading`} className="text-lg font-semibold text-ink">
           Trade on the curve
         </h2>
-        <div role="tablist" aria-label="Trade side" className="flex rounded-lg border border-line p-0.5">
+        <div role="group" aria-label="Trade side" className="flex rounded-lg border border-line p-0.5">
           {(["buy", "sell"] as const).map((s) => (
             <button
               key={s}
               type="button"
-              role="tab"
-              aria-selected={side === s}
+              aria-pressed={side === s}
               onClick={() => switchSide(s)}
               className={`rounded-md px-3 py-1 text-sm font-medium capitalize ${
                 side === s ? "bg-brand text-white" : "text-ink-2 hover:text-ink"

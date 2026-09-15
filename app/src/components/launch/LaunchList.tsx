@@ -35,13 +35,12 @@ export function LaunchList() {
           </h2>
           <p className="text-sm text-ink-3">Every launch below has, or will have, a redeemable floor.</p>
         </div>
-        <div role="tablist" aria-label="Filter launches" className="flex rounded-lg border border-line bg-surface p-1">
+        <div role="group" aria-label="Filter launches" className="flex rounded-lg border border-line bg-surface p-1">
           {FILTERS.map((f) => (
             <button
               key={f.id}
               type="button"
-              role="tab"
-              aria-selected={filter === f.id}
+              aria-pressed={filter === f.id}
               onClick={() => setFilter(f.id)}
               className={`rounded-md px-3 py-1.5 text-sm font-medium ${
                 filter === f.id ? "bg-brand text-white" : "text-ink-2 hover:text-ink"
