@@ -279,6 +279,7 @@ describe("C1 adversarial: a random signer cannot redirect any harvest", () => {
     await step(harvestLpFeesIx(lpArgs(L1, m1, a)), lp.b);
 
     expect(tokenAmount(fork, L1.vault)).toBe(expectedCurve + expectedMigration + expectedSurplus + lp.b);
+    console.log(JSON.stringify({ honestCrank: { curveFees: expectedCurve, migrationFee: expectedMigration, surplus: expectedSurplus, lpFees: lp.b } }, (_k, v) => (typeof v === "bigint" ? v.toString() : v)));
     expect(tokenAmount(fork, attackerQuote)).toBe(q0);
     expect(tokenAmount(fork, attackerBase)).toBe(b0);
     expect(tokenAmount(fork, L1.authorityBaseAccount)).toBe(0n);
@@ -420,6 +421,7 @@ describe("C1 edge: harvest_surplus with a non-trivial surplus (cheatcode state)"
     expect(tokenAmount(fork, L.vault)).toBe(expected);
     expect(dbc0 - tokenAmount(fork, L.keys.quoteVault)).toBe(expected);
     expect(expected).toBeGreaterThan(0n);
+    console.log(JSON.stringify({ cheatSurplus: { surplus, partnerShare: expected } }, (_k, v) => (typeof v === "bigint" ? v.toString() : v)));
   });
 });
 
