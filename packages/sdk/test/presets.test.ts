@@ -18,6 +18,7 @@ import {
   type LaunchInput,
   LaunchInputError,
   maxLossFraction,
+  MIN_THRESHOLD_USD,
   previewLaunch,
   QUOTE_ALLOWLIST,
   rawToUi,
@@ -295,7 +296,7 @@ describe("curve presets", () => {
       fc.property(
         fc.double({ min: 0.01, max: 100_000, noNaN: true }),
         fc.double({ min: 0.5, max: 3, noNaN: true }),
-        fc.double({ min: 10, max: 10_000_000, noNaN: true }),
+        fc.double({ min: 1, max: 10_000_000, noNaN: true }),
         fc.integer({ min: 30, max: 70 }),
         fc.constantFrom<CurvePreset>("gentle", "flat"),
         (
@@ -317,6 +318,7 @@ describe("curve presets", () => {
             leftoverReceiver: authority,
           });
           expect(result.migrationSqrtPrice < MAX_SQRT_PRICE).toBe(true);
+          expect(() => validateConfigParameters(params)).not.toThrow();
           const preview = previewLaunch(input);
           expect(preview.startPriceUsd).toBeLessThan(
             preview.graduationPriceUsd,
@@ -457,6 +459,22 @@ describe("input validation", () => {
     expect(() =>
       computeThresholdQuoteRaw(baseInput({ thresholdUsd: 1e30 })),
     ).toThrow(LaunchInputError);
+  });
+
+  it("rejects thresholds below MIN_THRESHOLD_USD and accepts it exactly", () => {
+    expect(() => previewLaunch(baseInput({ thresholdUsd: 0.99 }))).toThrow(
+      LaunchInputError,
+    );
+    const params = buildDbcConfigParams(
+      baseInput({ thresholdUsd: MIN_THRESHOLD_USD }),
+      authority,
+      authority,
+    );
+    expect(() => validateConfigParameters(params)).not.toThrow();
+    expect(
+      previewLaunch(baseInput({ thresholdUsd: MIN_THRESHOLD_USD }))
+        .vaultAtGraduationQuoteRaw > 0n,
+    ).toBe(true);
   });
 
   it("validateTokenMetadata enforces the Metaplex limits", () => {

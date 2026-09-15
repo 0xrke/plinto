@@ -27,7 +27,10 @@ import {
   MigrationFeeOption,
   MigrationOption,
   TokenAuthorityOption,
+  MAX_SQRT_PRICE,
+  MIN_SQRT_PRICE,
   TokenType,
+  U128_MAX,
   U64_MAX,
 } from "./dbc/constants";
 import {
@@ -89,6 +92,12 @@ export const DEFAULT_EXIT_FEE_BPS = 200;
 export const MAX_EXIT_FEE_BPS = 500;
 /** Meteora keepers auto-migrate stock-quoted pools only at a threshold of at least ~$750. */
 export const METEORA_KEEPER_MIN_THRESHOLD_USD = 750;
+/**
+ * Lowest accepted threshold. Far below it the raise rounds to a handful of raw units: the vault
+ * can round to 0, and the DBC SDK's own validateConfigParameters (which floors the migration
+ * quote amount where the program rounds up) starts rejecting configs the program accepts.
+ */
+export const MIN_THRESHOLD_USD = 1;
 
 /** Fixed DBC parameters of every StockFloor launch (docs/BRIEF.md §4). */
 export const STOCKFLOOR_DBC_DEFAULTS = {
@@ -211,8 +220,10 @@ function normalizeInput(input: LaunchInput): NormalizedInput {
       `vaultSharePct must be an integer in [${VAULT_SHARE_MIN_PCT}, ${VAULT_SHARE_MAX_PCT}]`,
     );
   }
-  if (!Number.isFinite(thresholdUsd) || thresholdUsd <= 0)
-    throw new LaunchInputError("thresholdUsd must be a positive number");
+  if (!Number.isFinite(thresholdUsd) || thresholdUsd < MIN_THRESHOLD_USD)
+    throw new LaunchInputError(
+      `thresholdUsd must be a number >= ${MIN_THRESHOLD_USD}`,
+    );
   if (
     !Number.isInteger(exitFeeBps) ||
     exitFeeBps < 0 ||
@@ -265,6 +276,11 @@ function evaluateCurve(
   const { num, den } = CURVE_PRESETS[preset].priceRatio;
   // Last sqrt price: sqrt(start^2 * ratio), floored. Prices are strictly increasing only if s1 > s0.
   const sqrtEndPrice = isqrt((sqrtStartPrice * sqrtStartPrice * num) / den);
+  if (sqrtStartPrice < MIN_SQRT_PRICE || sqrtEndPrice >= MAX_SQRT_PRICE) {
+    throw new LaunchInputError(
+      "curve prices are outside the DBC sqrt price range for this threshold",
+    );
+  }
   if (sqrtEndPrice <= sqrtStartPrice) {
     throw new LaunchInputError(
       "curve prices do not increase: the start price is too small for this preset",
@@ -273,6 +289,11 @@ function evaluateCurve(
   // Δquote over the segment = ceil(L * (s1 - s0) / 2^128) must be >= T, so L = ceil((T << 128) / (s1 - s0)).
   // Then the program's migration price lands on s1 or one rounding step below it.
   const liquidity = divCeil(threshold << 128n, sqrtEndPrice - sqrtStartPrice);
+  if (liquidity > U128_MAX) {
+    throw new LaunchInputError(
+      "curve liquidity does not fit u128 for this threshold",
+    );
+  }
   const curve: CurvePoint[] = [{ sqrtPrice: sqrtEndPrice, liquidity }];
 
   const migrationSqrtPrice = getMigrationThresholdPrice(
