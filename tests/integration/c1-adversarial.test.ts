@@ -13,7 +13,9 @@
  *   Authority PDA on the DBC/DAMM side) can never feed or drain the launch vault;
  * - harvest_surplus pays DBC's exact partner share of a non-trivial surplus (cheatcode state:
  *   DBC 0.2.1 swaps cannot overshoot the threshold by more than rounding);
- * - the FloorTracker invariant checker itself rejects violations (it is not vacuous).
+ * - the FloorTracker invariant checker itself rejects violations (it is not vacuous);
+ * - quote issuer controls (pause, frozen vault, transfer hook) make every harvest and redeem fail
+ *   cleanly with no state change, and a ScaledUiAmount multiplier change leaves raw math exact.
  */
 import { Keypair, PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -60,9 +62,13 @@ import {
 import {
   createAta,
   createTokenAccountOwnedBy,
+  ExtensionType,
+  findExtension,
   fundSpyx,
   mintSupply,
+  setMintPaused,
   setMintSupply,
+  setScaledUiMultiplier,
   setTokenAmount,
   splAta,
   spyxAta,
@@ -524,3 +530,106 @@ describe("FloorTracker self-check: the invariant checker rejects violations", ()
   });
 });
 
+
+// ====================================================================================================
+
+/** Token account `state` byte (0 uninitialized, 1 initialized, 2 frozen). */
+const setAccountState = (fork: Fork, account: PublicKey, state: number) => fork.patchAccount(account, (d) => (d[108] = state));
+
+/** Cheatcode: set (or clear) the Token-2022 TransferHook program id of a mint (extension: authority 32 + program_id 32). */
+function setTransferHookProgram(fork: Fork, mint: PublicKey, programId: PublicKey | null): void {
+  fork.patchAccount(mint, (d) => {
+    const { offset } = findExtension(d, ExtensionType.TransferHook);
+    if (offset < 0) throw new Error("mint has no TransferHook extension");
+    (programId ?? PublicKey.default).toBuffer().copy(d, offset + 32);
+  });
+}
+
+describe("Quote issuer controls (pause, frozen vault, transfer hook) fail cleanly on every quote-moving instruction", () => {
+  it("each harvest and redeem fails with a clear error and no state change, works after restore; a multiplier change leaves raw math exact", async () => {
+    const fork = Fork.create({ stockfloor: true, spike: false });
+    const L = await createStockfloorLaunch(fork);
+    const g = await graduate(fork, L, [25n, 10n]);
+    fork.warp(60);
+    await dammTrade(fork, L, g.migration, L.threshold / 5n);
+    const c = fork.newWallet(1);
+    const hookProgram = Keypair.generate().publicKey;
+    const modes: Array<[string, () => void, () => void, string]> = [
+      ["SPYx paused", () => setMintPaused(fork, SPYX_MINT, true), () => setMintPaused(fork, SPYX_MINT, false), "QuoteMintPaused"],
+      ["vault frozen", () => setAccountState(fork, L.vault, 2), () => setAccountState(fork, L.vault, 1), "VaultFrozen"],
+      [
+        "transfer hook program set",
+        () => setTransferHookProgram(fork, SPYX_MINT, hookProgram),
+        () => setTransferHookProgram(fork, SPYX_MINT, null),
+        "QuoteMintTransferHookUnsupported",
+      ],
+    ];
+    const snapshot = () => {
+      const l = fetchLaunch(fork, L.config);
+      return {
+        vault: tokenAmount(fork, L.vault),
+        supply: mintSupply(fork, L.keys.baseMint),
+        dbcQuote: tokenAmount(fork, L.keys.quoteVault),
+        dammQuote: tokenAmount(fork, g.migration.tokenBVault),
+        flags: [l.migrationFeeHarvested, l.surplusHarvested, l.migrated],
+        totals: [bnToBig(l.totalHarvestedQuote), bnToBig(l.totalRedeemedQuote)],
+      };
+    };
+
+    // Phase A: harvests under each control.
+    const harvests = () =>
+      [
+        ["harvest_curve_fees", harvestCurveFeesIx({ payer: c.publicKey, keys: L.keys })],
+        ["harvest_migration_fee", harvestMigrationFeeIx({ keys: L.keys })],
+        ["harvest_surplus", harvestSurplusIx({ keys: L.keys })],
+        ["harvest_lp_fees", harvestLpFeesIx(lpArgs(L, g.migration, c.publicKey))],
+      ] as const;
+    for (const [mode, set, restore, expected] of modes) {
+      const before = snapshot();
+      set();
+      for (const [label, ix] of harvests()) {
+        expect(errName(fork.sendExpectFail([await ix], [c])), `${label} with ${mode}`).toBe(expected);
+      }
+      restore();
+      expect(snapshot(), mode).toEqual(before);
+    }
+
+    // Phase B: a multiplier change (dividend) before harvesting does not change any raw amount.
+    const T = L.threshold;
+    const expectedCurve = bnToBig(fetchVirtualPool(fork, L.keys.pool).partnerQuoteFee);
+    const lp = pendingLpFee(fork, g.migration);
+    setScaledUiMultiplier(fork, SPYX_MINT, 1.5);
+    const v0 = tokenAmount(fork, L.vault);
+    for (const [, ix] of harvests()) fork.send([await ix], [c]);
+    const surplus = bnToBig(fetchVirtualPool(fork, L.keys.pool).quoteReserve) - T;
+    const pc = (surplus * 80n) / 100n;
+    expect(tokenAmount(fork, L.vault) - v0).toBe(expectedCurve + (T - ceilDiv(T * 50n, 100n)) + (pc - (pc * 30n) / 100n) + lp.b);
+
+    // Phase C: redeem under each control, then exact after restore (still at multiplier 1.5, then 0.8).
+    const [holder] = g.buyers;
+    const holderBase = splAta(holder.publicKey, L.keys.baseMint);
+    const amount = tokenAmount(fork, holderBase) / 4n;
+    for (const [mode, set, restore, expected] of modes) {
+      const before = snapshot();
+      const hb = tokenAmount(fork, holderBase);
+      const hq = tokenAmount(fork, spyxAta(holder.publicKey));
+      set();
+      expect(errName(fork.sendExpectFail([await redeemIx({ holder: holder.publicKey, keys: L.keys, amount })], [holder])), `redeem with ${mode}`).toBe(expected);
+      restore();
+      expect(snapshot(), mode).toEqual(before);
+      expect([tokenAmount(fork, holderBase), tokenAmount(fork, spyxAta(holder.publicKey))]).toEqual([hb, hq]);
+    }
+    for (const multiplier of [1.5, 0.8]) {
+      setScaledUiMultiplier(fork, SPYX_MINT, multiplier);
+      const V = tokenAmount(fork, L.vault);
+      const S = mintSupply(fork, L.keys.baseMint);
+      const gross = (V * amount) / S;
+      const net = gross - ceilDiv(gross * 200n, 10_000n);
+      const q0 = tokenAmount(fork, spyxAta(holder.publicKey));
+      fork.send([await redeemIx({ holder: holder.publicKey, keys: L.keys, amount })], [holder]);
+      expect(tokenAmount(fork, spyxAta(holder.publicKey)) - q0, `net at multiplier ${multiplier}`).toBe(net);
+      expect(tokenAmount(fork, L.vault)).toBe(V - net);
+      expect(mintSupply(fork, L.keys.baseMint)).toBe(S - amount);
+    }
+  });
+});
