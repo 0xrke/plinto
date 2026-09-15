@@ -19,6 +19,9 @@ describe("validateLaunchForm", () => {
   it("requires a name of at most 32 characters", () => {
     expect(validateLaunchForm({ ...valid, name: "  " }).name).toBeDefined();
     expect(validateLaunchForm({ ...valid, name: "x".repeat(33) }).name).toBeDefined();
+    expect(validateLaunchForm({ ...valid, name: "x".repeat(32) }).name).toBeUndefined();
+    // 11 × 3-byte characters = 33 bytes
+    expect(validateLaunchForm({ ...valid, name: "\u20ac".repeat(11) }).name).toBeDefined();
   });
 
   it("requires a 2 to 10 character alphanumeric symbol", () => {
@@ -31,6 +34,9 @@ describe("validateLaunchForm", () => {
   it("only accepts https image URLs", () => {
     expect(validateLaunchForm({ ...valid, imageUrl: "http://example.com/a.png" }).imageUrl).toBeDefined();
     expect(validateLaunchForm({ ...valid, imageUrl: "not a url" }).imageUrl).toBeDefined();
+    expect(
+      validateLaunchForm({ ...valid, imageUrl: `https://example.com/${"a".repeat(200)}` }).imageUrl,
+    ).toBeDefined();
   });
 
   it("keeps the vault share within 30..70", () => {
