@@ -112,6 +112,12 @@ export interface TradeRequest {
   /** Buy: amount of the pay token in its raw units. Sell: base token raw amount. */
   amountRaw: bigint;
   slippageBps: number;
+  /**
+   * The exact quote the user saw for a direct trade (venue and minimum out). The action re-quotes at
+   * fresh state; it refuses when the venue changed or the fresh output is below this minimum, and never
+   * signs a lower minimum.
+   */
+  expected?: { venue: "dbc" | "damm"; minOut: bigint };
 }
 
 export interface RedeemRequest {

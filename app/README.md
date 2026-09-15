@@ -85,8 +85,8 @@ messages, DBC/DAMM slippage and liquidity, missing SOL, expired blockhash, unrea
 | Action | Local fork (Surfpool) | Mainnet (`NEXT_PUBLIC_ALLOW_MAINNET=1` and `STOCKFLOOR_ALLOW_MAINNET=1`) |
 |---|---|---|
 | Create launch | SDK `buildLaunchTransactions` (tx1 config + `create_launch`, tx2 pool + `register_pool` + first buy when it fits, tx3 otherwise), config and base mint keypairs generated in memory. A failed attempt can be retried from the failed step with the same keypairs; steps already on chain are detected and not resent | same |
-| Presale buy / sell | DBC `swap2` with the quote asset, exact SDK quote and 1% slippage floor; a buy that crosses the migration price becomes PartialFill | USDC/SOL → quote via Jupiter Ultra, then the curve buy with the routed amount (two transactions); quote asset directly as on the fork |
-| Buy / sell after migration | DAMM v2 `swap2` with the quote asset | USDC/SOL through Jupiter Ultra to the pool; quote asset directly |
+| Presale buy / sell | DBC `swap2` with the quote asset, exact SDK quote and 1% slippage floor; a buy that crosses the migration price becomes PartialFill. The panel passes the venue and minimum it displayed: the action re-quotes at fresh state, refuses (nothing sent) when the venue changed or the fresh output is below that minimum, and never signs a lower minimum than the one shown | USDC/SOL → quote via Jupiter Ultra, then the curve buy with the routed amount (two transactions); quote asset directly as on the fork |
+| Buy / sell after migration | DAMM v2 `swap2` with the quote asset, with the same displayed-minimum rule | USDC/SOL through Jupiter Ultra to the pool; quote asset directly |
 | Redeem | SDK `buildRedeem`; enabled only when migrated, the migration fee is harvested and the payout is above zero | same |
 | Crank | SDK `runCrank` (harvest curve fees, migration fee, surplus, DBC → DAMM v2 migration, LP fees, claimer base burn); the wallet pays fees, each step shows up in the progress list | same |
 

@@ -100,7 +100,15 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
     dispatch({ type: "reset" });
     const result = await actions.trade(
       // Sells on the curve pay out the quote asset.
-      { launch, side, payToken: side === "sell" ? "QUOTE" : pay, amountRaw, slippageBps: DEFAULT_SLIPPAGE_BPS },
+      {
+        launch,
+        side,
+        payToken: side === "sell" ? "QUOTE" : pay,
+        amountRaw,
+        slippageBps: DEFAULT_SLIPPAGE_BPS,
+        // The action never signs a lower minimum than the one shown here.
+        expected: exactQuote ? { venue: exactQuote.venue, minOut: exactQuote.minOut } : undefined,
+      },
       wallet,
       { dispatch },
     );
@@ -276,7 +284,7 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
           {!gate.ready ? <p className="field-hint">{gate.reason}</p> : null}
           <p className="field-hint">
             {exactQuote
-              ? "Quoted with the exact curve math at the latest on-chain state. Max slippage 1%."
+              ? "Quoted with the exact curve math at the latest on-chain state. You never receive less than the minimum shown: if the price moved past it before you sign, nothing is sent and you review the new quote."
               : "Estimates use the current curve price; the price rises as the curve fills. Max slippage 1%."}
           </p>
           <TxProgress flow={flow} />

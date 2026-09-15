@@ -88,7 +88,19 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
     setPending(true);
     setMessage(null);
     dispatch({ type: "reset" });
-    const result = await actions.trade({ launch, side, payToken: token, amountRaw, slippageBps: DEFAULT_SLIPPAGE_BPS }, wallet, { dispatch });
+    const result = await actions.trade(
+      {
+        launch,
+        side,
+        payToken: token,
+        amountRaw,
+        slippageBps: DEFAULT_SLIPPAGE_BPS,
+        // The action never signs a lower minimum than the one shown here.
+        expected: exactQuote ? { venue: exactQuote.venue, minOut: exactQuote.minOut } : undefined,
+      },
+      wallet,
+      { dispatch },
+    );
     setPending(false);
     if (result.ok) {
       setInput("");

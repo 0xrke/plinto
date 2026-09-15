@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ComputeBudgetProgram, Keypair, PublicKey, Transaction, type Connection } from "@solana/web3.js";
+import { ComputeBudgetProgram, Keypair, PublicKey, Transaction, type Connection, type TransactionInstruction } from "@solana/web3.js";
 import {
   DBC_PROGRAM_ID,
   MAINNET_GENESIS_HASH,
@@ -22,6 +22,7 @@ import { classifyCluster, type ClusterInfo } from "../chain/cluster";
 import { recordFlow, type StepPhase } from "../chain/txFlow";
 import { connectionSenderFactory, type SenderFactory } from "../chain/walletSender";
 import { FakeReader, NOW, SPYX, account, encodeClock, encodeMint, launchInput, launchState } from "../../test/chainFixtures";
+import { quoteLaunchTrade } from "../tradeQuote";
 import { toLaunchSummary } from "./chain";
 import { ChainLaunchActions, MIN_LAUNCH_LAMPORTS } from "./chainActions";
 import type { WalletSigner } from "./types";
@@ -224,7 +225,10 @@ describe("ChainLaunchActions.createLaunch", () => {
 });
 
 /** Fake chain for trades and redemptions: ATA balances that a recording sender updates. */
-function tradeSetup(state: LaunchState, opts: { cluster?: ClusterInfo; quote?: bigint; base?: bigint; lamports?: number; onSend?: (label: string, s: FakeState) => void } = {}) {
+function tradeSetup(
+  state: LaunchState,
+  opts: { cluster?: ClusterInfo; quote?: bigint; base?: bigint; lamports?: number; onSend?: (label: string, s: FakeState) => void; freshState?: LaunchState } = {},
+) {
   const trader = Keypair.generate();
   const reader = new FakeReader();
   reader.set(trader.publicKey, account(new Uint8Array(0), PublicKey.default, opts.lamports ?? 1_000_000_000));
@@ -237,7 +241,7 @@ function tradeSetup(state: LaunchState, opts: { cluster?: ClusterInfo; quote?: b
     reader.setTokenBalance(trader.publicKey, quoteMint, quoteTokenProgram, quoteAta, balances.quote);
   };
   sync();
-  const sends: Array<{ label: string; programs: string[]; opts?: SendOptions }> = [];
+  const sends: Array<{ label: string; programs: string[]; opts?: SendOptions; ixs: TransactionInstruction[] }> = [];
   const createSender: SenderFactory = (w, onPhase) =>
     ({
       payer: w.publicKey,
@@ -249,13 +253,14 @@ function tradeSetup(state: LaunchState, opts: { cluster?: ClusterInfo; quote?: b
       send: async (ixs, sendOpts) => {
         onPhase("signing");
         onPhase("confirming");
-        sends.push({ label: sendOpts?.label ?? "", programs: ixs.map((i) => i.programId.toBase58()), opts: sendOpts });
+        sends.push({ label: sendOpts?.label ?? "", programs: ixs.map((i) => i.programId.toBase58()), opts: sendOpts, ixs });
         opts.onSend?.(sendOpts?.label ?? "", balances);
         sync();
         return { signature: `sig-${sends.length}`, logs: [] };
       },
     }) satisfies TxSender;
-  const fetchState = vi.fn(async () => state);
+  // The summary the panel rendered comes from `state`; the action re-reads `freshState` (another trade may have landed).
+  const fetchState = vi.fn(async () => opts.freshState ?? state);
   const ultraSwap = vi.fn();
   const actions = new ChainLaunchActions({ reader, createSender, cluster: async () => opts.cluster ?? localFork, fetchState, ultraSwap });
   return { actions, reader, sends, trader, wallet: keypairWallet(trader), balances, sync, fetchState, ultraSwap, summary: toLaunchSummary(state, null, { usd: 757.02, source: "jupiter", at: 0 })! };
@@ -301,6 +306,49 @@ describe("ChainLaunchActions.trade", () => {
     const t = tradeSetup(redeemable, { cluster: mainnetOpen, base: 10n ** 12n });
     expect((await t.actions.redeem({ launch: t.summary, amountRaw: 10n ** 12n }, t.wallet)).ok).toBe(true);
     expect(t.sends[0]!.opts?.computeUnitPriceMicroLamports).toBe(100_000);
+  });
+
+  it("never signs a minimum below the one the user saw when the curve moved before the click", async () => {
+    const amount = 30_000_000n;
+    const shown = launchState({ quoteReserve: 20_000_000n });
+    const displayed = quoteLaunchTrade(toLaunchSummary(shown.state, null, { usd: 757.02, source: "jupiter", at: 0 })!, "buy", amount, 100);
+    if (!displayed || "error" in displayed) throw new Error("no displayed quote");
+    const swapAmount1 = (ixs: TransactionInstruction[]) => {
+      const swap = ixs.find((i) => i.programId.equals(DBC_PROGRAM_ID))!;
+      return new DataView(swap.data.buffer, swap.data.byteOffset + 16, 8).getBigUint64(0, true);
+    };
+    // Same launch after another buyer's `otherBuy` landed: reserve and price moved up the curve.
+    const moved = (otherBuy: bigint): LaunchState => {
+      const q = quoteTrade(shown.state, "buy", otherBuy);
+      if (q.venue !== "dbc") throw new Error("expected a curve quote");
+      const pool = { ...shown.state.dbcPool!, quoteReserve: shown.state.dbcPool!.quoteReserve + q.quote.excludedFeeInputAmount, sqrtPrice: q.quote.nextSqrtPrice };
+      return { ...shown.state, dbcPool: pool, sqrtPriceX64: pool.sqrtPrice };
+    };
+
+    // A small move: the fresh quote still clears the displayed minimum, but 99% of it does not.
+    const small = moved(300_000n);
+    const smallQuote = quoteTrade(small, "buy", amount);
+    expect(smallQuote.amountOut).toBeGreaterThanOrEqual(displayed.minOut);
+    expect((smallQuote.amountOut * 99n) / 100n).toBeLessThan(displayed.minOut);
+    const t1 = tradeSetup(shown.state, { freshState: small, quote: 100_000_000n, onSend: (_l, b) => void (b.base += smallQuote.amountOut) });
+    const r1 = await t1.actions.trade({ launch: t1.summary, side: "buy", payToken: "QUOTE", amountRaw: amount, slippageBps: 100, expected: { venue: displayed.venue, minOut: displayed.minOut } }, t1.wallet);
+    expect(r1.ok).toBe(true);
+    expect(swapAmount1(t1.sends[0]!.ixs)).toBe(displayed.minOut);
+
+    // A large move: even the exact fresh quote is below the displayed minimum, so nothing is sent.
+    const large = moved(60_000_000n);
+    expect(quoteTrade(large, "buy", amount).amountOut).toBeLessThan(displayed.minOut);
+    const t2 = tradeSetup(shown.state, { freshState: large, quote: 100_000_000n });
+    const r2 = await t2.actions.trade({ launch: t2.summary, side: "buy", payToken: "QUOTE", amountRaw: amount, slippageBps: 100, expected: { venue: displayed.venue, minOut: displayed.minOut } }, t2.wallet);
+    expect(r2.ok).toBe(false);
+    if (!r2.ok) expect(r2.error).toMatch(/^The price moved since your quote: you would now receive [\d,.]+ \$\w+, below the minimum of [\d,.]+ \$\w+ you saw\. Review the new quote and try again\.$/);
+    expect(t2.sends).toHaveLength(0);
+
+    // The curve migrated between the quote and the click: a DAMM v2 swap is never sent on a curve quote.
+    const t3 = tradeSetup(shown.state, { freshState: launchState({ phase: "redeemable" }).state, quote: 100_000_000n });
+    const r3 = await t3.actions.trade({ launch: t3.summary, side: "buy", payToken: "QUOTE", amountRaw: amount, slippageBps: 100, expected: { venue: "dbc", minOut: displayed.minOut } }, t3.wallet);
+    expect(r3).toMatchObject({ ok: false, error: "The curve completed and the pool migrated to Meteora DAMM v2 since your quote. Review the new quote and try again." });
+    expect(t3.sends).toHaveLength(0);
   });
 
   it("refuses USDC/SOL routing on a local fork and trades beyond the wallet balance", async () => {

@@ -1,5 +1,7 @@
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import {
+  DAMM_V2_PROGRAM_ID,
+  DBC_PROGRAM_ID,
   DbcSwapMode,
   TOKEN_PROGRAM_ID,
   USDC_MINT,
@@ -16,7 +18,9 @@ import {
   getMintInfo,
   planCrank,
   runCrank,
+  swapParams2,
   type BuiltLaunch,
+  type BuiltTrade,
   type ChainReader,
   type CrankAction,
   type LaunchInput,
@@ -265,7 +269,7 @@ export class ChainLaunchActions implements LaunchActions {
       await this.requireLamports(w, MIN_TRADE_LAMPORTS, cluster, "Trading");
 
       if (payToken === "QUOTE") {
-        const outcome = await this.directTrade(state, launch, w, side, request.amountRaw, request.slippageBps, dispatch, signatures, true, cluster.priorityFeeMicroLamports);
+        const outcome = await this.directTrade(state, launch, w, side, request.amountRaw, request.slippageBps, dispatch, signatures, true, cluster.priorityFeeMicroLamports, request.expected);
         dispatch({ type: "finish", result: outcome.summary });
         return { ok: true, value: outcome.value, signatures };
       }
@@ -289,12 +293,21 @@ export class ChainLaunchActions implements LaunchActions {
     signatures: string[],
     startFlow: boolean,
     priorityFeeMicroLamports: number,
+    expected?: TradeRequest["expected"],
     stepId = "swap",
   ): Promise<{ value: TradeOutcome; summary: string }> {
     const reader = this.deps.reader;
     const { baseMint, quoteMint, quoteTokenProgram } = state.keys;
     const q = launch.quote;
-    const venueLabel = state.phase === "presale" ? "on the bonding curve" : "on the Meteora DAMM v2 pool";
+    const venue = state.phase === "presale" ? "dbc" : "damm";
+    if (expected && expected.venue !== venue) {
+      throw new UserFacingError(
+        venue === "damm"
+          ? "The curve completed and the pool migrated to Meteora DAMM v2 since your quote. Review the new quote and try again."
+          : "The venue changed since your quote. Review the new quote and try again.",
+      );
+    }
+    const venueLabel = venue === "dbc" ? "on the bonding curve" : "on the Meteora DAMM v2 pool";
     const label = side === "buy" ? `Buy $${launch.symbol} with ${q.asset.symbol} ${venueLabel}` : `Sell $${launch.symbol} for ${q.asset.symbol} ${venueLabel}`;
     if (startFlow) dispatch({ type: "start", steps: [{ id: stepId, label }] });
 
@@ -310,7 +323,21 @@ export class ChainLaunchActions implements LaunchActions {
           : `${formatTokenAmount(raw, launch.baseDecimals)} $${launch.symbol}`;
       throw new UserFacingError(`You need ${fmt(amountRaw)} but your wallet holds ${fmt(have)}.`);
     }
-    const trade = buildTrade(state, w.publicKey, side, amountRaw, { slippageBps });
+    let trade = buildTrade(state, w.publicKey, side, amountRaw, { slippageBps });
+    if (expected) {
+      const outFmt = (raw: bigint) =>
+        side === "buy"
+          ? `${formatTokenAmount(raw, launch.baseDecimals)} $${launch.symbol}`
+          : `${formatTokenAmount(raw, q.asset.decimals, { multiplier: q.multiplier, maxFractionDigits: 8 })} ${q.asset.symbol}`;
+      // The exact fresh quote cannot meet what the user was shown: the swap would fail on chain.
+      if (trade.quote.amountOut < expected.minOut) {
+        throw new UserFacingError(
+          `The price moved since your quote: you would now receive ${outFmt(trade.quote.amountOut)}, below the minimum of ${outFmt(expected.minOut)} you saw. Review the new quote and try again.`,
+        );
+      }
+      // Slippage recomputed at fresh state would sign a lower minimum than the one shown; keep the shown one.
+      if (trade.minAmountOut < expected.minOut) trade = withMinimumOut(trade, expected.minOut);
+    }
     let active: string | null = stepId;
     await runSteps(
       [
@@ -439,7 +466,7 @@ export class ChainLaunchActions implements LaunchActions {
         { id: "jupiter", label: `Swap ${q} to ${request.payToken} via Jupiter` },
       ],
     });
-    const sold = await this.directTrade(state, launch, w, "sell", request.amountRaw, request.slippageBps, dispatch, signatures, false, priorityFeeMicroLamports);
+    const sold = await this.directTrade(state, launch, w, "sell", request.amountRaw, request.slippageBps, dispatch, signatures, false, priorityFeeMicroLamports, request.expected);
     await runSteps(
       [
         {
@@ -607,6 +634,22 @@ export class ChainLaunchActions implements LaunchActions {
     dispatch({ type: "steps-added", steps: [{ id, label: crankActionLabel({ kind: kind as CrankAction["kind"] }) }] });
     return id;
   }
+}
+
+/**
+ * The same trade with a higher swap2 minimum out. DBC and DAMM v2 `swap2` share the argument layout
+ * (discriminator, amount_0 u64, amount_1 u64, swap_mode u8); `amount_1` is the minimum out for ExactIn
+ * and PartialFill, the only modes `buildTrade` emits.
+ */
+export function withMinimumOut(trade: BuiltTrade, minAmountOut: bigint): BuiltTrade {
+  const index = trade.instructions.findIndex((i) => i.programId.equals(DBC_PROGRAM_ID) || i.programId.equals(DAMM_V2_PROGRAM_ID));
+  const swap = trade.instructions[index];
+  if (!swap || swap.data.length !== 25) throw new Error("unexpected trade instructions: no swap2");
+  const view = new DataView(swap.data.buffer, swap.data.byteOffset, swap.data.byteLength);
+  const data = swapParams2(Array.from(swap.data.subarray(0, 8)), view.getBigUint64(8, true), minAmountOut, swap.data[24]!);
+  const instructions = trade.instructions.slice();
+  instructions[index] = new TransactionInstruction({ programId: swap.programId, keys: swap.keys, data: data as never });
+  return { ...trade, minAmountOut, instructions };
 }
 
 function capitalize(s: string): string {

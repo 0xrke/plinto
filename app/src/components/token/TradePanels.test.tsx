@@ -12,9 +12,10 @@ import { StubLaunchActions } from "@/lib/data/actions";
 import { toLaunchSummary } from "@/lib/data/chain";
 import { DataProvider } from "@/lib/data/context";
 import { MockDataSource } from "@/lib/data/mock";
-import type { LaunchDataSource } from "@/lib/data/types";
+import type { LaunchActions, LaunchDataSource, TradeRequest } from "@/lib/data/types";
 import { formatTokenAmount } from "@/lib/format";
 import { buyButtonLabel, launchFloorUsd } from "@/lib/metrics";
+import { quoteLaunchTrade } from "@/lib/tradeQuote";
 import { launchState } from "@/test/chainFixtures";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { MarketBuyPanel } from "./MarketBuyPanel";
@@ -49,13 +50,13 @@ function wallet(): WalletContextState {
   };
 }
 
-function Providers({ children, dataSource }: { children: ReactNode; dataSource: LaunchDataSource }) {
+function Providers({ children, dataSource, actions }: { children: ReactNode; dataSource: LaunchDataSource; actions?: LaunchActions }) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const localFork = classifyCluster("http://127.0.0.1:28899", { genesisHash: MAINNET_GENESIS_HASH, surfnetVersion: "1.5.0", surfnetMethodOk: true });
   return (
     <QueryClientProvider client={queryClient}>
       <WalletContext.Provider value={wallet()}>
-        <DataProvider dataSource={dataSource} actions={new StubLaunchActions(0)} cluster={async () => localFork}>
+        <DataProvider dataSource={dataSource} actions={actions ?? new StubLaunchActions(0)} cluster={async () => localFork}>
           <AttestationProvider>{children}</AttestationProvider>
         </DataProvider>
       </WalletContext.Provider>
@@ -132,6 +133,36 @@ describe("<PresaleTradePanel />", () => {
     fireEvent.change(screen.getByLabelText("You pay"), { target: { value: "6" } });
     expect(screen.getByText("Amount exceeds your SPYx balance.")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Buy $TIDE on the curve" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("trade panels pass the displayed quote to the action", () => {
+  it("sends the venue and minimum the user saw, so a moved price cannot lower it", async () => {
+    window.localStorage.setItem("stockfloor.attestation.non-us.v1", "yes");
+    const { state } = launchState({ quoteReserve: 20_000_000n });
+    const launch = toLaunchSummary(state, { name: "Tidepool", symbol: "TIDE", uri: "" }, { usd: 757.02, source: "jupiter", at: 0 })!;
+    const requests: TradeRequest[] = [];
+    const actions = new StubLaunchActions(0);
+    actions.trade = async (request) => {
+      requests.push(request);
+      return { ok: false, error: "recorded" };
+    };
+    render(
+      <Providers dataSource={chainSource({ [launch.quote.asset.mint]: 5n * 10n ** 8n })} actions={actions}>
+        <PresaleTradePanel launch={launch} />
+      </Providers>,
+    );
+    await screen.findByText(/^Balance: 5\.0285\d* SPYx/);
+    fireEvent.change(screen.getByLabelText("You pay"), { target: { value: "0.5" } });
+    const raw = uiToRaw("0.5", 8, launch.quote.multiplier);
+    const displayed = quoteLaunchTrade(launch, "buy", raw, 100);
+    if (!displayed || "error" in displayed) throw new Error("no quote");
+    expect(screen.getByText(`${formatTokenAmount(displayed.minOut, 6)} $TIDE`)).toBeTruthy();
+    const button = await screen.findByRole("button", { name: /Buy \$TIDE/ });
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(button);
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0]).toMatchObject({ side: "buy", payToken: "QUOTE", amountRaw: raw, expected: { venue: "dbc", minOut: displayed.minOut } });
   });
 });
 
