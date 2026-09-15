@@ -46,18 +46,19 @@ build brief (§12).
 
 ### 0.2 Local fork take (fallback or rehearsal)
 
-- [ ] **Surfpool fork running locally** (`scripts/surfpool/*`, TBD).
+- [ ] **Surfpool fork running locally.** Per the script header,
+      `STUDIO=1 FUND_WALLETS="<demo pubkeys>" FUND_SOL=10 FUND_SPYX=25 bash scripts/surfpool/up.sh` starts the
+      fork, deploys `stockfloor` with `keys/deployer.json` and funds the demo wallets with SOL and SPYx.
+      Not yet verified end to end for this script.
   - Verified not to relay transactions to mainnet before anything is sent.
-  - `stockfloor` deployed locally with `keys/deployer.json`.
-  - Demo wallets funded with SPYx by cheatcode (TBD).
 - [ ] **App against the fork.**
   - `NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8899 NEXT_PUBLIC_DATA_SOURCE=chain pnpm --filter @stockfloor/app dev`
   - The header network badge reads "Local fork".
 - [ ] **No Jupiter on the fork** (its APIs are mainnet-only).
   - In "Pay with", choose **SPYx**, not USDC or SOL.
   - Scene 5 uses a direct DAMM v2 swap script (TBD).
-- [ ] **No Solscan.** Show transactions in Surfpool Studio, the local UI, or show the signature in the app
-      (TBD which).
+- [ ] **No Solscan.** Show transactions in Surfpool Studio, the local UI on `http://127.0.0.1:18488` when
+      started with `STUDIO=1`, or show the signature in the app (TBD which).
 
 ### 0.3 Rules for the voiceover
 
