@@ -1,0 +1,17 @@
+{
+  "name": "stockfloor",
+  "private": true,
+  "license": "MIT",
+  "packageManager": "pnpm@10.30.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build:programs": "bash scripts/build-programs.sh",
+    "fixtures": "pnpm --filter @stockfloor/tests run fixtures",
+    "test": "bash scripts/test-all.sh",
+    "lint": "prettier --check \"packages/**/*.ts\" \"tests/**/*.ts\" \"scripts/**/*.ts\""
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "typescript": "^5.7.3"
+  }
+}

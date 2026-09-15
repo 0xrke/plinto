@@ -1,0 +1,24 @@
+# Secrets — never commit
+keys/
+.env
+.env*
+*.keypair.json
+*-keypair.json
+id.json
+
+# Build / tooling
+.anchor
+target
+test-ledger
+.surfpool
+node_modules
+.next
+dist
+coverage
+*.tsbuildinfo
+**/*.rs.bk
+.DS_Store
+.yarn
+
+# Local reference checkouts (large, fetched by scripts)
+vendor/

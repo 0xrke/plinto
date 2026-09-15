@@ -1,0 +1,24 @@
+[toolchain]
+anchor_version = "1.0.2"
+package_manager = "pnpm"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+stockfloor = "98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA"
+spike = "JDizjXTevp3bsexc4cxHbNPjMgXPhMewwkY34JnZSQFh"
+
+[programs.mainnet]
+stockfloor = "98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA"
+
+[provider]
+cluster = "localnet"
+# Dedicated repo-local keypair. Never use ~/.config/solana/id.json.
+wallet = "keys/deployer.json"
+
+[scripts]
+test = "pnpm test"
+
+[hooks]
