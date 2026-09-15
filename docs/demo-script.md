@@ -3,10 +3,14 @@
 **Target length:** 2:35 (hard maximum 3:00). **Recorded by:** the user. **Outline:** the eight beats of the
 build brief (§12).
 
-**Status.**
-- UI labels below are quoted from the web app at commit `3620335`, where the app still runs on mock data.
-- M4 wires the app to the chain. **Re-check every quoted label against the running app before recording.**
+**Status (2026-09-16).**
+- UI labels below are quoted from the web app wired to the chain (`NEXT_PUBLIC_DATA_SOURCE=chain`), after the
+  post-M5 review fixes. **Re-check every quoted label against the running app before recording**, and re-check
+  the C2 amounts in [`research/surfpool-e2e.md`](research/surfpool-e2e.md).
 - Everything marked TBD is not true yet.
+- **Two things the app cannot do on camera today:** the create form fixes the graduation threshold at $1,000
+  (`DEFAULT_THRESHOLD_USD`), and Jupiter routing (paying with USDC or SOL) has never been exercised against
+  the live API. Scenes 2, 3 and 5 below take that into account.
 
 **Environment tags used in every scene:**
 
@@ -24,17 +28,26 @@ build brief (§12).
 
 - [ ] **C2 done.** `stockfloor` deployed on mainnet (program link TBD (C2)). The upgrade-authority decision is
       made by the user (TBD (C2)).
-- [ ] **Demo launch ready to create on camera.** Threshold TBD (C2).
-  - The create form currently fixes the threshold at $1,000 (`DEFAULT_THRESHOLD_USD`).
-  - Whether the demo uses a smaller threshold, and how the form exposes it, is TBD (C2).
-  - Meteora keepers reportedly auto-migrate stock-quoted pools only from about $750. Below that, our crank
-    migrates (`migration_damm_v2` is permissionless).
+- [ ] **Demo launch: threshold $50 in SPYx, created with the CLI.** The C2 plan funds about $53 of SPYx in
+      total (`research/surfpool-e2e.md` §3 and §7), and the create form fixes the threshold at $1,000, which
+      those funds cannot graduate. So the **mainnet** launch is created with
+      `packages/sdk/scripts/run.sh create-launch --threshold-usd 50 …` (§9 of that document), and scene 2
+      records the form and its live preview plus a short terminal shot of the CLI.
+  - If the app gains a threshold control (or a build-time default) before C2, record scene 2 entirely in the
+    app instead and drop the terminal shot.
+  - On the **fork** take the form works as is: the faucet funds enough SPYx for a $1,000 launch.
+  - Meteora keepers reportedly auto-migrate stock-quoted pools only from about $750. At $50 our crank
+    migrates (`migration_damm_v2` is permissionless), which is what the demo shows.
 - [ ] **Dedicated demo wallets only.**
-  - One creator wallet, two or three buyer wallets and one "crash" seller wallet.
-  - Funded with USDC or SOL plus SOL for fees. Amounts TBD (C2).
+  - The five C2 keypairs under `keys/` (deployer, creator, buyer1, buyer2, cranker), funded per
+    `research/surfpool-e2e.md` §7: 2.84 SOL and 8,020,000 raw SPYx in total. A third buyer or a separate
+    "crash" seller needs its own SOL and SPYx.
+  - **Funded with SPYx, not USDC:** the CLI and the demo pay in SPYx.
   - Never show a seed phrase, a private key or a personal wallet on screen.
-- [ ] **Crank ready.** It runs `harvest_curve_fees`, `migration_damm_v2` and `harvest_migration_fee` right
-      after the completing buy (`packages/sdk/scripts/*` crank, TBD (M3)).
+- [ ] **Crank ready.** `packages/sdk/scripts/run.sh crank --keypair keys/cli-cranker.json --launch <addr>`,
+      or the app's **Run crank** button. After the completing buy it runs `harvest_curve_fees`,
+      `harvest_migration_fee`, `harvest_surplus`, DBC `migration_damm_v2` and `sync_migration` (5
+      transactions), and `harvest_lp_fees` later.
 - [ ] **Links.** The [Solscan links table](#3-solscan-links-to-record-c2) is filled in, and each link is open
       in its own browser tab before recording.
 - [ ] **Browser setup.**
@@ -46,17 +59,19 @@ build brief (§12).
 
 ### 0.2 Local fork take (fallback or rehearsal)
 
-- [ ] **Surfpool fork running locally.** Per the script header,
-      `STUDIO=1 FUND_WALLETS="<demo pubkeys>" FUND_SOL=10 FUND_SPYX=25 bash scripts/surfpool/up.sh` starts the
+- [ ] **Surfpool fork running locally.**
+      `STUDIO=1 FUND_WALLETS="<demo pubkeys>" FUND_SOL=10 FUND_SPYX=3 bash scripts/surfpool/up.sh` starts the
       fork, deploys `stockfloor` with `keys/deployer.json` and funds the demo wallets with SOL and SPYx.
-      Not yet verified end to end for this script.
-  - Verified not to relay transactions to mainnet before anything is sent.
+      The app's own faucet (`/api/faucet`, loopback only) tops a connected wallet up from the page.
+  - Verified not to relay transactions to mainnet before anything is sent (`research/surfpool.md`, and every
+    rehearsal re-checks it).
 - [ ] **App against the fork.**
   - `NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8899 NEXT_PUBLIC_DATA_SOURCE=chain pnpm --filter @stockfloor/app dev`
   - The header network badge reads "Local fork".
 - [ ] **No Jupiter on the fork** (its APIs are mainnet-only).
-  - In "Pay with", choose **SPYx**, not USDC or SOL.
-  - Scene 5 uses a direct DAMM v2 swap script (TBD).
+  - In "Pay with", choose **SPYx**, not USDC or SOL. The panel then says "Trades SPYx directly against the
+    Meteora DAMM v2 pool."
+  - Scene 5 moves the price with the app's own market panel (a SPYx buy and a sell), no extra script.
 - [ ] **No Solscan.** Show transactions in Surfpool Studio, the local UI on `http://127.0.0.1:18488` when
       started with `STUDIO=1`, or show the signature in the app (TBD which).
 
@@ -98,8 +113,9 @@ build brief (§12).
 | | |
 |---|---|
 | **Screen** | `/t/<mint>`, the token page. Phase stepper on **Presale** |
-| **Actions** | 1. Scroll to **Disclosures** and tick "I confirm that I am not a US person…". Scroll back up. 2. In **"Trade on the curve"**, choose **Buy**, set "Pay with" to **USDC** (SPYx on the fork), enter an amount and click **"Buy $SFDEMO on the curve"**. Approve; the MVP may take two transactions, a Jupiter swap and then the curve buy. 3. Cut to a second buyer wallet (pre-staged) that buys again. 4. Show **"Progress to graduation"** filling, plus "Floor at graduation (est.)" and "Vault at graduation". |
-| **Voiceover** | "Buyers pay with USDC. The app routes it into SPYx through Jupiter and buys on the bonding curve. The raise stays in SPYx inside the DBC pool, and the partner share of every trading fee is already flowing into this token's vault." |
+| **Actions** | 1. Scroll to **Disclosures** and tick "I confirm that I am not a US person…". Scroll back up. 2. In **"Trade on the curve"**, choose **Buy**, keep "Pay with" on **SPYx**, enter an amount and click the buy button (its label reads `Price $X · Floor at graduation (est.) $Y · Max loss if it graduates: −Z%`). Approve. 3. Cut to the second buyer wallet (pre-staged) that buys again. 4. Show **"Progress to graduation"** filling, plus "Floor at graduation (est.)" and "Vault at graduation". |
+| **Voiceover** | "Buyers pay in SPYx, tokenized S&P 500, straight into the bonding curve. The raise stays in SPYx inside the DBC pool, and the partner share of every trading fee is already flowing into this token's vault." |
+| **If Jupiter is exercised first** | The "Pay with" selector also offers USDC and SOL, routed through Jupiter (mainnet only). That path has never been run against the live API, so test it with a small amount before recording, or keep SPYx. |
 | **Proof** | Solscan: a curve buy transaction and the DBC pool account, TBD (C2) |
 
 ### Scene 4: Graduation · 1:00–1:20 · `MAINNET (C2)` or `FORK`
@@ -107,7 +123,7 @@ build brief (§12).
 | | |
 |---|---|
 | **Screen** | Token page, then Solscan |
-| **Actions** | 1. A pre-staged buyer makes the completing buy. The page shows **"Curve complete"** and the stepper moves to **Graduation** ("The raise is complete. The pool is migrating to Meteora DAMM v2…"). 2. Cut, or a 2 s terminal shot: the crank runs `migration_damm_v2` and `harvest_migration_fee`. 3. Refresh: the stepper shows **Floor live**, and the **"Price and floor"** card appears with the floor meter. 4. Solscan, `harvest_migration_fee` transaction: highlight the SPYx transfer from the DBC quote vault into the StockFloor vault, 50% of the threshold, signed by our claimer PDA through CPI. 5. Solscan, DAMM v2 position NFT account: owner is the claimer PDA, and the position is permanently locked. |
+| **Actions** | 1. A pre-staged buyer makes the completing buy. The page shows the progress at 100% and the message "The raise is complete. Next, the pool migrates to Meteora DAMM v2 and the vault share is harvested (Meteora keepers or anyone running the crank). Redemption opens as soon as the vault is funded." 2. Click **"Run crank (5 steps)"** in the permissionless crank card and approve each step (or a 2 s terminal shot of `run.sh crank`): harvest curve fees, harvest the migration fee, harvest the surplus, migrate to DAMM v2, record the migration. 3. Refresh: the stepper shows the floor live, and the **"Price and floor"** card appears with the floor meter. 4. Solscan, `harvest_migration_fee` transaction: highlight the SPYx transfer from the DBC quote vault into the StockFloor vault, 50% of the threshold, signed by our claimer PDA through CPI. 5. Solscan, DAMM v2 position NFT account: owner is the claimer PDA, and the position is permanently locked. |
 | **Voiceover** | "The curve hits its threshold and graduates. A permissionless crank migrates the pool to Meteora DAMM v2 with all liquidity locked forever, and our program pulls the migration fee — half the raise by default — into the vault. The floor is live." |
 | **Proof** | Solscan: completing buy, `migration_damm_v2`, `harvest_migration_fee`, DAMM v2 pool, position NFT account. All TBD (C2) |
 
@@ -115,10 +131,10 @@ build brief (§12).
 
 | | |
 |---|---|
-| **Screen** | Token page, "Buy on the market" panel ("Routed through Jupiter to the Meteora DAMM v2 pool.") |
-| **Actions** | 1. Zoom on the buy button label **"Price $X · Floor $Y · Max loss if you buy now: −Z%"**. 2. A pre-staged wallet buys through the panel; approve. 3. After the refresh, point at the higher price and the larger "Max loss if you buy now". |
+| **Screen** | Token page, "Buy on the market" panel. With "Pay with" on SPYx it says "Trades SPYx directly against the Meteora DAMM v2 pool."; with USDC or SOL, "Routed through Jupiter to the Meteora DAMM v2 pool." |
+| **Actions** | 1. Zoom on the buy button label **"Price $X · Floor $Y · Max loss if you buy now: −Z%"**. 2. A pre-staged wallet buys through the panel with SPYx; approve. 3. After the refresh, point at the higher price and the larger "Max loss if you buy now". |
 | **Voiceover** | "Now the token trades freely, and the price can run far above the floor. The buy button always tells the truth: the price, the floor, and your maximum loss if you buy right now." |
-| **Fork variant** | Jupiter is unavailable. Move the price with a direct DAMM v2 swap script (TBD) and show only the label update. |
+| **Fork variant** | Identical, with SPYx selected (Jupiter is mainnet-only). |
 | **Proof** | Solscan: the market buy transaction, TBD (C2) |
 
 ### Scene 6: Crash and redeem · 1:40–2:05 · `MAINNET (C2)` or `FORK`
@@ -156,10 +172,10 @@ build brief (§12).
 | Scene | `MAINNET (C2)` needed for | Works on `FORK` |
 |---|---|---|
 | 1 Hook | — | yes (`ANY`) |
-| 2 Create | Solscan links | yes |
-| 3 Presale | USDC/SOL routing through Jupiter; Solscan links | yes, paying SPYx directly |
+| 2 Create | Solscan links; the launch itself is created with the CLI at the $50 threshold | yes, the form's $1,000 threshold is affordable on the fork |
+| 3 Presale | Solscan links; Jupiter routing only if that path is tested first | yes, paying SPYx directly |
 | 4 Graduation | Solscan links; real Meteora keeper behaviour | yes (our crank migrates) |
-| 5 Market | Jupiter buy | partly: direct DAMM v2 swap script (TBD) |
+| 5 Market | Solscan links | yes, SPYx buy in the market panel |
 | 6 Crash and redeem | Solscan links | yes |
 | 7 Why Solana | — | yes (`ANY`) |
 | 8 Prior art | — | yes (`ANY`) |
@@ -181,7 +197,7 @@ Fill this in during C2 and copy the links into the README status table.
 | Vault token account | TBD (C2) | 4, 6 |
 | DAMM v2 pool | TBD (C2) | 4, 5 |
 | Position NFT account (owner = claimer PDA) | TBD (C2) | 4 |
-| Market buy (Jupiter) | TBD (C2) | 5 |
+| Market buy (DAMM v2 through the app) | TBD (C2) | 5 |
 | Crash sell | TBD (C2) | 6 |
 | `redeem` transaction | TBD (C2) | 6 |
 | `harvest_lp_fees` transaction (optional B-roll) | TBD (C2) | 7 |
@@ -195,5 +211,7 @@ Fill this in during C2 and copy the links into the README status table.
   Retry in PartialFill mode.
 - **Redeem is disabled after migration.** The migration fee is not harvested yet
   (`MigrationFeeNotHarvested`). Run the crank.
-- **A Jupiter route is missing** for a brand-new pool. Record scene 5 later, or use the fork variant and label
-  it.
+- **A Jupiter route is missing** for a brand-new pool. Pay with SPYx (the default for the demo) or record
+  scene 5 on the fork and label it.
+- **The crank stops after a rejected wallet prompt.** Click "Run crank" again: it re-plans from chain state
+  and only sends what is still due.
