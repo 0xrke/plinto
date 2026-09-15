@@ -1,0 +1,124 @@
+{
+  "generatedAt": "2026-09-15T17:39:56.790Z",
+  "rpc": "https://api.mainnet-beta.solana.com",
+  "programs": [
+    {
+      "name": "dynamic_bonding_curve",
+      "address": "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN",
+      "loader": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "programData": "HUfnSSiJxgspQm6C1rkqv6L3XgVtn7AESApgCQpCXCYh",
+      "file": "programs/dynamic_bonding_curve.so",
+      "size": 2326577,
+      "sha256": "4c26a8a5da99f8ce932fa0300c46675b527090021fbb74214c9486bedda9f23b",
+      "slot": 447309115,
+      "purpose": "Meteora DBC (mainnet binary, 0.2.1 line)"
+    },
+    {
+      "name": "cp_amm",
+      "address": "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG",
+      "loader": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "programData": "AUh8bm2XsMfex3KjYGcM3G4uBqUNSDw6HEhWaWMYnyPH",
+      "file": "programs/cp_amm.so",
+      "size": 2174352,
+      "sha256": "4d5b920baebc090f89b2e8796a3452ed067c9667a143058c96a312f2c1e6848b",
+      "slot": 447309117,
+      "purpose": "Meteora DAMM v2 (migration target)"
+    },
+    {
+      "name": "spl_token_2022",
+      "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "loader": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "programData": "DoU57AYuPFu2QU514RktNPG22QhApEjnKxnBcu4BHDTY",
+      "file": "programs/spl_token_2022.so",
+      "size": 1382016,
+      "sha256": "0999dbf708971e723b08d1caafc988826a59c6001ed6dc02260da07defbe1469",
+      "slot": 447309118,
+      "purpose": "Token-2022 mainnet binary (Pausable / ScaledUiAmount support for SPYx)"
+    },
+    {
+      "name": "spl_token",
+      "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "loader": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "programData": "3gvYRKWyXRR9xKWe1ZjPhLY5ZJRN7KDB4rFZFGoJfFk2",
+      "file": "programs/spl_token.so",
+      "size": 108600,
+      "sha256": "8190d3f7ceb6cb7a7a8d8924bff89f9f611e15ce1f806f2b6237f3311a98f697",
+      "slot": 447309118,
+      "purpose": "SPL Token mainnet binary (DBC base token)"
+    },
+    {
+      "name": "spl_associated_token_account",
+      "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+      "loader": "BPFLoader2111111111111111111111111111111111",
+      "programData": null,
+      "file": "programs/spl_associated_token_account.so",
+      "size": 105032,
+      "sha256": "6804554e69fd3a58caa191dc4a58f4c67223d30ca28ab8987f39fc18d2f7374d",
+      "slot": 447309118,
+      "purpose": "Associated Token Account program mainnet binary"
+    },
+    {
+      "name": "mpl_token_metadata",
+      "address": "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
+      "loader": "BPFLoaderUpgradeab1e11111111111111111111111",
+      "programData": "PwDiXFxQsGra4sFFTT8r1QWRMd4vfumiWC1jfWNfdYT",
+      "file": "programs/mpl_token_metadata.so",
+      "size": 793991,
+      "sha256": "31f0a627dba051a938de650464e55cc5397a4be0fd496929c1f9cf02fe5e9011",
+      "slot": 447309119,
+      "purpose": "Metaplex Token Metadata (DBC SPL-token pool creation CPI)"
+    }
+  ],
+  "accounts": [
+    {
+      "name": "spyx_mint",
+      "address": "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W",
+      "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "file": "accounts/spyx_mint.json",
+      "size": 676,
+      "sha256": "9b252e9a491d75c9f4268bacb2098a56cfb446a27db86ebfe9219fc176ccfb23",
+      "slot": 447309119,
+      "purpose": "SPYx mint (Token-2022, 8 decimals)"
+    },
+    {
+      "name": "dbc_token_badge_spyx",
+      "address": "D2THzeQLHaDeKBzzmTNuWEWw23WPM8vVhLvUmSPEpNeL",
+      "owner": "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN",
+      "file": "accounts/dbc_token_badge_spyx.json",
+      "size": 168,
+      "sha256": "b09a108aefb0e2ad3d7ba20532c047a86f7a6b525478387a08ab5573821d0428",
+      "slot": 447309120,
+      "purpose": "DBC token badge PDA [token_badge, SPYx]; remaining account 0 for create_config / pool init"
+    },
+    {
+      "name": "damm_v2_token_badge_spyx",
+      "address": "CzLLYiZcDXavJoS6wp9sgMU599qYWj2zPEh58fj9k1AK",
+      "owner": "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG",
+      "file": "accounts/damm_v2_token_badge_spyx.json",
+      "size": 168,
+      "sha256": "b09a108aefb0e2ad3d7ba20532c047a86f7a6b525478387a08ab5573821d0428",
+      "slot": 447309120,
+      "purpose": "DAMM v2 token badge PDA [token_badge, SPYx] (not required by DBC migration configs)"
+    },
+    {
+      "name": "damm_v2_config_customizable",
+      "address": "A8gMrEPJkacWkcb3DGwtJwTe16HktSEfvwtuDh2MCtck",
+      "owner": "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG",
+      "file": "accounts/damm_v2_config_customizable.json",
+      "size": 328,
+      "sha256": "988089b8bacd1967ad85e4acd2bb520c847c872a74fed0614b01a89c57ae73a5",
+      "slot": 447309120,
+      "purpose": "DAMM v2 dynamic config for DBC MigrationFeeOption::Customizable (6); remaining account 0 of migration_damm_v2"
+    },
+    {
+      "name": "damm_v2_config_fixed_bps100",
+      "address": "Hv8Lmzmnju6m7kcokVKvwqz7QPmdX9XfKjJsXz8RXcjp",
+      "owner": "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG",
+      "file": "accounts/damm_v2_config_fixed_bps100.json",
+      "size": 328,
+      "sha256": "56d526bd28a68a2096dc195200f3e43e1a972c4973b05f4ec2daf16772517ebc",
+      "slot": 447309120,
+      "purpose": "DAMM v2 static config for DBC MigrationFeeOption::FixedBps100 (2)"
+    }
+  ]
+}

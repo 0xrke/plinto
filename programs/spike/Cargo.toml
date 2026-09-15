@@ -1,0 +1,29 @@
+[package]
+name = "spike"
+version = "0.1.0"
+description = "M1 fork spike: PDA fee_claimer harvesting Meteora DBC / DAMM v2 fees via CPI"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "spike"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+anchor-debug = []
+custom-heap = []
+custom-panic = []
+
+[dependencies]
+anchor-lang = "1.0.2"
+anchor-spl = { version = "1.0.2", default-features = false, features = ["token", "token_2022", "associated_token"] }
+# Required by declare_program! for zero-copy account types in the DBC / DAMM v2 IDLs.
+bytemuck = { version = "1.21", features = ["derive", "min_const_generics"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
