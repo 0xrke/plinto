@@ -40,12 +40,3 @@ export function createBackend(kind = DATA_SOURCE, rpcUrl = RPC_URL, wsUrl = WS_U
     }),
   };
 }
-
-/** Back-compat helpers. */
-export function createDataSource(): LaunchDataSource {
-  return createBackend().dataSource;
-}
-
-export function createActions(): LaunchActions {
-  return createBackend().actions;
-}
