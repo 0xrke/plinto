@@ -11,11 +11,13 @@ import {
   buildLaunchTransactions,
   claimerBaseAccount,
   dammV2PoolPda,
+  dbcConstants,
   DAMM_V2_MIGRATION_CONFIGS,
   floorQ64,
   freshDbcState,
   type AccountData,
   type ChainReader,
+  type DammV2Pool,
   type KeyedAccount,
   type LaunchInput,
   type LaunchState,
@@ -144,6 +146,30 @@ export function launchState(opts: { phase?: FixturePhase; input?: Partial<Launch
     sqrtPriceX64: pool.sqrtPrice,
   };
   return { state, built, input, creator };
+}
+
+/**
+ * A migrated launch with a full-range DAMM v2 pool (1% flat fee, quote-only fees) at the launch's
+ * sqrt price holding about `quoteReserveRaw` of the quote asset, for exact market quotes.
+ */
+export function withDammPool(state: LaunchState, quoteReserveRaw: bigint): LaunchState {
+  const sqrtPrice = state.sqrtPriceX64!;
+  const sqrtMinPrice = dbcConstants.MIN_SQRT_PRICE;
+  const feeData = new Uint8Array(32);
+  new DataView(feeData.buffer).setBigUint64(0, 10_000_000n, true); // cliff fee numerator: 1% of 1e9
+  const pool = {
+    poolFees: { baseFee: { baseFeeInfo: { data: Array.from(feeData) } }, protocolFeePercent: 20, referralFeePercent: 20, compoundingFeeBps: 0, dynamicFee: { initialized: 0 }, initSqrtPrice: sqrtPrice },
+    liquidity: (quoteReserveRaw << 128n) / (sqrtPrice - sqrtMinPrice),
+    sqrtMinPrice,
+    sqrtMaxPrice: dbcConstants.MAX_SQRT_PRICE,
+    sqrtPrice,
+    activationPoint: 0n,
+    activationType: 1,
+    poolStatus: 0,
+    collectFeeMode: 1,
+    feeVersion: 1,
+  } as unknown as DammV2Pool;
+  return { ...state, damm: { ...state.damm, state: pool } };
 }
 
 // ---------------------------------------------------------------- account encoders

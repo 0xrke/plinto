@@ -58,6 +58,8 @@ describe("toLaunchSummary", () => {
     expect(s.quote).toEqual({ asset: SPYX, priceUsd: SPYX_PRICE, multiplier: SPYX_MULTIPLIER, updatedAt: 1_000, priceSource: "jupiter" });
     expect(s.priceUsd).toBe(sqrtPriceX64ToUsd(state.dbcPool!.sqrtPrice, 6, 8, SPYX_MULTIPLIER, SPYX_PRICE));
     expect(s.priceUsd).toBeCloseTo(built.preview.startPriceUsd, 12);
+    // The API's buy label for a presale launch bounds the loss against the estimated floor at graduation.
+    expect(launchToJson(s).buyLabel).toMatch(/^Price \$[\d.,]+ · Floor at graduation \(est\.\) \$[\d.,]+ · Max loss if it graduates: −[\d.]+%$/);
     // The projection equals the launch composer's own preview.
     expect(s.projectedAtGraduation).toEqual({
       vaultQuoteRaw: built.preview.vaultAtGraduationQuoteRaw,

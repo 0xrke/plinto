@@ -39,9 +39,11 @@ Environment:
 - `/` launches list: phase, progress to graduation, price, floor, max loss, quote asset.
 - `/create` launch form with a live `previewLaunch` preview and an optional creator first buy. Submitting
   runs the SDK launch composer's transactions with step-by-step progress (see below).
-- `/t/[mint]` token page: phase stepper; presale progress and curve trade panel; after graduation the
-  floor meter, the market panel with the honest buy label (`Price $X · Floor $Y · Max loss if you buy now:
-  −Z%`), the redeem panel and vault stats; the permissionless crank panel; disclosures with the non-US
+- `/t/[mint]` token page: phase stepper; presale progress and curve trade panel, whose buy button reads
+  `Price $X · Floor at graduation (est.) $Y · Max loss if it graduates: −Z%` (there is no floor before
+  graduation, and the page says so); after graduation the floor meter, the market panel with the honest buy
+  label (`Price $X · Floor $Y · Max loss if you buy now: −Z%`). With an exact quote, X is the buy's average
+  price (pool fee and price impact included), so a thin pool does not understate the max loss; the redeem panel and vault stats; the permissionless crank panel; disclosures with the non-US
   attestation on every token page, and on `/create` when the launch includes a first buy (a curve trade in the xStock).
 - `GET /api/launches`, `GET /api/launches/[mint]`: read-only JSON of the same `LaunchSummary` mapping the
   pages use (raw amounts as strings, floor, max loss, buy label, due crank actions).

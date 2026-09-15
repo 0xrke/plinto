@@ -1,6 +1,7 @@
 import { DbcSwapMode, dammMinimumOut, dbcSwapSlippageLimit, quoteTrade } from "@stockfloor/sdk";
 import { friendlyError } from "./chain/errors";
 import type { LaunchSummary } from "./data/types";
+import { quoteRawToUsd } from "./metrics";
 
 export interface TradeQuoteView {
   venue: "dbc" | "damm";
@@ -42,4 +43,19 @@ export function quoteLaunchTrade(
 
 export function isQuoteError(q: TradeQuoteView | { error: string } | null): q is { error: string } {
   return q !== null && "error" in q;
+}
+
+/**
+ * USD value of selling `amountRaw` base tokens into the launch's migrated DAMM v2 pool with the exact
+ * quote (pool fee and price impact included). Null without chain state, before migration, or when the
+ * pool cannot take the trade; callers fall back to an estimate labelled as such.
+ */
+export function quoteMarketSellUsd(launch: LaunchSummary, amountRaw: bigint): number | null {
+  if (!launch.chain || launch.phase !== "graduated" || amountRaw <= 0n) return null;
+  try {
+    const q = quoteTrade(launch.chain, "sell", amountRaw);
+    return q.venue === "damm" ? quoteRawToUsd(q.amountOut, launch.quote) : null;
+  } catch {
+    return null;
+  }
 }

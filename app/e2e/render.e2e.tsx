@@ -157,7 +157,7 @@ describe("page components render the on-chain launch from the local fork", () =>
     await screen.findByRole("heading", { name: uiName, level: 1 }, { timeout: 30_000 });
     fireEvent.click(screen.getByRole("checkbox", { name: /not a US person/ }));
     fireEvent.change(await screen.findByLabelText("You pay"), { target: { value: "0.1" } });
-    const buy = screen.getByRole("button", { name: "Buy $UIFL on the curve" }) as HTMLButtonElement;
+    const buy = screen.getByRole("button", { name: /^Price \$[\d.,]+ · Floor at graduation \(est\.\) \$[\d.,]+ · Max loss if it graduates: (−[\d.]+|0)%$/ }) as HTMLButtonElement;
     await waitFor(() => expect(buy.disabled).toBe(false), { timeout: 15_000 });
     await act(async () => {
       fireEvent.click(buy);

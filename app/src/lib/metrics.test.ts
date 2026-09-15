@@ -2,11 +2,16 @@ import { describe, expect, it } from "vitest";
 import { QUOTE_ALLOWLIST } from "@stockfloor/sdk";
 import type { LaunchSummary, QuoteMarket } from "./data/types";
 import { MINUS } from "./format";
+import { toLaunchSummary } from "./data/chain";
+import { launchState, withDammPool } from "../test/chainFixtures";
+import { quoteLaunchTrade, quoteMarketSellUsd } from "./tradeQuote";
 import {
+  buyAveragePriceUsd,
   buyButtonLabel,
   floorQuotePerToken,
   floorUsdPerToken,
   launchFloorUsd,
+  presaleBuyButtonLabel,
   presaleProgress,
   previewRedeem,
   priceToFloorMultiple,
@@ -127,3 +132,42 @@ describe("previewRedeem", () => {
     expect(previewRedeem(l, 10n).floorAfterUsd).toBe(0);
   });
 });
+
+describe("buy labels with the buyer's own price impact", () => {
+  const price = { usd: 757.02, source: "jupiter" as const, at: 0 };
+
+  it("uses the average price of an exact buy quote for max loss in a thin DAMM v2 pool", () => {
+    // About $21.8 of SPYx in the pool, like the planned $50 C2 launch; the buy is about $2.5.
+    const thin = withDammPool(launchState({ phase: "redeemable" }).state, 2_870_000n);
+    const l = toLaunchSummary(thin, null, price)!;
+    const amountIn = 330_000n;
+    const q = quoteLaunchTrade(l, "buy", amountIn, 100);
+    if (!q || "error" in q) throw new Error("no DAMM quote");
+    const avg = buyAveragePriceUsd(l, q.amountIn, q.amountOut)!;
+    // Fee plus impact: the average price is well above spot, so max loss is higher than at spot.
+    expect(avg / l.priceUsd).toBeGreaterThan(1.1);
+    const floor = launchFloorUsd(l);
+    expect(buyButtonLabel(avg, floor)).not.toBe(buyButtonLabel(l.priceUsd, floor));
+    expect(1 - floor / avg).toBeGreaterThan(1 - floor / l.priceUsd);
+    expect(buyAveragePriceUsd(l, q.amountIn, 0n)).toBeNull();
+  });
+
+  it("values a market sale with the exact DAMM v2 quote, below the spot estimate for a large sale", () => {
+    const thin = withDammPool(launchState({ phase: "redeemable" }).state, 2_870_000n);
+    const l = toLaunchSummary(thin, null, price)!;
+    const tokens = l.supplyRaw / 10n; // a large holder selling 10% of the supply into a thin pool
+    const exact = quoteMarketSellUsd(l, tokens)!;
+    const spotEstimate = (Number(tokens) / 1e6) * l.priceUsd * 0.99;
+    expect(exact).toBeGreaterThan(0);
+    expect(exact).toBeLessThan(spotEstimate * 0.9);
+    // No DAMM state (mock data or a missing pool): no exact value.
+    expect(quoteMarketSellUsd(toLaunchSummary(launchState({ phase: "redeemable" }).state, null, price)!, tokens)).toBeNull();
+    expect(quoteMarketSellUsd(toLaunchSummary(launchState().state, null, price)!, tokens)).toBeNull();
+  });
+
+  it("labels a presale buy with the estimated floor at graduation and the max loss if it graduates", () => {
+    expect(presaleBuyButtonLabel(0.0000016, 0.0000005)).toBe(`Price $0.0000016 · Floor at graduation (est.) $0.0000005 · Max loss if it graduates: ${MINUS}68.8%`);
+    expect(presaleBuyButtonLabel(0.0000016, null)).toBe("Price $0.0000016 · No floor until graduation");
+  });
+});
+

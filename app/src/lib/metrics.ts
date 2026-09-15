@@ -80,6 +80,27 @@ export function buyButtonLabel(priceUsd: number, floorUsd: number): string {
   return `Price ${formatUsd(priceUsd)} · Floor ${formatUsd(floorUsd)} · Max loss if you buy now: ${formatMaxLoss(z)}`;
 }
 
+/**
+ * Presale buy label. There is no floor before graduation, so the loss bound is against the estimated
+ * floor at graduation: "Price $X · Floor at graduation (est.) $Y · Max loss if it graduates: −Z%".
+ */
+export function presaleBuyButtonLabel(priceUsd: number, estFloorUsd: number | null): string {
+  if (estFloorUsd === null || !(estFloorUsd > 0)) return `Price ${formatUsd(priceUsd)} · No floor until graduation`;
+  const z = maxLossFraction(priceUsd, estFloorUsd);
+  return `Price ${formatUsd(priceUsd)} · Floor at graduation (est.) ${formatUsd(estFloorUsd)} · Max loss if it graduates: ${formatMaxLoss(z)}`;
+}
+
+/**
+ * Average USD price per whole base token of an exact buy quote (raw quote in, raw base out): what the
+ * buyer really pays, fees and price impact included. Null when it cannot be computed.
+ */
+export function buyAveragePriceUsd(launch: LaunchSummary, amountInQuoteRaw: bigint, amountOutBaseRaw: bigint): number | null {
+  if (amountInQuoteRaw <= 0n || amountOutBaseRaw <= 0n) return null;
+  const usd = quoteRawToUsd(amountInQuoteRaw, launch.quote);
+  const tokens = rawToUi(amountOutBaseRaw, launch.baseDecimals, 1);
+  return usd > 0 && tokens > 0 ? usd / tokens : null;
+}
+
 export interface RedeemPreview {
   gross: bigint;
   fee: bigint;

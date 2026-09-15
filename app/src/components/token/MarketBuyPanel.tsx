@@ -9,7 +9,7 @@ import type { LaunchSummary, PayToken } from "@/lib/data/types";
 import { useData, usePayTokenPrices, useRefreshChainData, useTokenBalance, useTxFlow } from "@/lib/data/context";
 import { PAY_TOKEN_DECIMALS, estimateSellUsd, estimateTokensOut, floorValueUsd, parseUiNumber } from "@/lib/estimates";
 import { formatMaxLoss, formatNumber, formatTokenAmount, formatUsd, parseTokenInput, rawToDecimal } from "@/lib/format";
-import { buyButtonLabel, launchFloorUsd } from "@/lib/metrics";
+import { buyAveragePriceUsd, buyButtonLabel, launchFloorUsd } from "@/lib/metrics";
 import { isQuoteError, quoteLaunchTrade } from "@/lib/tradeQuote";
 import { AmountField } from "@/components/ui/AmountField";
 import { TxProgress } from "@/components/ui/TxProgress";
@@ -44,7 +44,6 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
 
   const quote = launch.quote.asset;
   const floorUsd = launchFloorUsd(launch);
-  const maxLoss = maxLossFraction(launch.priceUsd, floorUsd);
   const tokenLabel = (t: PayToken) => (t === "QUOTE" ? quote.symbol : t);
   const amount = parseUiNumber(input);
 
@@ -70,6 +69,11 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
   const exact = token === "QUOTE" ? quoteLaunchTrade(launch, side, inputError ? null : amountRaw, DEFAULT_SLIPPAGE_BPS) : null;
   const exactQuote = exact && !isQuoteError(exact) ? exact : null;
   const quoteError = isQuoteError(exact) ? exact.error : null;
+  // With an exact quote, price and max loss use this buy's average price (pool fee and its own price
+  // impact included), which in a thin pool is well above the spot price.
+  const avgPriceUsd = side === "buy" && exactQuote ? buyAveragePriceUsd(launch, exactQuote.amountIn, exactQuote.amountOut) : null;
+  const buyPriceUsd = avgPriceUsd ?? launch.priceUsd;
+  const maxLoss = maxLossFraction(buyPriceUsd, floorUsd);
 
   let payUsd = 0;
   if (side === "buy" && amount !== null) {
@@ -261,6 +265,12 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
           ) : null}
           {side === "buy" ? (
             <>
+              {avgPriceUsd !== null ? (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-ink-2">Average price for this buy</dt>
+                  <dd className="tnum text-ink">{formatUsd(avgPriceUsd)}</dd>
+                </div>
+              ) : null}
               <div className="flex justify-between gap-3">
                 <dt className="text-ink-2">Worth at the floor</dt>
                 <dd className="tnum text-floor-strong">{tokensOut > 0 ? `≈ ${formatUsd(atFloorUsd)}` : "—"}</dd>
@@ -286,7 +296,7 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
             aria-busy={pending}
             onClick={onSubmit}
           >
-            {buyButtonLabel(launch.priceUsd, floorUsd)}
+            {buyButtonLabel(buyPriceUsd, floorUsd)}
           </button>
         ) : (
           <button type="button" className="btn btn-primary w-full" disabled={!canSubmit} aria-busy={pending} onClick={onSubmit}>
@@ -296,7 +306,10 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
         {!gate.ready ? <p className="field-hint">{gate.reason}</p> : null}
         {side === "buy" ? (
           <p className="field-hint">
-            {exactQuote ? "Exact DAMM v2 quote at the latest on-chain state" : "Estimate before slippage and route fees"} (max slippage 1%). If
+            {exactQuote
+              ? "Exact DAMM v2 quote at the latest on-chain state; price and max loss are this buy's average price, pool fee and price impact included"
+              : "Estimate at the spot price, before price impact, slippage and route fees"}{" "}
+            (max slippage 1%). If
             the price falls to the floor, redeeming these tokens returns about{" "}
             {tokensOut > 0 ? formatUsd(atFloorUsd) : "the floor value"} after the exit fee.
           </p>

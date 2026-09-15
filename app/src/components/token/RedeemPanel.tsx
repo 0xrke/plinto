@@ -7,6 +7,7 @@ import { useData, useRefreshChainData, useTokenBalance, useTxFlow } from "@/lib/
 import { formatPercent, formatTokenAmount, formatUsd, parseTokenInput, rawToDecimal } from "@/lib/format";
 import { estimateSellUsd, validateRedeemAmount } from "@/lib/estimates";
 import { previewRedeem } from "@/lib/metrics";
+import { quoteMarketSellUsd } from "@/lib/tradeQuote";
 import { AmountField } from "@/components/ui/AmountField";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { useActionGate } from "./useActionGate";
@@ -36,10 +37,13 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
   const inputError = input.trim() === "" ? null : validateRedeemAmount(amountRaw, balanceRaw, launch.supplyRaw);
   const preview = amountRaw !== null && amountRaw > 0n && !inputError ? previewRedeem(launch, amountRaw) : null;
   const zeroPayout = preview !== null && preview.net === 0n;
+  // Exact DAMM v2 sell quote (pool fee and price impact) when chain state is available, else a spot estimate.
+  const marketExact = amountRaw !== null && amountRaw > 0n ? quoteMarketSellUsd(launch, amountRaw) : null;
   const marketUsd =
-    amountRaw !== null && amountRaw > 0n
+    marketExact ??
+    (amountRaw !== null && amountRaw > 0n
       ? estimateSellUsd(rawToDecimal(amountRaw, launch.baseDecimals).toNumber(), launch.priceUsd, MARKET_FEE_BPS)
-      : 0;
+      : 0);
 
   const canSubmit = open && !launch.quotePaused && gate.ready && preview !== null && !zeroPayout && !status.pending;
 
@@ -124,7 +128,7 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
             {preview ? (
               <>
                 <div className="flex justify-between gap-3 text-xs">
-                  <dt className="text-ink-3">Selling at market instead (est.)</dt>
+                  <dt className="text-ink-3">{marketExact !== null ? "Selling at market instead (exact DAMM v2 quote)" : "Selling at market instead (est.)"}</dt>
                   <dd className="tnum text-ink-3">≈ {formatUsd(marketUsd)}</dd>
                 </div>
                 <div className="flex justify-between gap-3 text-xs">

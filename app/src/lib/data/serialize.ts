@@ -1,5 +1,5 @@
 import { maxLossFraction, planCrank } from "@stockfloor/sdk";
-import { buyButtonLabel, launchFloorUsd, presaleProgress, projectedFloorUsd } from "../metrics";
+import { buyButtonLabel, launchFloorUsd, presaleBuyButtonLabel, presaleProgress, projectedFloorUsd } from "../metrics";
 import type { LaunchSummary } from "./types";
 
 /**
@@ -49,7 +49,12 @@ export function launchToJson(launch: LaunchSummary) {
     floorUsd,
     projectedFloorUsd: projectedFloorUsd(launch),
     maxLossIfBuyNow: floorUsd !== null ? maxLossFraction(launch.priceUsd, floorUsd) : null,
-    buyLabel: floorUsd !== null ? buyButtonLabel(launch.priceUsd, floorUsd) : null,
+    buyLabel:
+      floorUsd !== null
+        ? buyButtonLabel(launch.priceUsd, floorUsd)
+        : launch.phase === "presale"
+          ? presaleBuyButtonLabel(launch.priceUsd, projectedFloorUsd(launch))
+          : null,
     projectedAtGraduation: launch.projectedAtGraduation
       ? {
           vaultQuoteRaw: launch.projectedAtGraduation.vaultQuoteRaw.toString(),

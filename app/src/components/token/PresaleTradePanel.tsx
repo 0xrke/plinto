@@ -3,13 +3,13 @@
 import { useEffect, useId, useState } from "react";
 import Decimal from "decimal.js";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { uiToRaw } from "@stockfloor/sdk";
+import { maxLossFraction, uiToRaw } from "@stockfloor/sdk";
 import { CURVE_TRADING_FEE_BPS, DEFAULT_SLIPPAGE_BPS } from "@/lib/config";
 import type { LaunchSummary, PayToken } from "@/lib/data/types";
 import { useCluster, useData, usePayTokenPrices, useRefreshChainData, useTokenBalance, useTxFlow } from "@/lib/data/context";
 import { PAY_TOKEN_DECIMALS, estimateSellUsd, estimateTokensOut, parseUiNumber } from "@/lib/estimates";
-import { formatNumber, formatTokenAmount, formatUsd, parseTokenInput, rawToDecimal } from "@/lib/format";
-import { projectedFloorUsd } from "@/lib/metrics";
+import { formatMaxLoss, formatNumber, formatTokenAmount, formatUsd, parseTokenInput, rawToDecimal } from "@/lib/format";
+import { buyAveragePriceUsd, presaleBuyButtonLabel, projectedFloorUsd } from "@/lib/metrics";
 import { isQuoteError, quoteLaunchTrade } from "@/lib/tradeQuote";
 import { AmountField } from "@/components/ui/AmountField";
 import { TxProgress } from "@/components/ui/TxProgress";
@@ -90,6 +90,12 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
   const tokensOut = side === "buy" ? estimateTokensOut(payUsd, launch.priceUsd, CURVE_TRADING_FEE_BPS) : 0;
   const sellUsd = side === "sell" && amount !== null ? estimateSellUsd(amount, launch.priceUsd, CURVE_TRADING_FEE_BPS) : 0;
   const sellQuoteUi = launch.quote.priceUsd > 0 ? sellUsd / launch.quote.priceUsd : 0;
+
+  // Presale buys have no floor yet: the label bounds the loss against the estimated floor at graduation,
+  // at this buy's average price when an exact curve quote exists.
+  const avgPriceUsd = side === "buy" && exactQuote ? buyAveragePriceUsd(launch, exactQuote.amountIn, exactQuote.amountOut) : null;
+  const buyPriceUsd = avgPriceUsd ?? launch.priceUsd;
+  const estMaxLoss = estFloor !== null && estFloor > 0 ? maxLossFraction(buyPriceUsd, estFloor) : null;
 
   const canSubmit = curveOpen && gate.ready && amountRaw !== null && amountRaw > 0n && !inputError && !quoteError && !pending;
 
@@ -270,6 +276,18 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
               <dt className="text-ink-2">Curve price</dt>
               <dd className="tnum text-ink">{formatUsd(launch.priceUsd)}</dd>
             </div>
+            {side === "buy" && avgPriceUsd !== null ? (
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-2">Average price for this buy</dt>
+                <dd className="tnum text-ink">{formatUsd(avgPriceUsd)}</dd>
+              </div>
+            ) : null}
+            {side === "buy" ? (
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-2">Max loss if it graduates (est.)</dt>
+                <dd className="tnum font-semibold text-risk">{estMaxLoss !== null ? formatMaxLoss(estMaxLoss) : "—"}</dd>
+              </div>
+            ) : null}
             <div className="flex justify-between gap-3">
               <dt className="text-ink-2">Curve fee</dt>
               <dd className="tnum text-ink">1%</dd>
@@ -278,9 +296,27 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
 
           <p className="field-hint">Route: {route}</p>
 
-          <button type="button" className="btn btn-primary w-full" disabled={!canSubmit} onClick={onSubmit} aria-busy={pending}>
-            {pending ? "Sending…" : side === "buy" ? `Buy $${launch.symbol} on the curve` : `Sell $${launch.symbol} to the curve`}
-          </button>
+          {side === "buy" ? (
+            <button
+              type="button"
+              className="btn btn-primary h-auto w-full py-3 text-left leading-snug whitespace-normal"
+              disabled={!canSubmit}
+              onClick={onSubmit}
+              aria-busy={pending}
+            >
+              {presaleBuyButtonLabel(buyPriceUsd, estFloor)}
+            </button>
+          ) : (
+            <button type="button" className="btn btn-primary w-full" disabled={!canSubmit} onClick={onSubmit} aria-busy={pending}>
+              {pending ? "Sending…" : `Sell $${launch.symbol} to the curve`}
+            </button>
+          )}
+          {side === "buy" ? (
+            <p className="field-hint">
+              There is no floor until graduation. If the curve never completes, the only exit is selling back to the
+              curve at its price, so the loss is not bounded by a floor.
+            </p>
+          ) : null}
           {!gate.ready ? <p className="field-hint">{gate.reason}</p> : null}
           <p className="field-hint">
             {exactQuote

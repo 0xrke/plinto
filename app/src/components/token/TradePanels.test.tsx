@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WalletContext, type WalletContextState } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
-import { MAINNET_GENESIS_HASH, quoteTrade, uiToRaw } from "@stockfloor/sdk";
+import { MAINNET_GENESIS_HASH, maxLossFraction, quoteTrade, uiToRaw } from "@stockfloor/sdk";
 import { AttestationProvider } from "@/lib/attestation";
 import { classifyCluster } from "@/lib/chain/cluster";
 import { IDLE_FLOW, txFlowReducer } from "@/lib/chain/txFlow";
@@ -13,10 +13,10 @@ import { toLaunchSummary } from "@/lib/data/chain";
 import { DataProvider } from "@/lib/data/context";
 import { MockDataSource } from "@/lib/data/mock";
 import type { LaunchActions, LaunchDataSource, TradeRequest } from "@/lib/data/types";
-import { formatTokenAmount } from "@/lib/format";
-import { buyButtonLabel, launchFloorUsd } from "@/lib/metrics";
+import { formatMaxLoss, formatTokenAmount } from "@/lib/format";
+import { buyAveragePriceUsd, buyButtonLabel, launchFloorUsd, presaleBuyButtonLabel, projectedFloorUsd } from "@/lib/metrics";
 import { quoteLaunchTrade } from "@/lib/tradeQuote";
-import { launchState } from "@/test/chainFixtures";
+import { launchState, withDammPool } from "@/test/chainFixtures";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { MarketBuyPanel } from "./MarketBuyPanel";
 import { PresaleTradePanel } from "./PresaleTradePanel";
@@ -112,6 +112,29 @@ describe("<MarketBuyPanel />", () => {
   });
 });
 
+describe("<MarketBuyPanel /> in a thin pool", () => {
+  it("uses the buy's average price (fee and price impact) for the max loss label", async () => {
+    const thin = withDammPool(launchState({ phase: "redeemable" }).state, 2_870_000n);
+    const launch = toLaunchSummary(thin, { name: "Harbor", symbol: "HRBR", uri: "" }, { usd: 757.02, source: "jupiter", at: 0 })!;
+    render(
+      <Providers dataSource={chainSource({ [launch.quote.asset.mint]: 5n * 10n ** 8n })}>
+        <MarketBuyPanel launch={launch} />
+      </Providers>,
+    );
+    await screen.findByText(/^Balance: 5\.0285\d* SPYx/);
+    const floor = launchFloorUsd(launch);
+    expect(screen.getByRole("button", { name: buyButtonLabel(launch.priceUsd, floor) })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("You pay"), { target: { value: "0.0033" } });
+    const q = quoteLaunchTrade(launch, "buy", uiToRaw("0.0033", 8, launch.quote.multiplier), 100);
+    if (!q || "error" in q) throw new Error("no quote");
+    const avg = buyAveragePriceUsd(launch, q.amountIn, q.amountOut)!;
+    expect(avg / launch.priceUsd).toBeGreaterThan(1.1);
+    expect(screen.getByRole("button", { name: buyButtonLabel(avg, floor) })).toBeTruthy();
+    expect(screen.getByText("Average price for this buy")).toBeTruthy();
+    expect(screen.getByText(formatMaxLoss(maxLossFraction(avg, floor)))).toBeTruthy();
+  });
+});
+
 describe("<PresaleTradePanel />", () => {
   it("shows the exact curve quote and the slippage minimum for a quote-asset buy", async () => {
     const { state } = launchState({ quoteReserve: 20_000_000n });
@@ -130,9 +153,18 @@ describe("<PresaleTradePanel />", () => {
     expect(screen.getByText("Minimum after 1% slippage")).toBeTruthy();
     expect(screen.getByText(/Paying with USDC or SOL routes through Jupiter, which works on mainnet only\./)).toBeTruthy();
 
+    // The buy button shows the price, the estimated floor at graduation and the max loss if it graduates,
+    // at this buy's average price.
+    const avg = buyAveragePriceUsd(launch, q.amountIn, q.amountOut)!;
+    const label = presaleBuyButtonLabel(avg, projectedFloorUsd(launch));
+    expect(label).toMatch(/^Price \$[\d.,]+ · Floor at graduation \(est\.\) \$[\d.,]+ · Max loss if it graduates: −[\d.]+%$/);
+    expect(screen.getByRole("button", { name: label })).toBeTruthy();
+    expect(screen.getByText("Max loss if it graduates (est.)")).toBeTruthy();
+    expect(screen.getByText(/There is no floor until graduation/)).toBeTruthy();
+
     fireEvent.change(screen.getByLabelText("You pay"), { target: { value: "6" } });
     expect(screen.getByText("Amount exceeds your SPYx balance.")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Buy $TIDE on the curve" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: presaleBuyButtonLabel(launch.priceUsd, projectedFloorUsd(launch)) }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
 
@@ -158,7 +190,7 @@ describe("trade panels pass the displayed quote to the action", () => {
     const displayed = quoteLaunchTrade(launch, "buy", raw, 100);
     if (!displayed || "error" in displayed) throw new Error("no quote");
     expect(screen.getByText(`${formatTokenAmount(displayed.minOut, 6)} $TIDE`)).toBeTruthy();
-    const button = await screen.findByRole("button", { name: /Buy \$TIDE/ });
+    const button = await screen.findByRole("button", { name: /^Price .* · Max loss if it graduates: / });
     await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(button);
     await waitFor(() => expect(requests).toHaveLength(1));
