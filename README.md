@@ -14,7 +14,7 @@ Foundation main track and the Meteora **Best Use of DBC** bounty.
 
 | | |
 |---|---|
-| **Status** | The full lifecycle runs on a mainnet fork (real DBC, DAMM v2 and Token-2022 binaries, the real SPYx mint and its DBC token badge) and end to end on a **local Surfpool fork of live mainnet**, driven by the CLI and by the web app. 519 tests pass (`pnpm test`, 2026-09-16). Not deployed to mainnet yet. |
+| **Status** | The full lifecycle runs on a mainnet fork (real DBC, DAMM v2 and Token-2022 binaries, the real SPYx mint and its DBC token badge) and end to end on a **local Surfpool fork of live mainnet**, driven by the CLI and by the web app. 523 tests pass (`pnpm test`, 2026-09-16). Not deployed to mainnet yet. |
 | **Program** | `stockfloor` `98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA` (Anchor 1.0.2). Mainnet deployment: TBD (C2) |
 | **Mainnet demo launch** (Solscan) | TBD (C2) |
 | **Live app** | TBD (C3) |
@@ -519,9 +519,9 @@ noted. Rationale lives in [`docs/DECISIONS.md`](docs/DECISIONS.md).
 | Program unit and property tests (Rust, proptest with 4,096 cases per property) | `cargo test -p stockfloor` | 43 passed |
 | SDK unit and property tests (fast-check) | `pnpm --filter @stockfloor/sdk test` | 210 passed (14 files) |
 | Mainnet-fork integration (LiteSVM) | `pnpm --filter @stockfloor/tests test` | 112 passed (17 files) |
-| Web app (vitest, jsdom) | `pnpm --filter @stockfloor/app test` | 154 passed (18 files) |
+| Web app (vitest, jsdom) | `pnpm --filter @stockfloor/app test` | 158 passed (19 files) |
 | Typecheck of the SDK and the fork tests | `tsc --noEmit` | pass |
-| **Total** | `pnpm test` | **519 passed** |
+| **Total** | `pnpm test` | **523 passed** |
 
 The 112 fork tests break down as follows:
 - C1 lifecycle: 20, adversarial: 17, M1 review regressions: 11
