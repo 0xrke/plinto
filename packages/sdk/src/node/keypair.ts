@@ -38,9 +38,15 @@ export function resolveKeypairPath(path: string, opts: { cwd?: string; repoKeysD
   if (!path || typeof path !== "string") throw new KeypairPathError("a --keypair path is required");
   const expanded = path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
   const abs = isAbsolute(expanded) ? expanded : resolve(opts.cwd ?? process.cwd(), expanded);
-  const solanaDefault = real(join(homedir(), ".config", "solana", "id.json"));
+  // Compare the literal path first, before any filesystem call touches it.
+  const literalDefault = join(homedir(), ".config", "solana", "id.json");
+  if (resolve(abs) === literalDefault) {
+    throw new KeypairPathError("refusing ~/.config/solana/id.json: use a dedicated keypair under keys/");
+  }
+  // Only the directory of the default wallet is resolved (never the wallet file itself).
+  const solanaDefault = join(real(join(homedir(), ".config", "solana")), "id.json");
   const target = real(abs);
-  if (target === solanaDefault || abs === join(homedir(), ".config", "solana", "id.json")) {
+  if (target === solanaDefault) {
     throw new KeypairPathError("refusing ~/.config/solana/id.json: use a dedicated keypair under keys/");
   }
   if (target.split(sep).includes(".config") && target.split(sep).includes("solana")) {
