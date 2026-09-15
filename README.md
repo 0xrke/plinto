@@ -14,7 +14,7 @@ Foundation main track and the Meteora **Best Use of DBC** bounty.
 
 | | |
 |---|---|
-| **Status** | The full lifecycle runs on a mainnet fork: the real DBC, DAMM v2 and Token-2022 binaries, the real SPYx mint and its DBC token badge. 267 tests pass (`pnpm test`, commit `3620335`). Not deployed to mainnet yet. |
+| **Status** | The full lifecycle runs on a mainnet fork (real DBC, DAMM v2 and Token-2022 binaries, the real SPYx mint and its DBC token badge) and end to end on a **local Surfpool fork of live mainnet**, driven by the CLI and by the web app. 519 tests pass (`pnpm test`, 2026-09-16). Not deployed to mainnet yet. |
 | **Program** | `stockfloor` `98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA` (Anchor 1.0.2). Mainnet deployment: TBD (C2) |
 | **Mainnet demo launch** (Solscan) | TBD (C2) |
 | **Live app** | TBD (C3) |
@@ -161,7 +161,7 @@ without the `stockfloor` program.
 | `harvest_migration_fee` | **+65,673,160** | = `T − ceil(T × 50 / 100)`, the SDK preview |
 | Curve fees of the completing buy | +490,326 | |
 | `harvest_surplus` | +0 | surplus is 1 raw: rounding dust in DBC 0.2.1 |
-| `harvest_leftover` (renamed `burn_claimer_base` in M2) burns a base-token donation to the claimer | unchanged | supply falls by 7,074,133,429,318 raw |
+| `burn_claimer_base` burns a base-token donation to the claimer | unchanged | supply falls by 7,074,133,429,318 raw |
 | 4 DAMM v2 swaps, then `harvest_lp_fees` | +681,460 | from DAMM v2 position state |
 | Vault before redemptions | **67,326,696** | supply 992,925,866,570,678 raw |
 | 4 holders redeem | −18,231,206 paid out | 372,067 in exit fees stays in the vault |
@@ -254,8 +254,8 @@ floor did not decrease (`VaultBalanceMismatch`, `SupplyMismatch`, `FloorDecrease
 3. **Supply can only shrink.** DBC revokes the base mint authority at pool creation, and `register_pool`
    refuses a mint that still has a mint or freeze authority.
 4. **Nothing else can touch the vault.** No admin, withdraw or sweep instruction exists. The only
-   program-signed transfer out of the vault is the payout in `redeem`. With the M2 split, the vault owner PDA
-   signs nothing else.
+   program-signed transfer out of the vault is the payout in `redeem`, and the vault owner PDA signs nothing
+   else.
 5. **Trading and donations do not hurt.** Swaps on DAMM v2 touch neither `V` nor `S`. Donated SPYx only raises
    `V`, and base tokens sent to the claimer's base account are burned by the next crank.
 
@@ -331,10 +331,6 @@ and PDAs are constants that unit tests check against `find_program_address`.
 
 ### Accounts per launch: the two-PDA model
 
-> **Design note.** The split of the signer PDA into a *claimer* and a *vault authority* is the M2 design
-> ([`docs/DECISIONS.md`](docs/DECISIONS.md)) and is being implemented now. The C1 fork run at commit
-> `3620335` used a single `["authority", config]` PDA for both roles.
-
 | Account | Seeds / derivation | Role |
 |---|---|---|
 | `Launch` | `["launch", config]` | Registry: config, creator, committed base mint, canonical DBC pool, quote mint, vault, exit fee, flags (`migration_fee_harvested`, `surplus_harvested`, `migrated`), informational counters. No admin field. |
@@ -345,6 +341,10 @@ and PDAs are constants that unit tests check against `find_program_address`.
 | DBC config | Keypair account, one per launch; signs `create_launch` | Curve, fee and migration parameters |
 | DBC virtual pool | DBC PDA `["pool", config, max(base, quote), min(base, quote)]` | Presale market, pinned in `Launch.pool` |
 | DAMM v2 pool and position | Created by `migration_damm_v2` | Market after graduation; position NFT owned by the claimer PDA |
+
+The split of the signer PDA into a claimer and a vault authority landed in M2
+([`docs/DECISIONS.md`](docs/DECISIONS.md)); the C1 fork run at commit `3620335` used a single
+`["authority", config]` PDA for both roles, and every C1 amount is unchanged by the split.
 
 **Why two PDAs.** DBC and DAMM v2 are upgradeable by Meteora. When a PDA signs a CPI, the callee can use that
 signature. If the vault's owner signed into DBC, a compromised DBC upgrade could move the vault. With the
@@ -391,14 +391,18 @@ fixed by the program.
 | `harvest_curve_fees()` | Anyone | CPI DBC `claim_trading_fee` (claimer signs): SPYx into the vault, any base burned | `PoolNotRegistered`, pinned pool/vault, `QuoteMintPaused`, `QuoteMintTransferHookUnsupported`, `VaultFrozen`, `VaultDecreased`, `VaultEncumbered` |
 | `harvest_migration_fee()` | Anyone, once | CPI DBC `withdraw_migration_fee(0)` into the vault. Opens redemption together with migration | `CurveNotComplete`, `MigrationFeeAlreadyHarvested`, plus the checks above |
 | `harvest_surplus()` | Anyone, once | CPI DBC `partner_withdraw_surplus` into the vault | `CurveNotComplete`, `SurplusAlreadyHarvested` |
-| `burn_claimer_base()` (M2; replaces `harvest_leftover`) | Anyone | Burns whatever the claimer base ATA holds, for example donated base tokens. DBC `withdraw_leftover` never applies, because fixed supply is rejected | canonical claimer ATA, `BaseMintMismatch` |
+| `sync_migration()` | Anyone, idempotent | Latches `Launch.migrated` once DBC reports the migration, so `redeem` stops reading DBC state. Reads nothing when already latched | `PoolNotRegistered`, `InvalidDbcPool`, `MigrationNotComplete` |
+| `burn_claimer_base()` | Anyone | Burns whatever the claimer base ATA holds, for example donated base tokens. DBC `withdraw_leftover` never applies, because fixed supply is rejected | canonical claimer ATA, `BaseMintMismatch` |
 | `harvest_lp_fees()` | Anyone | CPI DAMM v2 `claim_position_fee` for a position whose NFT the claimer owns: SPYx into the vault, base burned | `InvalidDammPool`, `InvalidDammPosition`, `PositionPoolMismatch`, `DammPoolMintMismatch`, `PositionNftNotOwnedByClaimer`, vault checks |
 | `redeem(amount)` | Any holder | Burns `amount`, pays `net` from the vault (vault authority signs) | `MigrationNotComplete`, `MigrationFeeNotHarvested`, `ZeroAmount`, `InsufficientBaseBalance`, `NothingToRedeem`, `QuoteMintPaused`, `QuoteMintTransferHookUnsupported`, `VaultFrozen`, `DestinationIsVault`, post-conditions `VaultBalanceMismatch`, `SupplyMismatch`, `FloorDecreased` |
 | `floor()` | Anyone (simulate) | Returns `{vault_raw, supply, exit_fee_bps, floor_q64}` as return data and emits `FloorSnapshot` | `FloorAccountMismatch` |
 
 Crank order after the curve completes: `harvest_curve_fees` (again, for the completing buy),
-`harvest_migration_fee`, `harvest_surplus`, `migration_damm_v2` (DBC), then `harvest_lp_fees`
-periodically. `burn_claimer_base` is only needed when someone sends base tokens to the claimer.
+`harvest_migration_fee`, `harvest_surplus`, `migration_damm_v2` (DBC), `sync_migration`, then
+`harvest_lp_fees` periodically. `burn_claimer_base` is only needed when someone sends base tokens to the
+claimer. The SDK crank (`planCrank`) plans exactly this order, and it harvests LP fees only for positions on
+the launch's own DAMM v2 pool, above a minimum pending fee and capped per pass, because anyone can hand the
+claimer dust positions on a pool they control.
 
 ---
 
@@ -420,19 +424,21 @@ periodically. `burn_claimer_base` is only needed when someone sends base tokens 
 | Party | Power | Can it move vault funds? | What we do |
 |---|---|---|---|
 | **SPYx issuer** (xStocks) | Pause authority and freeze authority `JDq14…`; permanent delegate `5aMNN…`; authority to set a transfer hook `5aMNN…`; ScaledUiAmount authority `S7vYFF…` | **Yes.** The permanent delegate can move or burn tokens in any account, including the vault | Disclosed on every token page. Pause, frozen vault and active hook fail cleanly (`QuoteMintPaused`, `VaultFrozen`, `QuoteMintTransferHookUnsupported`) with no state change; retry after restore. UI-level allowlist only |
-| **Meteora** (DBC and DAMM v2 upgrade authorities; both programs are upgradeable, checked 2026-09-15) | A malicious or breaking upgrade | Not by design once the vault authority is split out (M2). An upgrade could stop or divert fees that are not harvested yet. That includes an unharvested migration fee, which would keep redemption closed | Migration latch, post-CPI vault checks, strict account validation, two-PDA split (below) |
-| **stockfloor upgrade authority** | Upgrade our program | Yes, with a malicious upgrade | Revoke the upgrade authority before production. This is **pending the user's decision** (an irreversible action). Status: TBD (C2) |
+| **Meteora** (DBC and DAMM v2 upgrade authorities; both programs are upgradeable, checked 2026-09-15) | A malicious or breaking upgrade | Not by design: the vault authority is a separate PDA that never signs into them. An upgrade could stop or divert fees that are not harvested yet. That includes an unharvested migration fee, which would keep redemption closed | Migration latch, post-CPI vault checks, strict account validation, two-PDA split (below) |
+| **stockfloor upgrade authority** | Upgrade our program | Yes, with a malicious upgrade | Revoke the upgrade authority before production. This is **pending the user's decision** (an irreversible action). Status: TBD (C2). Revoking also makes two failures permanent: an issuer-enabled transfer hook on the quote mint (below) and any future DBC or DAMM v2 change that breaks a harvest CPI |
 | Launch creator | Chooses parameters within on-chain bounds | No | `create_launch` enforces the shape; the base mint is committed |
 | Crankers, other users | Call any permissionless instruction | No | Destinations and pools are pinned; covered by adversarial tests |
 
 ### Mitigations against upgradeable dependencies
 
-1. **Migration latch.** `Launch.migrated` is set the first time the program sees the DBC pool migrated. After
-   that `redeem` never decodes DBC state, so a DBC account-layout change cannot brick redemptions.
+1. **Migration latch.** `Launch.migrated` is set the first time the program sees the DBC pool migrated, which
+   the permissionless `sync_migration` does right after the migration (the one-shot DBC harvests run before it
+   and cannot latch anything). After that `redeem` never decodes DBC state, so a DBC account-layout change
+   cannot brick redemptions.
 2. **Post-CPI vault check.** After every harvest CPI the program reloads the vault. The harvest fails if the
    balance decreased (`VaultDecreased`) or the vault gained a delegate, a close authority, a different owner,
    CPI Guard or required memos (`VaultEncumbered`).
-3. **Two-PDA split (M2 design).** The vault owner never signs into DBC or DAMM v2.
+3. **Two-PDA split.** The vault owner never signs into DBC or DAMM v2.
 4. **Account validation.** External accounts are decoded only after owner-program, discriminator and minimum
    length checks, and the decoders tolerate grown accounts. Accounts bound to a launch are pinned by address
    (`launch.pool`, `launch.vault`, `launch.base_mint`, `launch.quote_mint`). The DBC `claim_trading_fee`
@@ -447,9 +453,16 @@ periodically. `burn_claimer_base` is only needed when someone sends base tokens 
 
 ### Known limitations
 
-- **Quote-mint transfer hooks are not supported.** If the issuer activates one, harvests and redemptions fail
-  with `QuoteMintTransferHookUnsupported` until a program upgrade forwards hook accounts. The vault stays
-  intact. DBC and DAMM v2 transfers would fail as well.
+- **Quote-mint transfer hooks are not supported.** If the issuer activates one (the SPYx TransferHook
+  authority `5aMNN…` can, at any time), harvests and redemptions fail with
+  `QuoteMintTransferHookUnsupported`. The vault stays intact, and DBC and DAMM v2 transfers would fail as
+  well, but no transaction shape can redeem: only a program upgrade that resolves the hook's extra accounts
+  can reopen redemptions. **After the upgrade authority is revoked, that failure is permanent.** The choice
+  between shipping hook support and keeping an upgrade path (multisig or timelock) is part of the revocation
+  decision ([`docs/research/program-design.md`](docs/research/program-design.md) §10).
+- **Duplicate `Launch` accounts.** `create_launch` does not reserve a base mint, so anyone can create a
+  pool-less `Launch` that commits a live launch's mint. It holds nothing and can never get a pool (a mint has
+  exactly one DBC pool), but clients must resolve a mint to the launch that owns its pool, as the SDK does.
 - **Thinner market liquidity.** Part of the raise goes to the floor instead of the pool. This is the intended
   trade-off.
 - **The denominator is conservative.** `mint.supply` includes base tokens sitting in the DAMM v2 pool and
@@ -463,8 +476,9 @@ periodically. `burn_claimer_base` is only needed when someone sends base tokens 
   migration. This was not observed on the fork.
 - **CPI depth.** stockfloor → DBC → Token-2022 plus DBC's event self-CPI reaches depth 3. Wrapping our
   instructions in another CPI layer, such as a multisig, is close to the limit.
-- **Fork fidelity.** The fork is LiteSVM, not a validator. A Surfpool run against live mainnet state is
-  planned before C2.
+- **Fork fidelity.** The test fork is LiteSVM, not a validator. The C2 sequence was additionally rehearsed on
+  a local Surfpool fork of live mainnet, with mainnet rent and production compute limits
+  ([`docs/research/surfpool-e2e.md`](docs/research/surfpool-e2e.md)).
 - **No audit.** This is hackathon code.
 
 ---
@@ -498,24 +512,28 @@ noted. Rationale lives in [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 ## Testing
 
-### Counts (`pnpm test`, commit `3620335`, from [`docs/STATUS.md`](docs/STATUS.md))
+### Counts (`pnpm test`, 2026-09-16)
 
 | Suite | Command | Result |
 |---|---|---|
-| Program unit and property tests (Rust, proptest with 4,096 cases per property) | `cargo test -p stockfloor` | 40 passed |
-| SDK unit and property tests (fast-check) | `pnpm --filter @stockfloor/sdk test` | 93 passed |
-| Mainnet-fork integration (LiteSVM) | `pnpm --filter @stockfloor/tests test` | 76 passed |
-| Web app (vitest, jsdom) | `pnpm --filter @stockfloor/app test` | 58 passed |
+| Program unit and property tests (Rust, proptest with 4,096 cases per property) | `cargo test -p stockfloor` | 43 passed |
+| SDK unit and property tests (fast-check) | `pnpm --filter @stockfloor/sdk test` | 210 passed (14 files) |
+| Mainnet-fork integration (LiteSVM) | `pnpm --filter @stockfloor/tests test` | 112 passed (17 files) |
+| Web app (vitest, jsdom) | `pnpm --filter @stockfloor/app test` | 154 passed (18 files) |
 | Typecheck of the SDK and the fork tests | `tsc --noEmit` | pass |
-| **Total** | `pnpm test` | **267 passed** |
+| **Total** | `pnpm test` | **519 passed** |
 
-The 76 fork tests break down as follows:
-- C1 lifecycle: 20
-- adversarial: 16
-- M1 review regressions: 11
-- SDK presets on the real programs: 7
-- stockfloor smoke: 1 test with 43 checks
+The 112 fork tests break down as follows:
+- C1 lifecycle: 20, adversarial: 17, M1 review regressions: 11
+- instruction validation: 7, vault authority: 3, redeem splits: 3, floor property (40 fast-check runs): 1
+- SDK presets on the real programs: 7, LP positions: 4, compute-budget limits: 1
+- SDK-driven: product flow 9, crank races 3, migration latch 3, base-mint lookup 2
 - M1 spike: 21
+
+Beyond `pnpm test`, the C2 sequence runs on a **local Surfpool fork of live mainnet**
+(`bash scripts/e2e/rehearsal.sh`, report in `scripts/e2e/reports/`), and the app has a local-fork
+end-to-end driver (`pnpm --filter @stockfloor/app e2e:local`). Both need Surfpool and a mainnet RPC for
+reads, so they are not part of the offline suite.
 
 ### The fork approach
 
@@ -558,14 +576,13 @@ The 76 fork tests break down as follows:
 - **Properties.** Exact redeem formula, floor monotonicity, rounding direction, split bounds, and donations
   never hurting, in Rust and TypeScript.
 
-**Not covered yet (planned):**
-- a Surfpool run against live mainnet state with realistic compute limits (before C2);
-- many small redemptions at 200 bps on the fork, checked against the continuous split bound (host property
-  tests cover it today);
-- a fork property test over random multi-holder redemption sequences;
-- a second DAMM v2 position donated to the claimer;
-- migration through a fixed-fee DAMM v2 config (the keeper path);
-- tests of the two-PDA split (M2, in progress).
+**Not covered yet:**
+- migration through a fixed-fee DAMM v2 config (the Meteora keeper path);
+- a substitute malicious DBC or DAMM v2 binary (the tests forge the signer privilege such a program would
+  receive through a CPI, which is the privilege that matters);
+- a quote mint with a live transfer-hook program (hooks are unsupported; only the clean failure is tested);
+- Jupiter routing (USDC or SOL → SPYx) against the live API: the app tests mock `fetch`, and the local fork
+  has no Jupiter.
 
 ### Run the tests
 
@@ -577,6 +594,9 @@ pnpm test          # builds the programs, then runs every suite and prints a sum
 `pnpm test` builds the programs first, and the build currently needs the repo-local program keypairs
 `keys/stockfloor-program.json` and `keys/spike-program.json`. These are gitignored, so a fresh clone cannot
 build yet. Fresh-clone support: TBD (C3).
+
+Every fork suite runs offline against `tests/fixtures/`; only the fixture dump and the Surfpool runs need a
+network.
 
 ```bash
 cargo test -p stockfloor                                        # program unit and property tests
@@ -597,39 +617,57 @@ pnpm fixtures                                                   # re-dump mainne
 - Rust 1.89.0 (pinned in `rust-toolchain.toml`), Anchor CLI 1.0.2 and the Solana CLI
 - [Surfpool](https://github.com/txtx/surfpool) 1.5.0, only for the live local fork
 
-### Web app on mock data (works today)
+### Web app on mock data
 
 ```bash
 pnpm install
-pnpm --filter @stockfloor/app dev       # http://localhost:3000
+pnpm --filter @stockfloor/app dev       # http://localhost:3000, NEXT_PUBLIC_DATA_SOURCE=mock by default
 ```
 
 Pages:
 - `/`: launch list
 - `/create`: form with a live floor preview
-- `/t/[mint]`: phase stepper, curve trade panel, floor meter, max-loss buy label, redeem panel, vault stats
-  and disclosures
+- `/t/[mint]`: phase stepper, curve trade panel, floor meter, max-loss buy label, redeem panel, vault stats,
+  permissionless crank panel and disclosures
 
-The data source is mock until M4 wires the chain (see [`app/README.md`](app/README.md)).
+Mock data needs no cluster. See [`app/README.md`](app/README.md) for the chain data source, the wallet
+actions and every environment variable.
 
-### Live local mainnet fork with Surfpool (scripts landing in M3/M4)
+### Live local mainnet fork with Surfpool
 
 Surfpool runs a **local** simnet that forks mainnet state on demand. It executes transactions in-process and
-uses the mainnet RPC only for reads. The helper scripts in `scripts/surfpool/` were just committed. The
-commands below are taken from their headers and have not been verified end to end for this README. The SDK
-scripts and the app's chain data source are still TBD.
+uses the mainnet RPC only for reads. The SDK CLI and the app refuse to send anywhere else unless both
+mainnet switches are set (`--allow-mainnet` plus `STOCKFLOOR_ALLOW_MAINNET=1`), which is reserved for C2.
 
-| Step | Command | Status |
-|---|---|---|
-| Start the local fork, deploy `target/deploy/stockfloor.so` with `keys/deployer.json`, fund wallets with SOL and SPYx | `FUND_WALLETS="<pubkey> <pubkey>" FUND_SOL=10 FUND_SPYX=25 bash scripts/surfpool/up.sh` | committed (M3) |
-| Start or stop only the fork | `bash scripts/surfpool/start.sh` / `bash scripts/surfpool/stop.sh` | committed (M3) |
-| Fund one wallet | `bash scripts/surfpool/run.sh fund <wallet> --sol 10 --token SPYx --amount 5` | committed (M3) |
-| Create a launch | `packages/sdk/scripts/*` (`create-launch`) | TBD (M3) |
-| Run the crank (harvests, migration) | `packages/sdk/scripts/*` (`crank`) | TBD (M3) |
-| Redeem from the CLI | `packages/sdk/scripts/*` (`redeem`) | TBD (M3) |
-| App against the fork | `NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8899 NEXT_PUBLIC_DATA_SOURCE=chain pnpm --filter @stockfloor/app dev` | TBD (M4) |
+```bash
+# 1. Start the fork, deploy target/deploy/stockfloor.so with keys/deployer.json, fund wallets with SOL and SPYx
+FUND_WALLETS="<pubkey> <pubkey>" FUND_SOL=10 FUND_SPYX=3 bash scripts/surfpool/up.sh
+# (bash scripts/surfpool/start.sh | stop.sh for the fork alone;
+#  bash scripts/surfpool/run.sh fund <wallet> --sol 10 --token SPYx --amount 5 for one wallet)
 
-On the local fork buyers pay SPYx directly, because Jupiter routing is mainnet-only.
+# 2. Create a launch, trade, crank and redeem with the SDK CLI (keypairs must live under keys/)
+bash packages/sdk/scripts/run.sh create-launch --keypair keys/cli-creator.json --name "Floor Demo" \
+  --symbol FLOOR --uri https://example.com/floor.json --quote SPYx --threshold-usd 1000 --first-buy 0.1 \
+  --out launch.json                     # writes keys/launches/<config>.json; --resume finishes it after a failure
+bash packages/sdk/scripts/run.sh buy    --keypair keys/cli-buyer1.json  --launch <addr> --amount 0.3
+bash packages/sdk/scripts/run.sh crank  --keypair keys/cli-cranker.json --launch <addr>   # harvests, migration, latch
+bash packages/sdk/scripts/run.sh redeem --keypair keys/cli-buyer1.json  --launch <addr> --all
+bash packages/sdk/scripts/run.sh status --launch <addr> --live-price
+
+# 3. The web app against the same fork
+NEXT_PUBLIC_DATA_SOURCE=chain NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8899 pnpm --filter @stockfloor/app dev
+
+# 4. The whole C2 sequence in one go (deploy, launch, buys, crank, DAMM v2 trades, redemptions, cost report)
+bash scripts/e2e/rehearsal.sh --restart
+```
+
+On the local fork buyers pay SPYx directly, because Jupiter routing is mainnet-only. `NEXT_PUBLIC_*`
+variables are **inlined into the client bundle**: never point `NEXT_PUBLIC_RPC_URL` at a keyed provider URL
+that must stay private; use a domain-restricted key, or serve reads from the server route with
+`STOCKFLOOR_RPC_URL`.
+
+Details and recorded runs: [`packages/sdk/scripts/README.md`](packages/sdk/scripts/README.md),
+[`docs/research/surfpool-e2e.md`](docs/research/surfpool-e2e.md), [`app/README.md`](app/README.md).
 
 ---
 
@@ -721,8 +759,8 @@ repository.
   - Record Solscan links in this README.
   - The user decides whether to revoke the upgrade authority.
 - **Hardening.**
-  - Finish the two-PDA split and its tests.
-  - Surfpool live-fork run with realistic compute limits.
+  - Transfer-hook support in `redeem`, or an upgrade path (multisig or timelock) if the quote issuer ever
+    enables a hook.
   - An external audit.
 - **Product.**
   - A crank service.
@@ -744,11 +782,11 @@ repository.
 |---|---|
 | `programs/stockfloor/` | The Anchor program (`src/instructions/*`, `math.rs`, `external.rs`, `token_utils.rs`) |
 | `programs/spike/` | M1 spike program that proved the PDA fee claimer |
-| `packages/sdk/` | TypeScript SDK: presets, DBC config builder and validation port, math, PDAs, allowlist |
-| `tests/` | LiteSVM mainnet-fork harness (`src/`), fixtures (`fixtures/`), integration suites (`integration/`, `spike/`) |
+| `packages/sdk/` | TypeScript SDK: presets and floor math, instruction builders and decoders for stockfloor, DBC and DAMM v2, exact swap quotes, launch composer, crank, senders, mainnet send guard, Jupiter helpers, and the CLI in `scripts/` |
+| `tests/` | LiteSVM mainnet-fork harness (`src/`), fixtures (`fixtures/`), integration suites (`integration/`, `sdk/`, `spike/`) |
 | `app/` | Next.js web app |
 | `idls/` | DBC 0.2.1 and DAMM v2 0.2.4 IDLs |
-| `scripts/` | `build-programs.sh`, `test-all.sh` |
+| `scripts/` | `build-programs.sh`, `test-all.sh`, `surfpool/` (local fork helpers), `e2e/` (C2 rehearsal and cost reports) |
 | [`docs/architecture.md`](docs/architecture.md) | Accounts, sequence diagrams of every instruction, invariants mapped to tests |
 | [`docs/demo-script.md`](docs/demo-script.md) | 2–3 minute video shot list |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | Every design decision with alternatives and reasons |
