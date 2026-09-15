@@ -15,8 +15,11 @@
  *   DBC 0.2.1 swaps cannot overshoot the threshold by more than rounding);
  * - the FloorTracker invariant checker itself rejects violations (it is not vacuous);
  * - quote issuer controls (pause, frozen vault, transfer hook) make every harvest and redeem fail
- *   cleanly with no state change, and a ScaledUiAmount multiplier change leaves raw math exact.
+ *   cleanly with no state change, and a ScaledUiAmount multiplier change leaves raw math exact;
+ * - redemption edge cases: SPYx donated to the vault, exit fees 0 and 500 bps, split redemptions,
+ *   dust, and redeeming the entire supply (cheatcode).
  */
+import { createTransferCheckedInstruction } from "@solana/spl-token";
 import { Keypair, PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { beforeAll, describe, expect, it } from "vitest";
 import { dbcProgram } from "../src/anchor.js";
@@ -631,5 +634,109 @@ describe("Quote issuer controls (pause, frozen vault, transfer hook) fail cleanl
       expect(tokenAmount(fork, L.vault)).toBe(V - net);
       expect(mintSupply(fork, L.keys.baseMint)).toBe(S - amount);
     }
+  });
+});
+
+// ====================================================================================================
+
+describe("Redemption edge cases on the fork: vault donation, exit fee 0 / 500 bps, split redemptions, entire supply", () => {
+  /** Graduated launch with the migration fee harvested; returns its curve buyers. */
+  async function openLaunch(fork: Fork, exitFeeBps: number): Promise<{ L: StockfloorLaunch; holders: Keypair[]; migration: Migration }> {
+    const L = await createStockfloorLaunch(fork, { exitFeeBps });
+    const g = await graduate(fork, L, [25n, 15n]);
+    fork.send([await harvestMigrationFeeIx({ keys: L.keys })], [fork.newWallet(1)]);
+    return { L, holders: g.buyers, migration: g.migration };
+  }
+
+  async function redeemAndCheck(fork: Fork, L: StockfloorLaunch, holder: Keypair, amount: bigint): Promise<{ gross: bigint; fee: bigint; net: bigint }> {
+    const V = tokenAmount(fork, L.vault);
+    const S = mintSupply(fork, L.keys.baseMint);
+    const gross = (V * amount) / S;
+    const fee = ceilDiv(gross * BigInt(L.exitFeeBps), 10_000n);
+    const net = gross - fee;
+    const q0 = tokenAmount(fork, spyxAta(holder.publicKey));
+    fork.send([await redeemIx({ holder: holder.publicKey, keys: L.keys, amount })], [holder]);
+    expect(tokenAmount(fork, spyxAta(holder.publicKey)) - q0).toBe(net);
+    expect(tokenAmount(fork, L.vault)).toBe(V - net);
+    expect(mintSupply(fork, L.keys.baseMint)).toBe(S - amount);
+    // Floor never decreases (strictly increases when a fee is retained and supply remains).
+    const V1 = V - net;
+    const S1 = S - amount;
+    if (S1 > 0n) {
+      expect(V1 * S >= V * S1).toBe(true);
+      if (fee > 0n) expect(V1 * S > V * S1).toBe(true);
+    }
+    return { gross, fee, net };
+  }
+
+  it("SPYx donated straight to the vault raises the floor and is paid out pro rata", async () => {
+    const fork = Fork.create({ stockfloor: true, spike: false });
+    const { L, holders } = await openLaunch(fork, 200);
+    const [alice] = holders;
+    const V0 = tokenAmount(fork, L.vault);
+    const S0 = mintSupply(fork, L.keys.baseMint);
+    const donation = 50_000_000n; // 0.5 SPYx
+    const donor = fundedWallet(fork, donation);
+    fork.send(
+      [createTransferCheckedInstruction(spyxAta(donor.publicKey), SPYX_MINT, L.vault, donor.publicKey, donation, 8, [], TOKEN_2022_PROGRAM_ID)],
+      [donor],
+    );
+    expect(tokenAmount(fork, L.vault)).toBe(V0 + donation);
+    expect(mintSupply(fork, L.keys.baseMint)).toBe(S0);
+    const amount = tokenAmount(fork, splAta(alice.publicKey, L.keys.baseMint)) / 2n;
+    const r = await redeemAndCheck(fork, L, alice, amount);
+    expect(r.gross).toBe(((V0 + donation) * amount) / S0);
+    expect(r.gross).toBeGreaterThan((V0 * amount) / S0);
+  });
+
+  it("exit fee 0: net = gross = floor(V*a/S); a redemption split into 10 parts never pays more than one redemption of the total", async () => {
+    const fork = Fork.create({ stockfloor: true, spike: false });
+    const { L, holders } = await openLaunch(fork, 0);
+    const [alice, bob] = holders;
+    const V0 = tokenAmount(fork, L.vault);
+    const S0 = mintSupply(fork, L.keys.baseMint);
+    const total = tokenAmount(fork, splAta(alice.publicKey, L.keys.baseMint));
+    const part = total / 10n;
+    let paid = 0n;
+    for (let i = 0; i < 10; i++) {
+      const r = await redeemAndCheck(fork, L, alice, part);
+      expect(r.fee).toBe(0n);
+      expect(r.net).toBe(r.gross);
+      paid += r.net;
+    }
+    expect(paid <= (V0 * (part * 10n)) / S0).toBe(true);
+    // Dust: an amount whose pro-rata share rounds to 0 is rejected rather than burned for nothing.
+    const dust = mintSupply(fork, L.keys.baseMint) / tokenAmount(fork, L.vault) - 1n;
+    expect(dust).toBeGreaterThan(0n);
+    expect(tokenAmount(fork, splAta(bob.publicKey, L.keys.baseMint))).toBeGreaterThan(dust);
+    expect(errName(fork.sendExpectFail([await redeemIx({ holder: bob.publicKey, keys: L.keys, amount: dust })], [bob]))).toBe("NothingToRedeem");
+  });
+
+  it("exit fee 500 bps (the cap): fee = ceil(gross * 5%) stays in the vault", async () => {
+    const fork = Fork.create({ stockfloor: true, spike: false });
+    const { L, holders } = await openLaunch(fork, 500);
+    for (const h of holders) {
+      const r = await redeemAndCheck(fork, L, h, tokenAmount(fork, splAta(h.publicKey, L.keys.baseMint)));
+      expect(r.fee).toBe(ceilDiv(r.gross * 500n, 10_000n));
+      expect(r.fee).toBeGreaterThan(0n);
+    }
+  });
+
+  it("redeeming the entire supply (cheatcode: one holder owns all base) pays vault minus fee and leaves only the fee", async () => {
+    const fork = Fork.create({ stockfloor: true, spike: false });
+    const { L, holders, migration } = await openLaunch(fork, 200);
+    const [alice, ...others] = holders;
+    const S = mintSupply(fork, L.keys.baseMint);
+    // Move every base balance to alice (DBC base vault, DAMM v2 base vault, other holders).
+    for (const acc of [L.keys.baseVault, migration.tokenAVault, ...others.map((o) => splAta(o.publicKey, L.keys.baseMint))]) {
+      setTokenAmount(fork, acc, 0n);
+    }
+    setTokenAmount(fork, splAta(alice.publicKey, L.keys.baseMint), S);
+    const V = tokenAmount(fork, L.vault);
+    const r = await redeemAndCheck(fork, L, alice, S);
+    expect(r.gross).toBe(V);
+    expect(tokenAmount(fork, L.vault)).toBe(r.fee);
+    expect(mintSupply(fork, L.keys.baseMint)).toBe(0n);
+    expect(errName(fork.sendExpectFail([await redeemIx({ holder: alice.publicKey, keys: L.keys, amount: 1n })], [alice]))).toBe("InsufficientBaseBalance");
   });
 });
