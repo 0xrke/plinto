@@ -22,11 +22,14 @@ export class KeypairPathError extends Error {
   }
 }
 
+/** realpath of `p`, or of its nearest existing ancestor joined with the rest when `p` does not exist. */
 function real(p: string): string {
+  const abs = resolve(p);
   try {
-    return realpathSync(p);
+    return realpathSync(abs);
   } catch {
-    return resolve(p);
+    const parent = dirname(abs);
+    return parent === abs ? abs : join(real(parent), basename(abs));
   }
 }
 
