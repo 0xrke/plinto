@@ -68,6 +68,17 @@ export function networkLabel(url: string): string {
 /** Base token parameters from docs/BRIEF.md section 4. */
 export const BASE_DECIMALS = 6;
 export const DEFAULT_THRESHOLD_USD = 1000;
+/**
+ * Quick picks for the advanced graduation-threshold control. $50 is the C2 mainnet demo threshold
+ * (docs/research/surfpool-e2e.md §3), $1,000 the default.
+ */
+export const THRESHOLD_PRESETS_USD = [50, 100, DEFAULT_THRESHOLD_USD, 10_000] as const;
+/**
+ * Upper bound of the threshold field. The chain accepts far more (the real limit is the raw u64
+ * threshold, checked by the SDK against the live quote price), but a launch this size is not a
+ * plausible xStock presale, and an unbounded field turns one extra zero into a 10× raise.
+ */
+export const THRESHOLD_MAX_USD = 10_000_000;
 export const DEFAULT_EXIT_FEE_BPS = 200;
 export const CURVE_TRADING_FEE_BPS = 100;
 export const VAULT_SHARE_MIN = 30;

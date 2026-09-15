@@ -4,17 +4,19 @@ import { useId, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
+  METEORA_KEEPER_MIN_THRESHOLD_USD,
+  MIN_THRESHOLD_USD,
   QUOTE_ALLOWLIST,
-  previewLaunch,
   uiToRaw,
   type CurvePreset,
   type LaunchInput,
-  type LaunchPreview,
 } from "@stockfloor/sdk";
 import {
   DEFAULT_EXIT_FEE_BPS,
   DEFAULT_THRESHOLD_USD,
   IS_LOCAL_RPC,
+  THRESHOLD_MAX_USD,
+  THRESHOLD_PRESETS_USD,
   VAULT_SHARE_DEFAULT,
   VAULT_SHARE_MAX,
   VAULT_SHARE_MIN,
@@ -23,7 +25,14 @@ import type { LaunchResume } from "@/lib/data/types";
 import { useCluster, useData, useQuoteMarkets, useRefreshChainData, useTokenBalance, useTxFlow } from "@/lib/data/context";
 import { parseUiNumber } from "@/lib/estimates";
 import { formatPercent, formatTokenAmount, formatUsd } from "@/lib/format";
-import { launchPriceError, validateLaunchForm, type LaunchFormValues } from "@/lib/launchForm";
+import {
+  formatUsdWhole,
+  launchPriceError,
+  parseThresholdUsd,
+  previewLaunchInput,
+  validateLaunchForm,
+  type LaunchFormValues,
+} from "@/lib/launchForm";
 import { useAttestation } from "@/lib/attestation";
 import { useActionGate } from "@/components/token/useActionGate";
 import { AttestationCheckbox } from "@/components/ui/AttestationCheckbox";
@@ -68,11 +77,14 @@ export function CreateLaunchForm() {
     quoteSymbol: QUOTE_ALLOWLIST[0]?.symbol ?? "SPYx",
     preset: "gentle",
     vaultSharePct: VAULT_SHARE_DEFAULT,
+    thresholdUsd: String(DEFAULT_THRESHOLD_USD),
   });
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submit, setSubmit] = useState<SubmitState>({ status: "idle" });
 
   const errors = validateLaunchForm(values);
+  // Only a threshold that passes the range check is sent to the SDK; otherwise the preview keeps the default.
+  const thresholdUsd = errors.thresholdUsd ? null : parseThresholdUsd(values.thresholdUsd);
   const market = markets.data?.find((m) => m.asset.symbol === values.quoteSymbol) ?? null;
   const quoteBalance = useTokenBalance(market?.asset.mint ?? null);
 
@@ -92,47 +104,40 @@ export function CreateLaunchForm() {
   // A launch prices its threshold with the live quote price; outside a local cluster stale or reference prices are refused.
   const priceError = market ? launchPriceError(dataSource.kind, market.priceSource, IS_LOCAL_RPC) : null;
 
-  const input: LaunchInput | null = market
-    ? {
-        name: values.name.trim(),
-        symbol: values.symbol.trim().toUpperCase(),
-        // M4 replaces this with a metadata JSON URI that references the image.
-        uri: values.imageUrl.trim(),
-        quote: market.asset,
-        quotePriceUsd: market.priceUsd,
-        quoteMultiplier: market.multiplier,
-        preset: values.preset,
-        vaultSharePct: values.vaultSharePct,
-        thresholdUsd: DEFAULT_THRESHOLD_USD,
-        exitFeeBps: DEFAULT_EXIT_FEE_BPS,
-      }
-    : null;
-
-  const { preview, previewError } = useMemo((): {
-    preview: LaunchPreview | null;
-    previewError: string | null;
-  } => {
-    if (!market) return { preview: null, previewError: null };
-    try {
-      return {
-        preview: previewLaunch({
-          name: "Preview",
-          symbol: "PREVIEW",
-          uri: "",
+  const input: LaunchInput | null =
+    market && thresholdUsd !== null
+      ? {
+          name: values.name.trim(),
+          symbol: values.symbol.trim().toUpperCase(),
+          // M4 replaces this with a metadata JSON URI that references the image.
+          uri: values.imageUrl.trim(),
           quote: market.asset,
           quotePriceUsd: market.priceUsd,
           quoteMultiplier: market.multiplier,
           preset: values.preset,
           vaultSharePct: values.vaultSharePct,
-          thresholdUsd: DEFAULT_THRESHOLD_USD,
+          thresholdUsd,
           exitFeeBps: DEFAULT_EXIT_FEE_BPS,
-        }),
-        previewError: null,
-      };
-    } catch (err) {
-      return { preview: null, previewError: err instanceof Error ? err.message : String(err) };
-    }
-  }, [market, values.preset, values.vaultSharePct]);
+        }
+      : null;
+
+  // The preview also runs the port of DBC's create_config validation, so a threshold the chain
+  // would reject shows up here instead of at signing time.
+  const { preview, error: previewError } = useMemo(() => {
+    if (!market || thresholdUsd === null) return { preview: null, error: null };
+    return previewLaunchInput({
+      name: "Preview",
+      symbol: "PREVIEW",
+      uri: "",
+      quote: market.asset,
+      quotePriceUsd: market.priceUsd,
+      quoteMultiplier: market.multiplier,
+      preset: values.preset,
+      vaultSharePct: values.vaultSharePct,
+      thresholdUsd,
+      exitFeeBps: DEFAULT_EXIT_FEE_BPS,
+    });
+  }, [market, values.preset, values.vaultSharePct, thresholdUsd]);
 
   function update<K extends keyof LaunchFormValues>(key: K, value: LaunchFormValues[K]) {
     setValues((v) => ({ ...v, [key]: value }));
@@ -147,9 +152,21 @@ export function CreateLaunchForm() {
   const attestationMissing = firstBuyNeedsAttestation && !attested;
 
   const hasErrors = Object.keys(errors).length > 0;
+  /**
+   * The parameters are frozen while a launch is in flight, after it succeeded, and while a retry is
+   * pending: a retry re-sends the transactions built from the original input, so an edited form
+   * would promise a floor and a threshold that are not the ones being launched.
+   */
   const locked = submit.status === "submitting" || (submit.status === "done" && (submit.ok || !!submit.resume));
   const canSubmit =
-    !hasErrors && input !== null && gate.ready && !firstBuyError && !priceError && !attestationMissing && !locked;
+    !hasErrors &&
+    input !== null &&
+    !previewError &&
+    gate.ready &&
+    !firstBuyError &&
+    !priceError &&
+    !attestationMissing &&
+    !locked;
 
   async function run(resume?: LaunchResume) {
     if (!input) return;
@@ -188,10 +205,11 @@ export function CreateLaunchForm() {
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:items-start">
       <form onSubmit={onSubmit} noValidate className="card space-y-8 p-5 sm:p-6" aria-describedby={`${formId}-intro`}>
         <p id={`${formId}-intro`} className="sr-only">
-          Configure the token, its quote asset, curve and vault share. The preview updates as you type.
+          Configure the token, its quote asset, curve, vault share and graduation threshold. The preview updates as you
+          type.
         </p>
 
-        <fieldset className="space-y-4">
+        <fieldset className="space-y-4" disabled={locked}>
           <legend className="text-base font-semibold text-ink">Token</legend>
           <div className="grid gap-4 sm:grid-cols-[1fr_10rem]">
             <div className="space-y-1.5">
@@ -262,7 +280,7 @@ export function CreateLaunchForm() {
           </div>
         </fieldset>
 
-        <fieldset className="space-y-3">
+        <fieldset className="space-y-3" disabled={locked}>
           <legend className="text-base font-semibold text-ink">Quote asset</legend>
           <p className="field-hint -mt-1">
             Buyers pay in this asset (on mainnet the app can route USDC or SOL through Jupiter). The floor is held in it.
@@ -301,7 +319,7 @@ export function CreateLaunchForm() {
           </div>
         </fieldset>
 
-        <fieldset className="space-y-3">
+        <fieldset className="space-y-3" disabled={locked}>
           <legend className="text-base font-semibold text-ink">Curve preset</legend>
           <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Curve preset">
             {PRESETS.map((preset) => {
@@ -331,7 +349,7 @@ export function CreateLaunchForm() {
           </div>
         </fieldset>
 
-        <fieldset className="space-y-3">
+        <fieldset className="space-y-3" disabled={locked}>
           <legend className="text-base font-semibold text-ink">Vault share</legend>
           <div className="flex items-baseline justify-between gap-3">
             <label htmlFor={`${formId}-share`} className="field-label">
@@ -365,7 +383,69 @@ export function CreateLaunchForm() {
           </p>
         </fieldset>
 
-        <fieldset className="space-y-3">
+        <fieldset className="space-y-3" disabled={locked}>
+          <legend className="text-base font-semibold text-ink">
+            Graduation threshold <span className="font-normal text-ink-3">(advanced)</span>
+          </legend>
+          <p className="field-hint -mt-1">
+            How much the presale must raise before the curve completes, the vault is funded and the floor goes live.
+            The default is {formatUsdWhole(DEFAULT_THRESHOLD_USD)}; a small threshold makes a cheap demo with the same
+            mechanics. Fixed in USD at launch and converted to {market?.asset.symbol ?? "the quote asset"} at the price
+            shown above.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {THRESHOLD_PRESETS_USD.map((amount) => {
+              const selected = thresholdUsd === amount;
+              return (
+                <button
+                  key={amount}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => update("thresholdUsd", String(amount))}
+                  className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors ${
+                    selected ? "border-brand bg-brand-soft/60 text-ink ring-1 ring-brand" : "border-line text-ink-2 hover:border-line-strong"
+                  }`}
+                >
+                  {formatUsdWhole(amount)}
+                  {amount === DEFAULT_THRESHOLD_USD ? <span className="ml-1 font-normal text-ink-3">default</span> : null}
+                </button>
+              );
+            })}
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor={`${formId}-threshold`} className="field-label">
+              Custom amount in USD
+            </label>
+            <input
+              id={`${formId}-threshold`}
+              className="input tnum"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder={String(DEFAULT_THRESHOLD_USD)}
+              value={values.thresholdUsd}
+              aria-invalid={errors.thresholdUsd || previewError ? true : undefined}
+              aria-describedby={`${formId}-threshold-hint`}
+              onChange={(e) => update("thresholdUsd", e.target.value)}
+            />
+            <p
+              id={`${formId}-threshold-hint`}
+              className={errors.thresholdUsd || previewError ? "text-sm text-risk" : "field-hint"}
+            >
+              {errors.thresholdUsd ??
+                previewError ??
+                `Between ${formatUsdWhole(MIN_THRESHOLD_USD)} and ${formatUsdWhole(THRESHOLD_MAX_USD)}. Checked against the same rules the chain applies to the pool config.`}
+            </p>
+          </div>
+          {thresholdUsd !== null && thresholdUsd < METEORA_KEEPER_MIN_THRESHOLD_USD ? (
+            <p className="rounded-lg bg-sunken px-3 py-2 text-sm text-ink-2">
+              Below about {formatUsdWhole(METEORA_KEEPER_MIN_THRESHOLD_USD)} Meteora&apos;s keeper does not migrate the
+              pool for you. Migration and the vault harvest then wait for the permissionless crank on the token page —
+              anyone can run it, and until they do there is no floor.
+            </p>
+          ) : null}
+        </fieldset>
+
+        <fieldset className="space-y-3" disabled={locked}>
           <legend className="text-base font-semibold text-ink">
             Your first buy <span className="font-normal text-ink-3">(optional)</span>
           </legend>
@@ -395,16 +475,12 @@ export function CreateLaunchForm() {
           {firstBuyNeedsAttestation ? <AttestationCheckbox /> : null}
         </fieldset>
 
-        <fieldset className="space-y-2">
+        <fieldset className="space-y-2" disabled={locked}>
           <legend className="text-base font-semibold text-ink">Fixed terms</legend>
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
             <div className="flex justify-between gap-3 rounded-lg bg-sunken px-3 py-2">
               <dt className="text-ink-2">Exit fee</dt>
               <dd className="font-semibold text-ink">{formatPercent(DEFAULT_EXIT_FEE_BPS / 10_000)}, stays in vault</dd>
-            </div>
-            <div className="flex justify-between gap-3 rounded-lg bg-sunken px-3 py-2">
-              <dt className="text-ink-2">Graduation threshold</dt>
-              <dd className="font-semibold text-ink">≈ {formatUsd(DEFAULT_THRESHOLD_USD)}</dd>
             </div>
             <div className="flex justify-between gap-3 rounded-lg bg-sunken px-3 py-2">
               <dt className="text-ink-2">Curve trading fee</dt>
@@ -472,11 +548,14 @@ export function CreateLaunchForm() {
       <div className="lg:sticky lg:top-20">
         <LaunchPreviewPanel
           preview={preview}
-          error={previewError ?? (markets.isError ? "Could not load quote prices." : null)}
+          error={
+            errors.thresholdUsd ?? previewError ?? (markets.isError ? "Could not load quote prices." : null)
+          }
           loading={markets.isPending}
           market={market}
           preset={values.preset}
           vaultSharePct={values.vaultSharePct}
+          thresholdUsd={thresholdUsd}
           name={values.name}
           symbol={values.symbol}
           imageUrl={errors.imageUrl ? "" : values.imageUrl}

@@ -1,7 +1,7 @@
 import type { CurvePreset, LaunchPreview } from "@stockfloor/sdk";
 import type { QuoteMarket } from "@/lib/data/types";
-import { BASE_DECIMALS, DEFAULT_THRESHOLD_USD } from "@/lib/config";
-import { formatMaxLoss, formatPercent, formatTokenAmount, formatUsd } from "@/lib/format";
+import { BASE_DECIMALS } from "@/lib/config";
+import { EMPTY, formatMaxLoss, formatPercent, formatTokenAmount, formatUsd } from "@/lib/format";
 import { quoteRawToUsd } from "@/lib/metrics";
 import { TokenAvatar } from "@/components/ui/TokenAvatar";
 import { CurveSketch } from "./CurveSketch";
@@ -13,6 +13,7 @@ export function LaunchPreviewPanel({
   market,
   preset,
   vaultSharePct,
+  thresholdUsd,
   name,
   symbol,
   imageUrl,
@@ -23,6 +24,8 @@ export function LaunchPreviewPanel({
   market: QuoteMarket | null;
   preset: CurvePreset;
   vaultSharePct: number;
+  /** Graduation threshold the preview was computed with; null when the form value is not usable. */
+  thresholdUsd: number | null;
   name: string;
   symbol: string;
   imageUrl: string;
@@ -97,7 +100,7 @@ export function LaunchPreviewPanel({
                 })}{" "}
                 {quoteSymbol}
               </dd>
-              <dd className="text-xs text-ink-3">≈ {formatUsd(DEFAULT_THRESHOLD_USD)}</dd>
+              <dd className="text-xs text-ink-3">{thresholdUsd !== null ? `≈ ${formatUsd(thresholdUsd)}` : EMPTY}</dd>
             </div>
             <div>
               <dt className="text-xs text-ink-3">Supply at graduation</dt>
