@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Keypair } from "@solana/web3.js";
 import { MAINNET_GENESIS_HASH } from "@stockfloor/sdk";
 import { checkFaucetRpc } from "./guard";
+import { faucetMessage } from "./message";
 import { FAUCET_SOL_LAMPORTS, FAUCET_TOKEN_WHOLE, handleFaucetRequest, handleFaucetStatus } from "./handler";
 import { fundWallet } from "./fund";
 
@@ -148,3 +149,12 @@ describe("/api/faucet route", () => {
     expect(fetchSpy.mock.calls.map(([, init]) => (JSON.parse(init.body) as { method: string }).method)).toEqual(["getGenesisHash", "getVersion"]);
   });
 });
+
+describe("faucetMessage", () => {
+  it("reports the quote token in UI units with the ScaledUiAmount multiplier, as the wallet shows it", () => {
+    const funded = { token: "SPYx", rawAdded: "500000000", solLamportsAdded: "10000000000" };
+    expect(faucetMessage(funded, { decimals: 8, multiplier: 1.005714560286254 })).toBe("Added 10 SOL and 5.0285 SPYx on the local fork.");
+    expect(faucetMessage(funded, null)).toBe("Added 10 SOL and 500,000,000 raw units of SPYx on the local fork.");
+  });
+});
+

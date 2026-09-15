@@ -35,6 +35,17 @@ describe("<LaunchCard />", () => {
     expect(screen.queryByText(/Max loss/)).toBeNull();
   });
 
+  it("never shows an incomplete curve as 100% complete", () => {
+    const tide = { quoteReserveRaw: 996n, thresholdQuoteRaw: 1000n };
+    return new MockDataSource(0).listLaunches().then((launches) => {
+      const presale = { ...launches.find((l) => l.symbol === "TIDE")!, ...tide };
+      render(<LaunchCard launch={presale} />);
+      expect(screen.getByText("99%")).toBeTruthy();
+      expect(screen.queryByText("100%")).toBeNull();
+      expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("99");
+    });
+  });
+
   it("renders every mock launch without errors", async () => {
     const launches = await new MockDataSource(0).listLaunches();
     expect(launches).toHaveLength(4);

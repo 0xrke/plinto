@@ -89,6 +89,20 @@ export function formatPercent(fraction: number, options: FormatPercentOptions = 
 }
 
 /**
+ * Formats a progress fraction (0..1) as a percentage rounded to nearest at `digits` fraction digits,
+ * except that a value below 1 never reads "100%" (it caps at 99%, or 99.9% with one digit). Values
+ * above 1 are clamped.
+ */
+export function formatProgress(fraction: number, digits = 0): string {
+  if (!Number.isFinite(fraction)) return EMPTY;
+  if (fraction >= 1) return "100%";
+  const scale = 10 ** digits;
+  const rounded = Math.round(Math.max(fraction, 0) * 100 * scale) / scale;
+  const capped = Math.min(rounded, 100 - 1 / scale);
+  return `${new Intl.NumberFormat("en-US", { minimumFractionDigits: 0, maximumFractionDigits: digits }).format(capped)}%`;
+}
+
+/**
  * Formats the maximum loss fraction Z (0..1) for the buy button: "−91.7%".
  * Zero renders as "0%" without a sign.
  */

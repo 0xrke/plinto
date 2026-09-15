@@ -1,4 +1,4 @@
-import { formatPercent } from "@/lib/format";
+import { formatProgress } from "@/lib/format";
 
 export function ProgressBar({
   value,
@@ -18,8 +18,8 @@ export function ProgressBar({
       aria-label={label}
       aria-valuemin={0}
       aria-valuemax={100}
-      aria-valuenow={Math.round(pct)}
-      aria-valuetext={formatPercent(value)}
+      aria-valuenow={value >= 1 ? 100 : Math.min(Math.round(pct), 99)}
+      aria-valuetext={formatProgress(value, 1)}
       className={`w-full overflow-hidden rounded-full bg-presale-soft ${size === "sm" ? "h-1.5" : "h-2.5"}`}
     >
       <div

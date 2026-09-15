@@ -103,8 +103,8 @@ mainnet-only, and the quote asset is the default.
   server RPC host parses as 127.0.0.1 / localhost / ::1 without credentials, then requires a Surfpool
   surfnet (`getVersion` `surfnet-version` and `surfnet_getLocalSignatures`). It airdrops 10 SOL, creates the
   wallet's SPYx (or another allowlisted quote) associated token account through the ATA program paid by a
-  throwaway in-memory keypair, and adds 5 whole tokens with `surfnet_setAccount` (token account amount and
-  mint supply). A JSON content type is required (cross-site form posts are refused).
+  throwaway in-memory keypair, and adds 5 whole raw-unit tokens (5×10^8 raw SPYx) with `surfnet_setAccount` (token account amount and
+  mint supply). The button reports the UI amount the wallet shows (≈5.03 SPYx at the current multiplier). A JSON content type is required (cross-site form posts are refused).
 - **Wallets**: the app only asks the wallet to sign and sends through its own RPC, so transactions go to
   the fork whatever network the wallet shows. Wallet simulation previews may warn because the wallet
   simulates against its own network; Solflare and Backpack can point their RPC at the fork for accurate

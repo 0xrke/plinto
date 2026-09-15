@@ -5,7 +5,7 @@ import Link from "next/link";
 import { maxLossFraction } from "@stockfloor/sdk";
 import { useLaunch } from "@/lib/data/context";
 import type { LaunchSummary } from "@/lib/data/types";
-import { formatMaxLoss, formatMultiple, formatPercent, formatTokenAmount, formatUsd, truncateAddress } from "@/lib/format";
+import { formatMaxLoss, formatMultiple, formatPercent, formatProgress, formatTokenAmount, formatUsd, truncateAddress } from "@/lib/format";
 import {
   launchFloorUsd,
   presaleProgress,
@@ -201,7 +201,7 @@ function PresaleBody({ launch }: { launch: LaunchSummary }) {
             {graduating ? "Curve complete" : "Progress to graduation"}
           </h2>
           <div className="mt-4 flex flex-wrap items-end justify-between gap-2">
-            <p className="text-3xl font-semibold tracking-tight text-ink">{formatPercent(progress, { digits: 0 })}</p>
+            <p className="text-3xl font-semibold tracking-tight text-ink">{formatProgress(progress)}</p>
             <p className="text-sm text-ink-2">
               <span className="font-semibold text-ink">
                 {formatTokenAmount(launch.quoteReserveRaw, quote.asset.decimals, { multiplier: quote.multiplier })}

@@ -3,18 +3,20 @@
 import { useEffect, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { IS_LOCAL_RPC } from "@/lib/config";
-import { useData, useRefreshChainData } from "@/lib/data/context";
+import { useData, useQuoteMarkets, useRefreshChainData } from "@/lib/data/context";
+import { faucetMessage, type FaucetFunded } from "@/lib/faucet/message";
 
 type FaucetState = { status: "idle" } | { status: "pending" } | { status: "done"; message: string } | { status: "error"; message: string };
 
 /**
  * Local fork faucet: asks the app's /api/faucet route (localhost RPC only, Surfpool cheatcodes) for
- * 10 SOL and 5 SPYx. Rendered only for the chain data source with a loopback RPC and a connected wallet.
+ * 10 SOL and 5×10^8 raw SPYx (≈5.03 SPYx at the current multiplier). Rendered only for the chain data source with a loopback RPC and a connected wallet.
  */
 export function FaucetButton() {
   const { dataSource } = useData();
   const { publicKey, connected } = useWallet();
   const refresh = useRefreshChainData();
+  const markets = useQuoteMarkets();
   const [state, setState] = useState<FaucetState>({ status: "idle" });
 
   useEffect(() => {
@@ -34,9 +36,11 @@ export function FaucetButton() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ wallet: publicKey.toBase58(), token: "SPYx" }),
       });
-      const body = (await res.json()) as { ok?: boolean; error?: string };
+      const body = (await res.json()) as { ok?: boolean; error?: string } & Partial<FaucetFunded>;
       if (!res.ok || !body.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-      setState({ status: "done", message: "Added 10 SOL and 5 SPYx on the local fork." });
+      const spyx = markets.data?.find((m) => m.asset.symbol === (body.token ?? "SPYx"));
+      const funded: FaucetFunded = { token: body.token ?? "SPYx", rawAdded: body.rawAdded ?? "0", solLamportsAdded: body.solLamportsAdded ?? "0" };
+      setState({ status: "done", message: faucetMessage(funded, spyx ? { decimals: spyx.asset.decimals, multiplier: spyx.multiplier } : null) });
       refresh();
     } catch (e) {
       setState({ status: "error", message: e instanceof Error ? e.message : String(e) });

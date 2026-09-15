@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { maxLossFraction } from "@stockfloor/sdk";
 import type { LaunchSummary } from "@/lib/data/types";
-import { formatMaxLoss, formatPercent, formatUsd } from "@/lib/format";
+import { formatMaxLoss, formatPercent, formatProgress, formatUsd } from "@/lib/format";
 import { launchFloorUsd, presaleProgress, projectedFloorUsd, quoteRawToUsd } from "@/lib/metrics";
 import { PhaseBadge } from "@/components/ui/PhaseBadge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -58,7 +58,7 @@ export function LaunchCard({ launch }: { launch: LaunchSummary }) {
                 <span className="font-semibold text-ink">{formatUsd(raisedUsd)}</span> of{" "}
                 {formatUsd(thresholdUsd)}
               </span>
-              <span className="font-semibold text-presale">{formatPercent(progress, { digits: 0 })}</span>
+              <span className="font-semibold text-presale">{formatProgress(progress)}</span>
             </div>
             <ProgressBar value={progress} label={`${launch.name} progress to graduation`} size="sm" />
           </div>

@@ -7,6 +7,7 @@ import {
   formatMultiple,
   formatNumber,
   formatPercent,
+  formatProgress,
   formatTokenAmount,
   formatUsd,
   parseTokenInput,
@@ -43,6 +44,24 @@ describe("formatUsd", () => {
     expect(formatUsd(1_234_567, { compact: true })).toBe("$1.2M");
     expect(formatUsd(12_500, { compact: true })).toBe("$12.5K");
     expect(formatUsd(9_999.99, { compact: true })).toBe("$9,999.99");
+  });
+});
+
+describe("formatProgress", () => {
+  it("never shows an incomplete curve as 100%", () => {
+    // formatPercent rounds to nearest, which showed a 99.6% curve as complete.
+    expect(formatPercent(0.996, { digits: 0 })).toBe("100%");
+    expect(formatProgress(0.996)).toBe("99%");
+    expect(formatProgress(0.999999)).toBe("99%");
+    expect(formatProgress(1)).toBe("100%");
+    expect(formatProgress(1.5)).toBe("100%");
+    // Below the cap it rounds to nearest like before.
+    expect(formatProgress(0.619999)).toBe("62%");
+    expect(formatProgress(0.29)).toBe("29%");
+    expect(formatProgress(0)).toBe("0%");
+    expect(formatProgress(0.9996, 1)).toBe("99.9%");
+    expect(formatProgress(0.1234, 1)).toBe("12.3%");
+    expect(formatProgress(Number.NaN)).toBe(EMPTY);
   });
 });
 
