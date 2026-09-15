@@ -11,6 +11,7 @@ import { NOT_WIRED, StubLaunchActions } from "@/lib/data/actions";
 import { DataProvider } from "@/lib/data/context";
 import type { LaunchSummary } from "@/lib/data/types";
 import { formatTokenAmount } from "@/lib/format";
+import { floorQuotePerToken } from "@/lib/metrics";
 import { Disclosures } from "./Disclosures";
 import { RedeemPanel } from "./RedeemPanel";
 import { VaultStats } from "./VaultStats";
@@ -157,5 +158,36 @@ describe("vault guarantees are stated with their exceptions", () => {
     expect(screen.queryByText(/nobody can pause it except/)).toBeNull();
     expect(screen.getByText(/The SPYx issuer's permanent delegate and a program upgrade are exceptions/)).toBeTruthy();
     expect(screen.getByText(/a program upgrade could change the rules/)).toBeTruthy();
+  });
+
+  it("the post-redemption floor is not promised to hold in USD, only in the quote asset", async () => {
+    const launch = await harbor();
+    render(
+      <Providers>
+        <RedeemPanel launch={launch} />
+      </Providers>,
+    );
+    fireEvent.change(await screen.findByLabelText("Amount to redeem"), { target: { value: "1000000" } });
+    const row = screen.getByText("Floor for remaining holders").closest("div")!;
+    // The floor per token only rises in SPYx; in USD it moves with the underlying, so "never lower"
+    // next to a dollar figure would be a promise the vault cannot keep.
+    expect(row.textContent).toMatch(/\(never falls in SPYx\)$/);
+    expect(row.textContent).not.toMatch(/never lower/);
+  });
+
+  it("shows the floor per token in the quote asset rounded down, never above what the vault backs", async () => {
+    const launch = await harbor();
+    // vault / supply × 10^(6−8) × multiplier = 1.29996…e−9 SPYx per token: rounding significant
+    // digits to nearest would print 0.0000000013, a floor the vault does not back.
+    const tuned = { ...launch, vaultRaw: 129_251_000n, supplyRaw: 1_000_000_000_000_000n };
+    const exact = floorQuotePerToken(tuned.vaultRaw, tuned.supplyRaw, tuned.baseDecimals, tuned.quote);
+    expect(new Intl.NumberFormat("en-US", { maximumSignificantDigits: 4 }).format(exact)).toBe("0.0000000013");
+    render(
+      <Providers>
+        <VaultStats launch={tuned} />
+      </Providers>,
+    );
+    expect(screen.getByText("0.000000001299 SPYx")).toBeTruthy();
+    expect(Number("0.000000001299")).toBeLessThanOrEqual(exact);
   });
 });

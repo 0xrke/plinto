@@ -8,6 +8,7 @@ import {
   formatNumber,
   formatPercent,
   formatProgress,
+  formatSignificantDown,
   formatTokenAmount,
   formatUsd,
   parseTokenInput,
@@ -189,5 +190,22 @@ describe("formatCompact and truncateAddress", () => {
   it("shortens long addresses and leaves short strings alone", () => {
     expect(truncateAddress("XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W")).toBe("XsoC…DF2W");
     expect(truncateAddress("short")).toBe("short");
+  });
+});
+
+describe("formatSignificantDown", () => {
+  it("rounds significant digits down, so a floor is never shown above its real value", () => {
+    // Intl's maximumSignificantDigits rounds to nearest and would print 0.0000000013 here.
+    expect(formatSignificantDown(1.2999e-9)).toBe("0.000000001299");
+    expect(formatSignificantDown(0.00012999)).toBe("0.0001299");
+    expect(formatSignificantDown(1.99999)).toBe("1.999");
+    expect(formatSignificantDown(12345.6)).toBe("12,340");
+  });
+
+  it("renders zero and unusable values as 0", () => {
+    expect(formatSignificantDown(0)).toBe("0");
+    expect(formatSignificantDown(-1)).toBe("0");
+    expect(formatSignificantDown(Number.NaN)).toBe("0");
+    expect(formatSignificantDown(Number.POSITIVE_INFINITY)).toBe("0");
   });
 });

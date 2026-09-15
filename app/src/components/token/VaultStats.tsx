@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { LaunchSummary } from "@/lib/data/types";
-import { formatPercent, formatTokenAmount, formatUsd, truncateAddress } from "@/lib/format";
+import { formatPercent, formatSignificantDown, formatTokenAmount, formatUsd, truncateAddress } from "@/lib/format";
 import { floorQuotePerToken, launchFloorUsd, quoteRawToUsd } from "@/lib/metrics";
 
 function Row({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
@@ -22,9 +22,12 @@ const PRICE_SOURCE_LABEL: Record<LaunchSummary["quote"]["priceSource"], string> 
   mock: "",
 };
 
+/**
+ * The floor per token in the quote asset. Rounded down: `Intl` rounds to nearest, which can print a
+ * floor above the one the vault actually backs.
+ */
 function formatFloorQuote(value: number): string {
-  if (!(value > 0)) return "0";
-  return new Intl.NumberFormat("en-US", { maximumSignificantDigits: 4 }).format(value);
+  return formatSignificantDown(value, 4);
 }
 
 export function VaultStats({ launch }: { launch: LaunchSummary }) {

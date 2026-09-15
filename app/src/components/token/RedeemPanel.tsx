@@ -132,9 +132,16 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
                   <dt className="text-ink-3">{marketExact !== null ? "Selling at market instead (exact DAMM v2 quote)" : "Selling at market instead (est.)"}</dt>
                   <dd className="tnum text-ink-3">≈ {formatUsd(marketUsd)}</dd>
                 </div>
+                {/*
+                  The floor per token never falls in the quote asset (the exit fee stays in the vault),
+                  but this figure is in USD, where it moves with the underlying. Do not promise "never
+                  lower" next to a dollar amount.
+                */}
                 <div className="flex justify-between gap-3 text-xs">
                   <dt className="text-ink-3">Floor for remaining holders</dt>
-                  <dd className="tnum text-ink-3">{formatUsd(preview.floorAfterUsd)} (never lower)</dd>
+                  <dd className="tnum text-ink-3">
+                    {formatUsd(preview.floorAfterUsd)} (never falls in {quote.symbol})
+                  </dd>
                 </div>
               </>
             ) : null}

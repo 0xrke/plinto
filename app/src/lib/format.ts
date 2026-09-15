@@ -174,6 +174,20 @@ export function formatTokenAmount(raw: bigint, decimals: number, options: Format
 }
 
 /**
+ * Formats a positive amount with `digits` significant digits, rounding **down** and grouping the
+ * integer part. Used for money figures that are not raw amounts (the floor per token in the quote
+ * asset), so they are never shown above their real value. Zero and non-finite values render "0".
+ */
+export function formatSignificantDown(value: number, digits = 4): string {
+  if (!Number.isFinite(value) || value <= 0) return "0";
+  const rounded = new Decimal(value).toSignificantDigits(digits, Decimal.ROUND_DOWN);
+  if (rounded.isZero()) return "0";
+  const [intPart = "0", fracPart = ""] = rounded.toFixed().split(".");
+  const grouped = BigInt(intPart).toLocaleString("en-US");
+  return fracPart ? `${grouped}.${fracPart}` : grouped;
+}
+
+/**
  * Parses a user-typed token amount into raw units without floating point.
  * Accepts "1", "1.5", ".5", "1,000.25". Returns null for invalid input or when the
  * input has more fraction digits than the token supports.
