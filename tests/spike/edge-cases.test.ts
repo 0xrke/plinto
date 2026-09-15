@@ -47,7 +47,7 @@ async function launchWithSpikePda(fork: Fork) {
 
 describe("M1 spike edge cases (LiteSVM fork)", () => {
   it("partner migration fee can be withdrawn before migration; migration still succeeds with identical DAMM v2 reserves", async () => {
-    const fork = Fork.create({ spike: true });
+    const fork = Fork.create({ spike: true, stockfloor: false });
     const l = await launchWithSpikePda(fork);
     await buyOnCurve(fork, l.keys, fundedWallet(fork, 3n * SPYX_ONE), 2n * SPYX_ONE);
 
@@ -69,7 +69,7 @@ describe("M1 spike edge cases (LiteSVM fork)", () => {
   });
 
   it("paused SPYx: curve trades and the PDA harvest fail atomically; after unpause the harvest succeeds", async () => {
-    const fork = Fork.create({ spike: true });
+    const fork = Fork.create({ spike: true, stockfloor: false });
     const l = await launchWithSpikePda(fork);
     await completeCurve(fork, l.keys, THRESHOLD);
 
@@ -106,7 +106,7 @@ describe("M1 spike edge cases (LiteSVM fork)", () => {
   });
 
   it("ScaledUiAmount multiplier change mid-lifecycle leaves raw amounts unchanged", async () => {
-    const fork = Fork.create({ spike: true });
+    const fork = Fork.create({ spike: true, stockfloor: false });
     const l = await launchWithSpikePda(fork);
     const original = getScaledUiAmount(fork, SPYX_MINT)!;
     expect(original.multiplier).toBeGreaterThan(0.9);
@@ -129,7 +129,7 @@ describe("M1 spike edge cases (LiteSVM fork)", () => {
   });
 
   it("anyone can create a second pool on the same DBC config (fee claimer PDA is shared)", async () => {
-    const fork = Fork.create({ spike: true });
+    const fork = Fork.create({ spike: true, stockfloor: false });
     const l = await launchWithSpikePda(fork);
     const stranger = fork.newWallet();
     const baseMint2 = Keypair.generate();
@@ -151,7 +151,7 @@ describe("M1 spike edge cases (LiteSVM fork)", () => {
   });
 
   it("withdraw_leftover is rejected for dynamic-supply configs (unsold base is burned at migration instead)", async () => {
-    const fork = Fork.create({ spike: true });
+    const fork = Fork.create({ spike: true, stockfloor: false });
     const l = await launchWithSpikePda(fork);
     await completeCurve(fork, l.keys, THRESHOLD);
     await migrateToDammV2(fork, l.keys);

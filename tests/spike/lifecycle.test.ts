@@ -64,7 +64,7 @@ describe("M1 spike: SPYx-quoted DBC lifecycle with a PDA fee_claimer (LiteSVM fo
   const log: Record<string, unknown> = {};
 
   beforeAll(async () => {
-    fork = Fork.create({ spike: true });
+    fork = Fork.create({ spike: true, stockfloor: false });
     const configKp = Keypair.generate();
     config = configKp.publicKey;
     authority = deriveAuthority(config, SPIKE_PROGRAM_ID);
@@ -126,6 +126,13 @@ describe("M1 spike: SPYx-quoted DBC lifecycle with a PDA fee_claimer (LiteSVM fo
     expect(bnToBig(pool.quoteReserve)).toBeLessThan(THRESHOLD);
     expect(bnToBig(pool.partnerQuoteFee)).toBeGreaterThan(0n);
     expect(bnToBig(pool.partnerBaseFee)).toBe(0n); // collect fee mode = quote token
+    // Fee split: protocol 20% of the total fee; the rest split creator 30% / partner 70%.
+    const partnerFee = bnToBig(pool.partnerQuoteFee);
+    const creatorFee = bnToBig(pool.creatorQuoteFee);
+    const protocolFee = bnToBig(pool.protocolQuoteFee);
+    const lp = partnerFee + creatorFee;
+    expect(Number((lp * 1000n) / (lp + protocolFee))).toBeGreaterThanOrEqual(799);
+    expect(Number((partnerFee * 1000n) / lp)).toBeGreaterThanOrEqual(699);
     log.feesBeforeClaim = {
       partnerQuote: bnToBig(pool.partnerQuoteFee),
       creatorQuote: bnToBig(pool.creatorQuoteFee),
@@ -258,6 +265,18 @@ describe("M1 spike: SPYx-quoted DBC lifecycle with a PDA fee_claimer (LiteSVM fo
     expect(bnToBig(ev!.data.quoteReceived)).toBe(250_000_000n);
     log.partnerMigrationFee = split.partner;
     log.cuWithdrawMigrationFee = res.computeUnits;
+  });
+
+  it("harvests the partner trading fee accrued by the completing buy after migration", async () => {
+    const pending = bnToBig(fetchVirtualPool(fork, keys.pool).partnerQuoteFee);
+    expect(pending).toBeGreaterThan(0n);
+    const before = tokenAmount(fork, pdaQuoteAta);
+    fork.send(
+      [await spikeClaimPartnerTradingFeeIx({ keys, tokenBaseAccount: pdaBaseAta, tokenQuoteAccount: pdaQuoteAta, maxBase: U64_MAX, maxQuote: U64_MAX })],
+      [fork.newWallet()],
+    );
+    expect(tokenAmount(fork, pdaQuoteAta) - before).toBe(pending);
+    log.partnerTradingFeeClaimedAfterMigration = pending;
   });
 
   it("rejects a random signer calling DBC withdraw_migration_fee(flag=0) directly", async () => {

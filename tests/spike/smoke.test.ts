@@ -5,7 +5,7 @@ import { extensionTypes, fundSpyx, mintSupply, tokenAmount } from "../src/token.
 
 describe("fork smoke", () => {
   it("loads fixtures and funds a SPYx ATA via the real ATA + Token-2022 programs", () => {
-    const fork = Fork.create();
+    const fork = Fork.create({ spike: false, stockfloor: false });
     const mint = fork.mustGetAccount(SPYX_MINT);
     expect(mint.owner.equals(TOKEN_2022_PROGRAM_ID)).toBe(true);
     expect(fork.getAccount(DBC_TOKEN_BADGE_SPYX)).not.toBeNull();
