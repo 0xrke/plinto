@@ -11,10 +11,11 @@ use crate::state::Launch;
 ///
 /// `create_launch` committed the base mint, and DBC derives the pool address from
 /// `(config, base_mint, quote_mint)`, so exactly one pool can match: the one created with
-/// the base mint keypair, and it must name the launch creator (DBC pool creation needs the
-/// creator's signature). Anyone can therefore register it, and the creator cannot hold the
-/// migration fee hostage by never registering. Other pools on the same config use other
-/// base mints and are ignored forever.
+/// the base mint keypair (which only the launch creator's client holds). Anyone can
+/// therefore register it, and the creator cannot hold the migration fee hostage, neither
+/// by never registering nor by creating the pool under another creator key (`pool.creator`
+/// is deliberately not compared: it only decides who receives the creator's own DBC fee
+/// share). Other pools on the same config use other base mints and are ignored forever.
 ///
 /// Account order:
 /// 0. `launch`     writable: PDA `["launch", config]`
@@ -64,11 +65,6 @@ pub fn handle_register_pool(ctx: Context<RegisterPool>) -> Result<()> {
         pool.pool_state.base_mint,
         base_mint.key(),
         StockfloorError::BaseMintMismatch
-    );
-    require_keys_eq!(
-        pool.pool_state.creator,
-        launch.creator,
-        StockfloorError::PoolCreatorMismatch
     );
     require!(
         pool.pool_state.pool_type == DBC_POOL_TYPE_SPL_TOKEN,

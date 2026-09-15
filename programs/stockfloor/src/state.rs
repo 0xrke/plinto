@@ -27,7 +27,7 @@ pub struct Launch {
     pub migrated: bool,
     /// DBC config (one config per launch).
     pub config: Pubkey,
-    /// Launch creator. Must sign `register_pool` and must be the DBC pool creator.
+    /// Launch creator (signed `create_launch`). Informational: registration is permissionless.
     pub creator: Pubkey,
     /// Canonical DBC virtual pool. `Pubkey::default()` until `register_pool`.
     pub pool: Pubkey,

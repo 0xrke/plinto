@@ -220,6 +220,51 @@ describe("2. register_pool is permissionless for the committed base mint: the cr
     await redeemExact(fork, L, alice, tokenAmount(fork, splAta(alice.publicKey, L.keys.baseMint)) / 2n);
   });
 
+  it("a creator who creates the committed pool under another creator key still cannot block registration", async () => {
+    const fork = Fork.create({ stockfloor: true, spike: false });
+    const partner = fork.newWallet();
+    const creator = fork.newWallet();
+    const sockPuppet = fork.newWallet(); // a second wallet of the same creator
+    const configKp = Keypair.generate();
+    const config = configKp.publicKey;
+    const authority = authorityPda(config)[0];
+    const input = {
+      name: "Sock",
+      symbol: "SOCK",
+      uri: "https://example.com/sock.json",
+      quote: DEFAULT_QUOTE_ASSET,
+      quotePriceUsd: SPYX_USD_PRICE,
+      quoteMultiplier: spyxMultiplier(fork),
+      preset: "gentle" as const,
+      vaultSharePct: 50,
+    };
+    const { feeClaimer, leftoverReceiver, quoteMint, ...params } = buildDbcConfigParams(input, authority, authority);
+    fork.send(
+      [await createConfigIx({ config, feeClaimer, leftoverReceiver, quoteMint, payer: partner.publicKey, params: params as never, tokenBadge: DBC_TOKEN_BADGE_SPYX })],
+      [partner, configKp],
+    );
+    const baseMint = Keypair.generate();
+    fork.send(
+      [await createLaunchIx({ payer: partner.publicKey, creator: creator.publicKey, config, baseMint: baseMint.publicKey, exitFeeBps: 200 })],
+      [partner, creator, configKp],
+    );
+    const init = await initializeVirtualPoolWithSplTokenIx({
+      config,
+      creator: sockPuppet.publicKey,
+      baseMint: baseMint.publicKey,
+      quoteMint: SPYX_MINT,
+      payer: sockPuppet.publicKey,
+      name: input.name,
+      symbol: input.symbol,
+      uri: input.uri,
+      tokenBadge: DBC_TOKEN_BADGE_SPYX,
+    });
+    fork.send([init.ix], [sockPuppet, baseMint]);
+    const c = fork.newWallet(1);
+    fork.send([await registerPoolIx({ config, pool: init.pool, baseMint: baseMint.publicKey })], [c]);
+    expect(fetchLaunch(fork, config).pool.equals(init.pool)).toBe(true);
+  });
+
   it("create_launch can commit the base mint before the pool exists; registration works once DBC creates it", async () => {
     const fork = Fork.create({ stockfloor: true, spike: false });
     const partner = fork.newWallet();

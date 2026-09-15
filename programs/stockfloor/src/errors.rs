@@ -58,8 +58,6 @@ pub enum StockfloorError {
     PoolNotRegistered,
     #[msg("DBC pool belongs to a different config")]
     PoolConfigMismatch,
-    #[msg("DBC pool creator is not the launch creator")]
-    PoolCreatorMismatch,
     #[msg("Base mint does not match the DBC pool base mint")]
     BaseMintMismatch,
     #[msg("DBC pool base token must be SPL Token")]
