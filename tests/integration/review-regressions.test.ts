@@ -11,9 +11,11 @@
  *    create_launch now commits the base mint and register_pool is permissionless.
  * 3. redeem decoded the upgradeable DBC VirtualPool (exact size) on every call. Migration is now
  *    latched in Launch.migrated and decoders accept grown accounts.
- * 4. Harvests sign with the vault owner into upgradeable DBC / DAMM v2 with the vault writable,
- *    and only compared balances. They now refuse a vault with a delegate, close authority or
- *    foreign owner (CPI Guard and required memos are covered by the Rust unit tests).
+ * 4. Harvests signed with the vault owner into upgradeable DBC / DAMM v2 with the vault writable,
+ *    and only compared balances. They now refuse a vault with a delegate, close authority or an
+ *    owner other than the vault authority (CPI Guard and required memos are covered by the Rust
+ *    unit tests). Since M2 the vault owner is a separate PDA that never signs those CPIs at all
+ *    (see vault-authority.test.ts); this check remains as defence in depth.
  * 5. The floor view had no floor per token (see c1-lifecycle and the smoke test for the Q64 value).
  */
 import { BN } from "@coral-xyz/anchor";
@@ -44,7 +46,6 @@ import {
   fetchLaunch,
   floorIx,
   harvestCurveFeesIx,
-  harvestLeftoverIx,
   harvestLpFeesIx,
   harvestMigrationFeeIx,
   harvestSurplusIx,
@@ -227,7 +228,7 @@ describe("2. register_pool is permissionless for the committed base mint: the cr
     const sockPuppet = fork.newWallet(); // a second wallet of the same creator
     const configKp = Keypair.generate();
     const config = configKp.publicKey;
-    const authority = authorityPda(config)[0];
+    const claimer = authorityPda(config)[0];
     const input = {
       name: "Sock",
       symbol: "SOCK",
@@ -238,7 +239,7 @@ describe("2. register_pool is permissionless for the committed base mint: the cr
       preset: "gentle" as const,
       vaultSharePct: 50,
     };
-    const { feeClaimer, leftoverReceiver, quoteMint, ...params } = buildDbcConfigParams(input, authority, authority);
+    const { feeClaimer, leftoverReceiver, quoteMint, ...params } = buildDbcConfigParams(input, claimer, claimer);
     fork.send(
       [await createConfigIx({ config, feeClaimer, leftoverReceiver, quoteMint, payer: partner.publicKey, params: params as never, tokenBadge: DBC_TOKEN_BADGE_SPYX })],
       [partner, configKp],
@@ -271,7 +272,7 @@ describe("2. register_pool is permissionless for the committed base mint: the cr
     const creator = fork.newWallet();
     const configKp = Keypair.generate();
     const config = configKp.publicKey;
-    const authority = authorityPda(config)[0];
+    const claimer = authorityPda(config)[0];
     const input = {
       name: "Commit First",
       symbol: "CMT",
@@ -284,7 +285,7 @@ describe("2. register_pool is permissionless for the committed base mint: the cr
       thresholdUsd: 1000,
       exitFeeBps: 200,
     };
-    const { feeClaimer, leftoverReceiver, quoteMint, ...params } = buildDbcConfigParams(input, authority, authority);
+    const { feeClaimer, leftoverReceiver, quoteMint, ...params } = buildDbcConfigParams(input, claimer, claimer);
     fork.send(
       [await createConfigIx({ config, feeClaimer, leftoverReceiver, quoteMint, payer: partner.publicKey, params: params as never, tokenBadge: DBC_TOKEN_BADGE_SPYX })],
       [partner, configKp],
@@ -329,24 +330,23 @@ describe("3. redeem does not depend on DBC state once the migration is latched",
     fork.send([await harvestMigrationFeeIx({ keys: L.keys })], [fork.newWallet(1)]);
     expect(fetchLaunch(fork, L.config).migrated).toBe(true);
 
-    // A future DBC upgrade reallocs VirtualPool (appends fields). Emulated here without DBC's own
-    // loader being upgraded, so only stockfloor paths that decode the pool without calling DBC
-    // are meaningful: harvest_leftover (dynamic supply: decode only) accepts the grown account
-    // (minimum-size decoder), and redeem is exact.
+    // A future DBC upgrade reallocs VirtualPool (appends fields). Emulated without DBC's own loader
+    // being upgraded, so only stockfloor paths that do not call DBC are meaningful: redeem is exact.
+    // (The minimum-size decoder itself is exercised by the unlatched first redeem in the next test.)
     const acc = fork.mustGetAccount(L.keys.pool);
     fork.setAccount(L.keys.pool, { ...acc, data: Buffer.concat([acc.data, Buffer.alloc(64)]) });
     const c = fork.newWallet(1);
-    fork.send([await harvestLeftoverIx({ payer: c.publicKey, keys: L.keys })], [c]);
     const [h1, h2] = g.buyers;
     await redeemExact(fork, L, h1, tokenAmount(fork, splAta(h1.publicKey, L.keys.baseMint)) / 3n);
 
     // Worse: the account is re-typed (discriminator changes, unknown migration state). Instructions
-    // that decode it now fail, but redemptions no longer read DBC state.
+    // that decode it now fail (harvest_surplus decodes the pool before its CPI), but redemptions no
+    // longer read DBC state.
     fork.patchAccount(L.keys.pool, (d) => {
       d.fill(0xee, 0, 8);
       d[8 + 300] = 7; // migration_progress
     });
-    expect(errName(fork.sendExpectFail([await harvestLeftoverIx({ payer: c.publicKey, keys: L.keys })], [c]))).toBe("InvalidDbcPool");
+    expect(errName(fork.sendExpectFail([await harvestSurplusIx({ keys: L.keys })], [c]))).toBe("InvalidDbcPool");
     await redeemExact(fork, L, h2, tokenAmount(fork, splAta(h2.publicKey, L.keys.baseMint)));
     await redeemExact(fork, L, h1, tokenAmount(fork, splAta(h1.publicKey, L.keys.baseMint)));
   });
@@ -364,6 +364,9 @@ describe("3. redeem does not depend on DBC state once the migration is latched",
 
     await migrateToDammV2(fork, L.keys);
     expect(fetchLaunch(fork, L.config).migrated).toBe(false);
+    // The pool grows before the first (latching) redeem: the minimum-size decoder accepts it.
+    const acc = fork.mustGetAccount(L.keys.pool);
+    fork.setAccount(L.keys.pool, { ...acc, data: Buffer.concat([acc.data, Buffer.alloc(64)]) });
     await redeemExact(fork, L, alice, amount);
     expect(fetchLaunch(fork, L.config).migrated).toBe(true);
 
@@ -430,7 +433,7 @@ describe("4. harvests refuse an encumbered vault (the vault owner signs into upg
       [
         "foreign owner",
         () => fork.patchAccount(L.vault, (d) => evil.toBuffer().copy(d, 32)),
-        () => fork.patchAccount(L.vault, (d) => L.authority.toBuffer().copy(d, 32)),
+        () => fork.patchAccount(L.vault, (d) => L.vaultAuthority.toBuffer().copy(d, 32)),
       ],
     ];
     for (const [what, set, clear] of encumbrances) {

@@ -6,20 +6,45 @@
  *    increases on a redemption that retains a non-zero exit fee;
  * 2. only `redeem` takes quote out of the vault, and exactly the redeemer's net amount;
  * 3. `mint.supply` is the truth: it equals the sum of every base token account that exists
- *    (tracked explicitly: DBC base vault, DAMM v2 base vault, holders, Authority base ATA);
- * 4. the Authority holds no base tokens after any instruction (its base ATA is empty);
- * 5. the vault is the Authority's SPYx ATA (owner and mint never change).
+ *    (tracked explicitly: DBC base vault, DAMM v2 base vault, holders, claimer base ATA);
+ * 4. the claimer PDA holds no base tokens after any instruction (its base ATA is empty);
+ * 5. the claimer never holds or controls the vault: the vault is the vault authority's quote ATA
+ *    (owner and mint never change), with no delegate and no close authority.
  */
 import { PublicKey } from "@solana/web3.js";
 import { expect } from "vitest";
 import { Fork } from "./fork.js";
 import { mintSupply, tokenAccountMint, tokenAccountOwner, tokenAmount } from "./token.js";
 
+/** The launch accounts the tracker reads. */
+export interface FloorTrackerAccounts {
+  vault: PublicKey;
+  baseMint: PublicKey;
+  quoteMint: PublicKey;
+  /** PDA ["vault_authority", config]: the only allowed vault owner. */
+  vaultAuthority: PublicKey;
+  /** PDA ["authority", config]: DBC fee_claimer; must never own or control the vault. */
+  claimer: PublicKey;
+  /** ATA(claimer, base mint): must be empty after every non-donation step. */
+  claimerBaseAccount: PublicKey;
+}
+
+/** SPL / Token-2022 base account layout: delegate COption at 72, close_authority COption at 129. */
+export function tokenAccountDelegate(fork: Fork, account: PublicKey): PublicKey | null {
+  const d = fork.mustGetAccount(account).data;
+  return d.readUInt32LE(72) === 1 ? new PublicKey(d.subarray(76, 108)) : null;
+}
+
+export function tokenAccountCloseAuthority(fork: Fork, account: PublicKey): PublicKey | null {
+  const d = fork.mustGetAccount(account).data;
+  return d.readUInt32LE(129) === 1 ? new PublicKey(d.subarray(133, 165)) : null;
+}
+
 export interface FloorState {
   label: string;
   vault: bigint;
   supply: bigint;
-  authorityBase: bigint;
+  claimerBase: bigint;
   trackedBase: bigint;
 }
 
@@ -29,8 +54,8 @@ export type StepKind =
   /** A `redeem`: the vault must decrease by exactly `vaultOut`. */
   | "redeem"
   /**
-   * A plain token transfer into an Authority account (donation). The Authority may hold base
-   * tokens right after it; the next StockFloor instruction must burn them.
+   * A plain token transfer into the claimer's base ATA (donation). The claimer may hold base
+   * tokens right after it; the next burn must empty it.
    */
   | "donation";
 
@@ -45,15 +70,24 @@ export class FloorTracker {
   readonly history: FloorState[] = [];
   private readonly baseAccounts = new Map<string, PublicKey>();
 
+  readonly vault: PublicKey;
+  readonly baseMint: PublicKey;
+  readonly quoteMint: PublicKey;
+  readonly vaultAuthority: PublicKey;
+  readonly claimer: PublicKey;
+  readonly claimerBaseAccount: PublicKey;
+
   constructor(
     private readonly fork: Fork,
-    readonly vault: PublicKey,
-    readonly baseMint: PublicKey,
-    readonly authority: PublicKey,
-    readonly quoteMint: PublicKey,
-    readonly authorityBaseAccount: PublicKey,
+    accounts: FloorTrackerAccounts,
   ) {
-    this.trackBase(authorityBaseAccount);
+    this.vault = accounts.vault;
+    this.baseMint = accounts.baseMint;
+    this.quoteMint = accounts.quoteMint;
+    this.vaultAuthority = accounts.vaultAuthority;
+    this.claimer = accounts.claimer;
+    this.claimerBaseAccount = accounts.claimerBaseAccount;
+    this.trackBase(accounts.claimerBaseAccount);
   }
 
   /** Register a base token account so that it counts toward the supply reconciliation. */
@@ -68,7 +102,7 @@ export class FloorTracker {
       label,
       vault: tokenAmount(this.fork, this.vault),
       supply: mintSupply(this.fork, this.baseMint),
-      authorityBase: tokenAmount(this.fork, this.authorityBaseAccount),
+      claimerBase: tokenAmount(this.fork, this.claimerBaseAccount),
       trackedBase,
     };
   }
@@ -119,9 +153,13 @@ export class FloorTracker {
     const ctx = `[${s.label}]`;
     expect(s.trackedBase, `${ctx} mint.supply equals the sum of all base token accounts`).toBe(s.supply);
     if (kind !== "donation") {
-      expect(s.authorityBase, `${ctx} Authority holds no base tokens`).toBe(0n);
+      expect(s.claimerBase, `${ctx} claimer holds no base tokens`).toBe(0n);
     }
-    expect(tokenAccountOwner(this.fork, this.vault).equals(this.authority), `${ctx} vault owner is the Authority`).toBe(true);
+    const owner = tokenAccountOwner(this.fork, this.vault);
+    expect(owner.equals(this.vaultAuthority), `${ctx} vault owner is the vault authority`).toBe(true);
+    expect(owner.equals(this.claimer), `${ctx} the claimer does not own the vault`).toBe(false);
+    expect(tokenAccountDelegate(this.fork, this.vault), `${ctx} vault has no delegate`).toBeNull();
+    expect(tokenAccountCloseAuthority(this.fork, this.vault), `${ctx} vault has no close authority`).toBeNull();
     expect(tokenAccountMint(this.fork, this.vault).equals(this.quoteMint), `${ctx} vault mint is the quote mint`).toBe(true);
   }
 

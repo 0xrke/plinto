@@ -12,7 +12,7 @@
  *  5. harvest_curve_fees (exact partner share)
  *  6. curve completion (surplus)
  *  7. migration to DAMM v2
- *  8. harvest_migration_fee (exact), harvest_surplus (exact), harvest_leftover (supply effects)
+ *  8. harvest_migration_fee (exact), harvest_surplus (exact), burn_claimer_base (supply effects)
  *  9. DAMM v2 trades
  * 10. harvest_lp_fees (exact)
  * 11. redeem by several holders (exact net / fee)
@@ -38,6 +38,7 @@ import {
   redeemQuote,
   validateDbcConfigParams,
   vaultAddress,
+  vaultAuthorityPda,
 } from "@stockfloor/sdk";
 import { beforeAll, describe, expect, it } from "vitest";
 import { dbcProgram, dammProgram, parseCpiEvents, parseEvents } from "../src/anchor.js";
@@ -68,15 +69,16 @@ import { buyOnCurve, fundedWallet, Migration, migrateToDammV2, sellOnCurve } fro
 import {
   createLaunchIx,
   decodeFloorReturn,
-  deriveAuthorityBaseAccount,
+  burnClaimerBaseIx,
+  deriveClaimer,
+  deriveClaimerBaseAccount,
   expectedFloorQ64,
   deriveLaunch,
-  deriveStockfloorAuthority,
   deriveVault,
+  deriveVaultAuthority,
   fetchLaunch,
   floorIx,
   harvestCurveFeesIx,
-  harvestLeftoverIx,
   harvestLpFeesIx,
   harvestMigrationFeeIx,
   harvestSurplusIx,
@@ -86,6 +88,7 @@ import {
 } from "../src/stockfloor.js";
 import {
   createAta,
+  getAta,
   getScaledUiAmount,
   mintAuthority,
   mintDecimals,
@@ -158,7 +161,8 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
   let creator: Keypair;
   let configKp: Keypair;
   let config: PublicKey;
-  let authority: PublicKey;
+  let claimer: PublicKey; // ["authority", config]: DBC fee_claimer, LP NFT owner, CPI signer
+  let vaultAuthority: PublicKey; // ["vault_authority", config]: vault owner
   let vault: PublicKey;
   let launchPk: PublicKey;
   let input: LaunchInput;
@@ -166,7 +170,7 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
   let curve: ReturnType<typeof computeLaunchCurve>;
   let preview: ReturnType<typeof previewLaunch>;
   let keys: DbcPoolKeys;
-  let authorityBase: PublicKey;
+  let claimerBase: PublicKey;
   let tracker: FloorTracker;
   let rogue: { creator: Keypair; keys: DbcPoolKeys };
   let migration: Migration;
@@ -187,7 +191,8 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     creator = fork.newWallet();
     configKp = Keypair.generate();
     config = configKp.publicKey;
-    authority = authorityPda(config)[0];
+    claimer = authorityPda(config)[0];
+    vaultAuthority = vaultAuthorityPda(config)[0];
     vault = vaultAddress(config, SPYX_MINT, TOKEN_2022_PROGRAM_ID);
     launchPk = launchPda(config)[0];
     log.fixtures = { generatedAt: fork.manifest.generatedAt, slots: [...new Set(fork.manifest.accounts.map((a) => a.slot).concat(fork.manifest.programs.map((p) => p.slot)))].sort() };
@@ -195,11 +200,16 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
 
   // ---------------------------------------------------------------- 1. config
 
-  it("1. creates the SPYx-quoted DBC config from SDK buildDbcConfigParams (fee_claimer = leftover_receiver = Authority PDA)", async () => {
+  it("1. creates the SPYx-quoted DBC config from SDK buildDbcConfigParams (fee_claimer = leftover_receiver = claimer PDA)", async () => {
     // SDK PDAs match the harness derivations and the on-chain seeds.
-    expect(authority.equals(deriveStockfloorAuthority(config))).toBe(true);
+    expect(claimer.equals(deriveClaimer(config))).toBe(true);
+    expect(vaultAuthority.equals(deriveVaultAuthority(config))).toBe(true);
     expect(launchPk.equals(deriveLaunch(config))).toBe(true);
     expect(vault.equals(deriveVault(config))).toBe(true);
+    // Two distinct PDAs: the vault is the vault authority's SPYx ATA, never the claimer's.
+    expect(claimer.equals(vaultAuthority)).toBe(false);
+    expect(vault.equals(getAta(vaultAuthority, SPYX_MINT, TOKEN_2022_PROGRAM_ID))).toBe(true);
+    expect(vault.equals(getAta(claimer, SPYX_MINT, TOKEN_2022_PROGRAM_ID))).toBe(false);
     expect(dbcTokenBadgePda(SPYX_MINT)[0].equals(DBC_TOKEN_BADGE_SPYX)).toBe(true);
 
     // Effective ScaledUiAmount multiplier of the real SPYx mint at the fork clock.
@@ -224,13 +234,13 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
       exitFeeBps: EXIT_FEE_BPS,
     };
     expect(DEFAULT_QUOTE_ASSET.mint).toBe(SPYX_MINT.toBase58());
-    const built = buildDbcConfigParams(input, authority, authority);
+    const built = buildDbcConfigParams(input, claimer, claimer);
     curve = computeLaunchCurve(input);
     preview = previewLaunch(input);
     threshold = curve.thresholdQuoteRaw;
     const port = validateDbcConfigParams(built);
     const { feeClaimer, leftoverReceiver, quoteMint, ...params } = built;
-    expect(feeClaimer.equals(authority) && leftoverReceiver.equals(authority) && quoteMint.equals(SPYX_MINT)).toBe(true);
+    expect(feeClaimer.equals(claimer) && leftoverReceiver.equals(claimer) && quoteMint.equals(SPYX_MINT)).toBe(true);
 
     fork.send(
       [
@@ -249,8 +259,8 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
 
     const cfg = fetchPoolConfig(fork, config);
     expect(cfg.quoteMint.equals(SPYX_MINT)).toBe(true);
-    expect(cfg.feeClaimer.equals(authority)).toBe(true);
-    expect(cfg.leftoverReceiver.equals(authority)).toBe(true);
+    expect(cfg.feeClaimer.equals(claimer)).toBe(true);
+    expect(cfg.leftoverReceiver.equals(claimer)).toBe(true);
     expect(bnToBig(cfg.migrationQuoteThreshold)).toBe(threshold);
     expect(cfg.migrationFeePercentage).toBe(VAULT_SHARE_PCT);
     expect(cfg.creatorMigrationFeePercentage).toBe(0);
@@ -273,7 +283,8 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
 
     log.config = {
       address: config.toBase58(),
-      authority: authority.toBase58(),
+      claimer: claimer.toBase58(),
+      vaultAuthority: vaultAuthority.toBase58(),
       vault: vault.toBase58(),
       multiplier,
       thresholdRaw: threshold,
@@ -314,7 +325,7 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
       baseTokenProgram: TOKEN_PROGRAM_ID,
       quoteTokenProgram: TOKEN_2022_PROGRAM_ID,
     };
-    authorityBase = deriveAuthorityBaseAccount(config, keys.baseMint);
+    claimerBase = deriveClaimerBaseAccount(config, keys.baseMint);
 
     const pool = fetchVirtualPool(fork, keys.pool);
     expect(pool.config.equals(config)).toBe(true);
@@ -365,9 +376,15 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     expect(L.migrated).toBe(false);
     expect(L.migrationFeeHarvested).toBe(false);
     expect(fork.mustGetAccount(launchPk).owner.equals(STOCKFLOOR_PROGRAM_ID)).toBe(true);
-    expect(tokenAccountOwner(fork, vault).equals(authority)).toBe(true);
+    expect(L.claimerBump).toBe(authorityPda(config)[1]);
+    expect(L.vaultAuthorityBump).toBe(vaultAuthorityPda(config)[1]);
+    expect(L.version).toBe(2);
+    expect(tokenAccountOwner(fork, vault).equals(vaultAuthority)).toBe(true);
     expect(tokenAmount(fork, vault)).toBe(0n);
     const ev = parseEvents(stockfloorProgram(), res.logs).find((e) => e.name === "launchCreated");
+    expect(ev!.data.claimer.equals(claimer)).toBe(true);
+    expect(ev!.data.vaultAuthority.equals(vaultAuthority)).toBe(true);
+    expect(ev!.data.vault.equals(vault)).toBe(true);
     expect(ev?.data.migrationFeePercentage).toBe(VAULT_SHARE_PCT);
     expect(ev!.data.baseMint.equals(keys.baseMint)).toBe(true);
     expect(bnToBig(ev!.data.migrationQuoteThreshold)).toBe(threshold);
@@ -391,7 +408,7 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
   });
 
   it("3c. register_pool by a random key (permissionless) records the canonical pool; floor invariants tracking starts", async () => {
-    tracker = new FloorTracker(fork, vault, keys.baseMint, authority, SPYX_MINT, authorityBase);
+    tracker = new FloorTracker(fork, { vault, baseMint: keys.baseMint, quoteMint: SPYX_MINT, vaultAuthority, claimer, claimerBaseAccount: claimerBase });
     tracker.trackBase(keys.baseVault);
     tracker.start("launch created");
     const res = await tracker.step("register_pool", "no-outflow", async () =>
@@ -456,7 +473,7 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     expect(bnToBig(pool.quoteReserve)).toBeLessThan(threshold);
     expect(tokenAmount(fork, vault)).toBe(0n);
 
-    // Fees also accrue on the rogue pool (fee_claimer is the same Authority); they must never reach the vault.
+    // Fees also accrue on the rogue pool (fee_claimer is the same claimer PDA); they must never reach the vault.
     const rogueBuyer = fundedWallet(fork, threshold);
     await buyOnCurve(fork, rogue.keys, rogueBuyer, threshold / 10n);
     expect(bnToBig(fetchVirtualPool(fork, rogue.keys.pool).partnerQuoteFee)).toBeGreaterThan(0n);
@@ -559,7 +576,7 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
 
   // ---------------------------------------------------------------- 7. migration
 
-  it("7. permissionless migration to DAMM v2 burns the unsold base; the Authority owns the permanently locked position", async () => {
+  it("7. permissionless migration to DAMM v2 burns the unsold base; the claimer PDA owns the permanently locked position", async () => {
     const supply0 = mintSupply(fork, keys.baseMint);
     const payer = fork.newWallet();
     const dammPool = deriveDammPool(DAMM_V2_CONFIG_CUSTOMIZABLE, keys.baseMint, SPYX_MINT);
@@ -583,7 +600,7 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     expect(tokenAmount(fork, migration.tokenAVault)).toBe(bnToBig(damm.tokenAAmount));
 
     const position = fetchPosition(fork, migration.firstPosition);
-    expect(tokenAccountOwner(fork, migration.firstPositionNftAccount).equals(authority)).toBe(true);
+    expect(tokenAccountOwner(fork, migration.firstPositionNftAccount).equals(claimer)).toBe(true);
     expect(tokenAmount(fork, migration.firstPositionNftAccount)).toBe(1n);
     expect(bnToBig(position.permanentLockedLiquidity)).toBeGreaterThan(0n);
     expect(bnToBig(position.unlockedLiquidity)).toBe(0n);
@@ -613,7 +630,7 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     };
   });
 
-  // ---------------------------------------------------------------- 8. migration fee, surplus, leftover
+  // ---------------------------------------------------------------- 8. migration fee, surplus, base burn
 
   it("8a. adversarial: redeem after migration but before harvest_migration_fee is rejected", async () => {
     const bob = wallets.bob;
@@ -687,36 +704,36 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     log.surplus = { surplus, partnerShare: expected };
   });
 
-  it("8f. harvest_leftover: no DBC leftover for dynamic supply (burn 0), then burns a base donation to the Authority exactly", async () => {
+  it("8f. burn_claimer_base: nothing to burn (DBC leftover never applies to dynamic supply), then burns a base donation to the claimer exactly", async () => {
     const supply0 = mintSupply(fork, keys.baseMint);
-    let res = await tracker.step("harvest_leftover (nothing to burn)", "no-outflow", async () => {
-      const c = cranker();
-      return fork.send([await harvestLeftoverIx({ payer: c.publicKey, keys })], [c]);
-    });
-    let ev = parseEvents(stockfloorProgram(), res.logs).find((e) => e.name === "leftoverHarvested");
-    expect(ev!.data.leftoverWithdrawn).toBe(false);
+    let res = await tracker.step("burn_claimer_base (nothing to burn)", "no-outflow", async () =>
+      fork.send([await burnClaimerBaseIx({ config, baseMint: keys.baseMint })], [cranker()]),
+    );
+    let ev = parseEvents(stockfloorProgram(), res.logs).find((e) => e.name === "claimerBaseBurned");
     expect(bnToBig(ev!.data.baseBurned)).toBe(0n);
+    expect(ev!.data.baseMint.equals(keys.baseMint)).toBe(true);
     expect(mintSupply(fork, keys.baseMint)).toBe(supply0);
+    // DBC never pays a leftover for a dynamic-supply config (withdraw_leftover rejects it).
     expect(fetchVirtualPool(fork, keys.pool).isWithdrawLeftover).toBe(0);
 
-    // A holder donates base tokens to the Authority's base ATA (a plain SPL transfer).
+    // A holder donates base tokens to the claimer's base ATA (a plain SPL transfer).
     const bob = wallets.bob;
     donation = tokenAmount(fork, baseOf(bob)) / 10n;
-    await tracker.step("donation of base to the Authority", "donation", () =>
-      fork.send([createTransferInstruction(baseOf(bob), authorityBase, bob.publicKey, donation)], [bob]),
+    await tracker.step("donation of base to the claimer", "donation", () =>
+      fork.send([createTransferInstruction(baseOf(bob), claimerBase, bob.publicKey, donation)], [bob]),
     );
-    expect(tokenAmount(fork, authorityBase)).toBe(donation);
+    expect(tokenAmount(fork, claimerBase)).toBe(donation);
 
-    res = await tracker.step("harvest_leftover (burns the donation)", "no-outflow", async () => {
-      const c = cranker();
-      return fork.send([await harvestLeftoverIx({ payer: c.publicKey, keys })], [c]);
-    });
-    ev = parseEvents(stockfloorProgram(), res.logs).find((e) => e.name === "leftoverHarvested");
+    res = await tracker.step("burn_claimer_base (burns the donation)", "no-outflow", async () =>
+      fork.send([await burnClaimerBaseIx({ config, baseMint: keys.baseMint })], [cranker()]),
+    );
+    ev = parseEvents(stockfloorProgram(), res.logs).find((e) => e.name === "claimerBaseBurned");
     expect(bnToBig(ev!.data.baseBurned)).toBe(donation);
     expect(mintSupply(fork, keys.baseMint)).toBe(supply0 - donation);
-    expect(tokenAmount(fork, authorityBase)).toBe(0n);
+    expect(tokenAmount(fork, claimerBase)).toBe(0n);
     expect(bnToBig(fetchLaunch(fork, config).totalBurnedBase)).toBe(donation);
-    log.leftover = { dbcLeftoverWithdrawn: false, donationBurned: donation };
+    (log.cu as any).burnClaimerBase = res.computeUnits;
+    log.claimerBaseBurn = { dbcLeftoverWithdrawn: false, donationBurned: donation };
   });
 
   // ---------------------------------------------------------------- 9. DAMM v2 trades
@@ -769,10 +786,10 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
       dammTokenBVault: migration.tokenBVault,
       overrides,
     });
-    // Adversarial: a position NFT account that the Authority does not own.
+    // Adversarial: a position NFT account that the claimer does not own.
     const c0 = cranker();
     const f = fork.sendExpectFail([await harvestLpFeesIx(lpArgs(c0.publicKey, { positionNftAccount: spyxAta(wallets.frank.publicKey) }))], [c0]);
-    expect(errName(f)).toBe("PositionNftNotOwnedByAuthority");
+    expect(errName(f)).toBe("PositionNftNotOwnedByClaimer");
 
     // Expected claim from DAMM v2 state (position.update_fee): pending + liquidity * (fee_b_per_liquidity - checkpoint) >> 128.
     const damm = fetchDammPool(fork, migration.dammPool);
@@ -880,9 +897,9 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
       }
     }
     const final = tracker.last;
-    expect(final.authorityBase).toBe(0n);
+    expect(final.claimerBase).toBe(0n);
     expect(final.trackedBase).toBe(final.supply);
-    expect(tokenAccountOwner(fork, vault).equals(authority)).toBe(true);
+    expect(tokenAccountOwner(fork, vault).equals(vaultAuthority)).toBe(true);
 
     console.log(
       json({

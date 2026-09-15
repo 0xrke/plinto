@@ -6,11 +6,12 @@
  * this file covers what needs a dedicated setup:
  *
  * - a random signer cannot redirect any harvest: every destination is pinned to the vault or the
- *   Authority's own base ATA (substitutions fail), and when it cranks honestly the vault receives
+ *   claimer's own base ATA (substitutions fail, including the claimer and vault authority PDAs of
+ *   another launch or swapped with each other), and when it cranks honestly the vault receives
  *   exact amounts while the signer receives nothing;
  * - harvest_migration_fee before migration (allowed by DBC) does not open redemptions;
  * - a second pool on the same config (fees, migration fee, LP position all owned by the same
- *   Authority PDA on the DBC/DAMM side) can never feed or drain the launch vault;
+ *   claimer PDA on the DBC/DAMM side) can never feed or drain the launch vault;
  * - harvest_surplus pays DBC's exact partner share of a non-trivial surplus (cheatcode state:
  *   DBC 0.2.1 swaps cannot overshoot the threshold by more than rounding);
  * - the FloorTracker invariant checker itself rejects violations (it is not vacuous);
@@ -50,13 +51,13 @@ import {
   createStockfloorLaunch,
   graduate,
   StockfloorLaunch,
+  trackerAccounts,
 } from "../src/stockfloor-scenario.js";
 import {
+  burnClaimerBaseIx,
   deriveLaunch,
-  deriveStockfloorAuthority,
   fetchLaunch,
   harvestCurveFeesIx,
-  harvestLeftoverIx,
   harvestLpFeesIx,
   harvestMigrationFeeIx,
   harvestSurplusIx,
@@ -136,8 +137,9 @@ describe("C1 adversarial: a random signer cannot redirect any harvest", () => {
   let attacker: Keypair;
   let attackerQuote: PublicKey;
   let attackerBase: PublicKey;
-  let authorityOwnedBase: PublicKey; // token accounts an attacker created with owner = Authority, not the ATAs
-  let authorityOwnedQuote: PublicKey;
+  let claimerOwnedBase: PublicKey; // token accounts an attacker created with a PDA owner, not the ATAs
+  let vaultAuthorityOwnedQuote: PublicKey;
+  let claimerQuoteAta: PublicKey; // ATA(claimer, SPYx): the vault address before the M2 split, anyone can create it
 
   beforeAll(async () => {
     fork = Fork.create({ stockfloor: true, spike: false });
@@ -150,31 +152,38 @@ describe("C1 adversarial: a random signer cannot redirect any harvest", () => {
     attacker = fork.newWallet();
     attackerQuote = fundSpyx(fork, attacker, attacker.publicKey, 1n);
     attackerBase = createAta(fork, attacker, attacker.publicKey, L1.keys.baseMint, TOKEN_PROGRAM_ID);
-    authorityOwnedBase = createTokenAccountOwnedBy(fork, attacker, L1.authority, L1.keys.baseMint, TOKEN_PROGRAM_ID);
+    claimerOwnedBase = createTokenAccountOwnedBy(fork, attacker, L1.claimer, L1.keys.baseMint, TOKEN_PROGRAM_ID);
     const spyxAccountLen = fork.mustGetAccount(attackerQuote).data.length;
-    authorityOwnedQuote = createTokenAccountOwnedBy(fork, attacker, L1.authority, SPYX_MINT, TOKEN_2022_PROGRAM_ID, spyxAccountLen);
+    vaultAuthorityOwnedQuote = createTokenAccountOwnedBy(fork, attacker, L1.vaultAuthority, SPYX_MINT, TOKEN_2022_PROGRAM_ID, spyxAccountLen);
+    claimerQuoteAta = createAta(fork, attacker, L1.claimer, SPYX_MINT, TOKEN_2022_PROGRAM_ID);
   });
 
-  it("harvest_curve_fees: substituted vault, base account, pool, config or launch are rejected", async () => {
+  it("harvest_curve_fees: substituted vault, base account, pool, config, launch or claimer are rejected", async () => {
     const a = attacker.publicKey;
     const cases: Array<[string, Partial<Record<string, PublicKey>>, string | RegExp]> = [
       ["vault = attacker SPYx account", { vault: attackerQuote }, "ConstraintAddress"],
       ["vault = another launch's vault", { vault: L2.vault }, "ConstraintAddress"],
-      ["authority base account = attacker base account", { authorityBaseAccount: attackerBase }, "ConstraintTokenOwner"],
-      ["authority base account = non-ATA base account owned by the Authority", { authorityBaseAccount: authorityOwnedBase }, "AccountNotAssociatedTokenAccount"],
-      ["vault = non-ATA SPYx account owned by the Authority", { vault: authorityOwnedQuote }, "ConstraintAddress"],
+      ["vault = the claimer's SPYx ATA (the pre-split vault address)", { vault: claimerQuoteAta }, "ConstraintAddress"],
+      ["claimer base account = attacker base account", { claimerBaseAccount: attackerBase }, "ConstraintTokenOwner"],
+      ["claimer base account = non-ATA base account owned by the claimer", { claimerBaseAccount: claimerOwnedBase }, "AccountNotAssociatedTokenAccount"],
+      ["vault = non-ATA SPYx account owned by the vault authority", { vault: vaultAuthorityOwnedQuote }, "ConstraintAddress"],
       ["pool = another launch's pool", { pool: L2.keys.pool }, "InvalidDbcPool"],
       ["config = another launch's config", { config: L2.config }, "InvalidDbcConfig"],
       ["launch = another launch", { launch: deriveLaunch(L2.config) }, "ConstraintSeeds"],
-      // Anchor runs `init_if_needed` of authority_base_account before the authority seeds check;
-      // the ATA-create CPI references ATA(other authority, base mint), which is not in the
-      // transaction, so the runtime rejects it with MissingAccount (verified from the logs).
-      ["authority = another launch's authority", { authority: L2.authority }, /MissingAccount/],
-      // With ATA(other authority, base mint) in the transaction the ATA is created (payer pays) and the
-      // program's own seeds check on the Authority rejects the substitution; the tx rolls back.
+      // Anchor runs `init_if_needed` of claimer_base_account before the claimer seeds check; the
+      // ATA-create CPI references ATA(other claimer, base mint), which is not in the transaction,
+      // so the runtime rejects it with MissingAccount (verified from the logs).
+      ["claimer = another launch's claimer", { claimer: L2.claimer }, /MissingAccount/],
+      // With ATA(other claimer, base mint) in the transaction the ATA is created (payer pays) and the
+      // program's own seeds check on the claimer rejects the substitution; the tx rolls back.
       [
-        "authority = another launch's authority, with its base ATA included",
-        { authority: L2.authority, authorityBaseAccount: splAta(L2.authority, L1.keys.baseMint) },
+        "claimer = another launch's claimer, with its base ATA included",
+        { claimer: L2.claimer, claimerBaseAccount: splAta(L2.claimer, L1.keys.baseMint) },
+        "ConstraintSeeds",
+      ],
+      [
+        "claimer = this launch's vault authority, with its base ATA included",
+        { claimer: L1.vaultAuthority, claimerBaseAccount: splAta(L1.vaultAuthority, L1.keys.baseMint) },
         "ConstraintSeeds",
       ],
     ];
@@ -184,15 +193,17 @@ describe("C1 adversarial: a random signer cannot redirect any harvest", () => {
     }
   });
 
-  it("harvest_migration_fee and harvest_surplus: substituted vault, pool, launch or authority are rejected", async () => {
+  it("harvest_migration_fee and harvest_surplus: substituted vault, pool, launch or claimer are rejected", async () => {
     for (const build of [harvestMigrationFeeIx, harvestSurplusIx]) {
       const cases: Array<[string, Partial<Record<string, PublicKey>>, string]> = [
         ["vault = attacker SPYx account", { vault: attackerQuote }, "ConstraintAddress"],
         ["vault = another launch's vault", { vault: L2.vault }, "ConstraintAddress"],
-        ["vault = non-ATA SPYx account owned by the Authority", { vault: authorityOwnedQuote }, "ConstraintAddress"],
+        ["vault = the claimer's SPYx ATA (the pre-split vault address)", { vault: claimerQuoteAta }, "ConstraintAddress"],
+        ["vault = non-ATA SPYx account owned by the vault authority", { vault: vaultAuthorityOwnedQuote }, "ConstraintAddress"],
         ["pool = another launch's pool", { pool: L2.keys.pool }, "InvalidDbcPool"],
         ["launch = another launch", { launch: deriveLaunch(L2.config) }, "ConstraintSeeds"],
-        ["authority = another launch's authority", { authority: L2.authority }, "ConstraintSeeds"],
+        ["claimer = another launch's claimer", { claimer: L2.claimer }, "ConstraintSeeds"],
+        ["claimer = this launch's vault authority", { claimer: L1.vaultAuthority }, "ConstraintSeeds"],
         ["DBC quote vault of another pool", { dbcQuoteVault: L2.keys.quoteVault }, "ConstraintHasOne"],
       ];
       for (const [label, overrides, expected] of cases) {
@@ -202,36 +213,52 @@ describe("C1 adversarial: a random signer cannot redirect any harvest", () => {
     }
   });
 
-  it("harvest_leftover and harvest_lp_fees: substituted destinations and foreign positions are rejected", async () => {
+  it("burn_claimer_base and harvest_lp_fees: substituted accounts and foreign positions are rejected", async () => {
     const a = attacker.publicKey;
-    let f = fork.sendExpectFail([await harvestLeftoverIx({ payer: a, keys: L1.keys, overrides: { authorityBaseAccount: attackerBase } })], [attacker]);
-    expect(errName(f)).toBe("ConstraintTokenOwner");
-    f = fork.sendExpectFail([await harvestLeftoverIx({ payer: a, keys: L1.keys, overrides: { authorityBaseAccount: authorityOwnedBase } })], [attacker]);
-    expect(errName(f)).toBe("AccountNotAssociatedTokenAccount");
-    f = fork.sendExpectFail([await harvestLeftoverIx({ payer: a, keys: L1.keys, overrides: { pool: L2.keys.pool } })], [attacker]);
-    expect(errName(f)).toBe("InvalidDbcPool");
+    // burn_claimer_base does not create the claimer's base ATA: before any base-receiving harvest
+    // (or a donation, which creates it) there is nothing to burn and the account is missing.
+    if (!fork.getAccount(L1.claimerBaseAccount)) {
+      const f = fork.sendExpectFail([await burnClaimerBaseIx({ config: L1.config, baseMint: L1.keys.baseMint })], [attacker]);
+      expect(errName(f)).toBe("AccountNotInitialized");
+      createAta(fork, attacker, L1.claimer, L1.keys.baseMint, TOKEN_PROGRAM_ID); // anyone can create it
+    }
+    const burnCases: Array<[string, Partial<Record<string, PublicKey>>, string]> = [
+      ["claimer base account = attacker base account", { claimerBaseAccount: attackerBase }, "ConstraintTokenOwner"],
+      ["claimer base account = non-ATA base account owned by the claimer", { claimerBaseAccount: claimerOwnedBase }, "ConstraintAssociated"],
+      ["launch = another launch", { launch: deriveLaunch(L2.config) }, "ConstraintSeeds"],
+      ["claimer = this launch's vault authority", { claimer: L1.vaultAuthority }, "ConstraintSeeds"],
+      ["base mint = another launch's base mint", { baseMint: L2.keys.baseMint, claimerBaseAccount: createAta(fork, attacker, L1.claimer, L2.keys.baseMint, TOKEN_PROGRAM_ID) }, "BaseMintMismatch"],
+    ];
+    for (const [label, overrides, expected] of burnCases) {
+      const f = fork.sendExpectFail([await burnClaimerBaseIx({ config: L1.config, baseMint: L1.keys.baseMint, overrides })], [attacker]);
+      expect(errName(f), `burn_claimer_base: ${label}`).toBe(expected);
+    }
 
     const lpCases: Array<[string, Partial<Record<string, PublicKey>>, string | RegExp]> = [
       ["vault = attacker SPYx account", { vault: attackerQuote }, "ConstraintAddress"],
       ["vault = another launch's vault", { vault: L2.vault }, "ConstraintAddress"],
-      ["authority base account = attacker base account", { authorityBaseAccount: attackerBase }, "ConstraintTokenOwner"],
-      ["authority base account = non-ATA base account owned by the Authority", { authorityBaseAccount: authorityOwnedBase }, "AccountNotAssociatedTokenAccount"],
-      ["vault = non-ATA SPYx account owned by the Authority", { vault: authorityOwnedQuote }, "ConstraintAddress"],
-      ["position NFT account not owned by the Authority", { positionNftAccount: attackerQuote }, "PositionNftNotOwnedByAuthority"],
-      ["authority = another launch's authority", { authority: L2.authority }, /MissingAccount/], // see harvest_curve_fees
+      ["vault = the claimer's SPYx ATA (the pre-split vault address)", { vault: claimerQuoteAta }, "ConstraintAddress"],
+      ["claimer base account = attacker base account", { claimerBaseAccount: attackerBase }, "ConstraintTokenOwner"],
+      ["claimer base account = non-ATA base account owned by the claimer", { claimerBaseAccount: claimerOwnedBase }, "AccountNotAssociatedTokenAccount"],
+      ["vault = non-ATA SPYx account owned by the vault authority", { vault: vaultAuthorityOwnedQuote }, "ConstraintAddress"],
+      ["position NFT account not owned by the claimer", { positionNftAccount: attackerQuote }, "PositionNftNotOwnedByClaimer"],
+      // Unlike the harvest_curve_fees case, ATA(this claimer, base mint) exists now, so init_if_needed
+      // validates it against the substituted claimer and fails on its owner.
+      ["claimer = another launch's claimer", { claimer: L2.claimer }, "ConstraintTokenOwner"],
       [
-        "authority = another launch's authority, with its base ATA included",
-        { authority: L2.authority, authorityBaseAccount: splAta(L2.authority, L1.keys.baseMint) },
+        "claimer = another launch's claimer, with its base ATA included",
+        { claimer: L2.claimer, claimerBaseAccount: splAta(L2.claimer, L1.keys.baseMint) },
         "ConstraintSeeds",
       ],
     ];
+    let f: TxFailure;
     for (const [label, overrides, expected] of lpCases) {
       f = fork.sendExpectFail([await harvestLpFeesIx(lpArgs(L1, m1, a, overrides))], [attacker]);
       expectError(f, expected, label);
     }
   });
 
-  it("direct DBC / DAMM v2 claims signed by the attacker fail: only the Authority PDA can claim", async () => {
+  it("direct DBC / DAMM v2 claims signed by the attacker fail: only the claimer PDA can claim", async () => {
     const a = attacker.publicKey;
     let f = fork.sendExpectFail(
       [await claimTradingFeeIx({ keys: L1.keys, feeClaimer: a, tokenBaseAccount: attackerBase, tokenQuoteAccount: attackerQuote, maxBase: 1n, maxQuote: 1n })],
@@ -296,14 +323,14 @@ describe("C1 adversarial: a random signer cannot redirect any harvest", () => {
     await step(harvestCurveFeesIx({ payer: a, keys: L1.keys }), expectedCurve);
     await step(harvestMigrationFeeIx({ keys: L1.keys }), expectedMigration);
     await step(harvestSurplusIx({ keys: L1.keys }), expectedSurplus);
-    await step(harvestLeftoverIx({ payer: a, keys: L1.keys }), 0n);
+    await step(burnClaimerBaseIx({ config: L1.config, baseMint: L1.keys.baseMint }), 0n);
     await step(harvestLpFeesIx(lpArgs(L1, m1, a)), lp.b);
 
     expect(tokenAmount(fork, L1.vault)).toBe(expectedCurve + expectedMigration + expectedSurplus + lp.b);
     console.log(JSON.stringify({ honestCrank: { curveFees: expectedCurve, migrationFee: expectedMigration, surplus: expectedSurplus, lpFees: lp.b } }, (_k, v) => (typeof v === "bigint" ? v.toString() : v)));
     expect(tokenAmount(fork, attackerQuote)).toBe(q0);
     expect(tokenAmount(fork, attackerBase)).toBe(b0);
-    expect(tokenAmount(fork, L1.authorityBaseAccount)).toBe(0n);
+    expect(tokenAmount(fork, L1.claimerBaseAccount)).toBe(0n);
     // The other launch is untouched.
     expect(tokenAmount(fork, L2.vault)).toBe(0n);
   });
@@ -353,7 +380,7 @@ describe("C1 adversarial: a second pool on the same config never feeds or drains
     const L = await createStockfloorLaunch(fork);
     await buyers(fork, L, [10n]);
 
-    // A rogue pool on the launch's config: same fee_claimer (the Authority), different base mint.
+    // A rogue pool on the launch's config: same fee_claimer (the claimer PDA), different base mint.
     const rogueCreator = fork.newWallet();
     const rogueMint = Keypair.generate();
     const init = await initializeVirtualPoolWithSplTokenIx({
@@ -375,7 +402,7 @@ describe("C1 adversarial: a second pool on the same config never feeds or drains
     await completeWithPartialFill(fork, rogueLaunch);
     const rogueMigration = await migrateToDammV2(fork, rogueKeys);
     expect(fetchVirtualPool(fork, rogueKeys.pool).isMigrated).toBe(1);
-    // DAMM v2 gave the rogue position NFT to the same Authority PDA.
+    // DAMM v2 gave the rogue position NFT to the same claimer PDA.
     expect(fetchPosition(fork, rogueMigration.firstPosition).pool.equals(rogueMigration.dammPool)).toBe(true);
     expect(fetchDammPool(fork, rogueMigration.dammPool).tokenAMint.equals(rogueMint.publicKey)).toBe(true);
 
@@ -384,7 +411,14 @@ describe("C1 adversarial: a second pool on the same config never feeds or drains
       ["harvest_curve_fees on the rogue pool", harvestCurveFeesIx({ payer: c.publicKey, keys: rogueKeys }), "InvalidDbcPool"],
       ["harvest_migration_fee on the rogue pool", harvestMigrationFeeIx({ keys: rogueKeys }), "InvalidDbcPool"],
       ["harvest_surplus on the rogue pool", harvestSurplusIx({ keys: rogueKeys }), "InvalidDbcPool"],
-      ["harvest_leftover on the rogue pool", harvestLeftoverIx({ payer: c.publicKey, keys: rogueKeys }), "InvalidDbcPool"],
+      [
+        "burn_claimer_base with the rogue base mint (its claimer ATA created first)",
+        (async () => {
+          createAta(fork, c, L.claimer, rogueMint.publicKey, TOKEN_PROGRAM_ID);
+          return burnClaimerBaseIx({ config: L.config, baseMint: rogueMint.publicKey });
+        })(),
+        "BaseMintMismatch",
+      ],
       [
         "harvest_lp_fees on the rogue DAMM v2 pool (launch base mint)",
         harvestLpFeesIx({ ...lpArgs(L, rogueMigration, c.publicKey) }),
@@ -458,7 +492,7 @@ describe("FloorTracker self-check: the invariant checker rejects violations", ()
   let tracked: PublicKey[];
 
   const newTracker = () => {
-    const t = new FloorTracker(fork, L.vault, L.keys.baseMint, L.authority, SPYX_MINT, L.authorityBaseAccount);
+    const t = new FloorTracker(fork, trackerAccounts(L));
     t.trackBase(...tracked);
     t.start("start");
     return t;
@@ -518,17 +552,49 @@ describe("FloorTracker self-check: the invariant checker rejects violations", ()
     setMintSupply(fork, L.keys.baseMint, S);
 
     t = newTracker();
-    createAta(fork, holder, deriveStockfloorAuthority(L.config), L.keys.baseMint, TOKEN_PROGRAM_ID);
+    createAta(fork, holder, L.claimer, L.keys.baseMint, TOKEN_PROGRAM_ID);
     const hb = splAta(holder.publicKey, L.keys.baseMint);
     const hbal = tokenAmount(fork, hb);
     await expect(
-      t.step("base parked at the Authority", "no-outflow", () => {
+      t.step("base parked at the claimer", "no-outflow", () => {
         setTokenAmount(fork, hb, hbal - 5n);
-        setTokenAmount(fork, L.authorityBaseAccount, 5n);
+        setTokenAmount(fork, L.claimerBaseAccount, 5n);
       }),
-    ).rejects.toThrow(/Authority holds no base tokens/);
-    setTokenAmount(fork, L.authorityBaseAccount, 0n);
+    ).rejects.toThrow(/claimer holds no base tokens/);
+    setTokenAmount(fork, L.claimerBaseAccount, 0n);
     setTokenAmount(fork, hb, hbal);
+    newTracker();
+  });
+
+  it("rejects a vault owned by the claimer, a vault with a delegate and a vault with a close authority", async () => {
+    // Base token account layout: owner at 32, delegate COption at 72 (+ delegated_amount at 121),
+    // close_authority COption at 129.
+    const cheats: Array<[string, (d: Buffer) => void, RegExp]> = [
+      ["vault re-owned by the claimer", (d) => L.claimer.toBuffer().copy(d, 32), /vault owner is the vault authority/],
+      [
+        "vault delegate = claimer",
+        (d) => {
+          d.writeUInt32LE(1, 72);
+          L.claimer.toBuffer().copy(d, 76);
+          d.writeBigUInt64LE(1n, 121);
+        },
+        /vault has no delegate/,
+      ],
+      [
+        "vault close authority = claimer",
+        (d) => {
+          d.writeUInt32LE(1, 129);
+          L.claimer.toBuffer().copy(d, 133);
+        },
+        /vault has no close authority/,
+      ],
+    ];
+    for (const [label, cheat, expected] of cheats) {
+      const t = newTracker();
+      const original = Buffer.from(fork.mustGetAccount(L.vault).data);
+      await expect(t.step(label, "no-outflow", () => fork.patchAccount(L.vault, cheat)), label).rejects.toThrow(expected);
+      fork.patchAccount(L.vault, (d) => original.copy(d));
+    }
     newTracker();
   });
 });

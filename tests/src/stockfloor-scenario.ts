@@ -1,8 +1,8 @@
 /**
  * StockFloor launch scenarios on the fork, built the way the product builds them:
  * DBC config parameters from @stockfloor/sdk buildDbcConfigParams (SPYx quote, fee_claimer =
- * leftover_receiver = Authority PDA), DBC pool, create_launch, register_pool; then curve trades,
- * completion and migration with the harness helpers.
+ * leftover_receiver = claimer PDA ["authority", config]), DBC pool, create_launch, register_pool;
+ * then curve trades, completion and migration with the harness helpers.
  */
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {
@@ -10,6 +10,7 @@ import {
   buildDbcConfigParams,
   DEFAULT_QUOTE_ASSET,
   effectiveScaledUiMultiplier,
+  vaultAuthorityPda,
   type CurvePreset,
   type LaunchInput,
 } from "@stockfloor/sdk";
@@ -17,7 +18,8 @@ import { DBC_TOKEN_BADGE_SPYX, SPYX_MINT, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_I
 import { bnToBig, createConfigIx, DbcPoolKeys, fetchVirtualPool, initializeVirtualPoolWithSplTokenIx, SwapMode } from "./dbc.js";
 import { Fork } from "./fork.js";
 import { buyOnCurve, fundedWallet, Migration, migrateToDammV2 } from "./scenario.js";
-import { createLaunchIx, deriveAuthorityBaseAccount, deriveVault, registerPoolIx } from "./stockfloor.js";
+import type { FloorTrackerAccounts } from "./floor-invariants.js";
+import { createLaunchIx, deriveClaimerBaseAccount, deriveVault, registerPoolIx } from "./stockfloor.js";
 import { getScaledUiAmount } from "./token.js";
 
 /** Jupiter Price V3 `usdPrice` of SPYx observed on 2026-09-15. */
@@ -28,9 +30,12 @@ export interface StockfloorLaunch {
   creator: Keypair;
   configKeypair: Keypair;
   config: PublicKey;
-  authority: PublicKey;
+  /** PDA ["authority", config]: DBC fee_claimer / leftover_receiver, LP NFT owner, CPI signer. */
+  claimer: PublicKey;
+  /** PDA ["vault_authority", config]: owner of the vault. */
+  vaultAuthority: PublicKey;
   vault: PublicKey;
-  authorityBaseAccount: PublicKey;
+  claimerBaseAccount: PublicKey;
   keys: DbcPoolKeys;
   threshold: bigint;
   input: LaunchInput;
@@ -50,6 +55,12 @@ export interface StockfloorLaunchOptions {
   mutateParams?: (params: any) => void;
   /** Skip create_launch (and register_pool), e.g. to send a create_launch that must fail. */
   skipCreateLaunch?: boolean;
+  /** DBC config keypair (default: generated). */
+  configKeypair?: Keypair;
+  /** DBC config fee_claimer (default: the claimer PDA). */
+  feeClaimer?: PublicKey;
+  /** DBC config leftover_receiver (default: the claimer PDA). */
+  leftoverReceiver?: PublicKey;
 }
 
 /** Effective SPYx ScaledUiAmount multiplier at the fork clock. */
@@ -64,9 +75,10 @@ export function spyxMultiplier(fork: Fork): number {
 export async function createStockfloorLaunch(fork: Fork, o: StockfloorLaunchOptions = {}): Promise<StockfloorLaunch> {
   const partner = o.partner ?? fork.newWallet();
   const creator = o.creator ?? fork.newWallet();
-  const configKeypair = Keypair.generate();
+  const configKeypair = o.configKeypair ?? Keypair.generate();
   const config = configKeypair.publicKey;
-  const authority = authorityPda(config)[0];
+  const claimer = authorityPda(config)[0];
+  const vaultAuthority = vaultAuthorityPda(config)[0];
   const exitFeeBps = o.exitFeeBps ?? 200;
   const input: LaunchInput = {
     name: "Floor Test",
@@ -80,7 +92,11 @@ export async function createStockfloorLaunch(fork: Fork, o: StockfloorLaunchOpti
     thresholdUsd: o.thresholdUsd ?? 1000,
     exitFeeBps,
   };
-  const { feeClaimer, leftoverReceiver, quoteMint, ...params } = buildDbcConfigParams(input, authority, authority);
+  const { feeClaimer, leftoverReceiver, quoteMint, ...params } = buildDbcConfigParams(
+    input,
+    o.feeClaimer ?? claimer,
+    o.leftoverReceiver ?? claimer,
+  );
   o.mutateParams?.(params);
   fork.send(
     [
@@ -135,13 +151,26 @@ export async function createStockfloorLaunch(fork: Fork, o: StockfloorLaunchOpti
     creator,
     configKeypair,
     config,
-    authority,
+    claimer,
+    vaultAuthority,
     vault: deriveVault(config),
-    authorityBaseAccount: deriveAuthorityBaseAccount(config, keys.baseMint),
+    claimerBaseAccount: deriveClaimerBaseAccount(config, keys.baseMint),
     keys,
     threshold: bnToBig(params.migrationQuoteThreshold as never),
     input,
     exitFeeBps,
+  };
+}
+
+/** FloorTracker accounts of a launch. */
+export function trackerAccounts(launch: StockfloorLaunch): FloorTrackerAccounts {
+  return {
+    vault: launch.vault,
+    baseMint: launch.keys.baseMint,
+    quoteMint: launch.keys.quoteMint,
+    vaultAuthority: launch.vaultAuthority,
+    claimer: launch.claimer,
+    claimerBaseAccount: launch.claimerBaseAccount,
   };
 }
 

@@ -33,18 +33,27 @@ export function deriveLaunch(config: PublicKey): PublicKey {
   return PublicKey.findProgramAddressSync([Buffer.from("launch"), config.toBuffer()], STOCKFLOOR_PROGRAM_ID)[0];
 }
 
-export function deriveStockfloorAuthority(config: PublicKey): PublicKey {
+/**
+ * Claimer PDA `["authority", config]`: DBC fee_claimer / leftover_receiver, DAMM v2 position NFT
+ * owner, signer of the DBC / DAMM v2 CPIs. No authority over the vault.
+ */
+export function deriveClaimer(config: PublicKey): PublicKey {
   return PublicKey.findProgramAddressSync([Buffer.from("authority"), config.toBuffer()], STOCKFLOOR_PROGRAM_ID)[0];
 }
 
-/** Floor vault: ATA(Authority, quote mint, quote token program). */
-export function deriveVault(config: PublicKey, quoteMint = SPYX_MINT, quoteTokenProgram = TOKEN_2022_PROGRAM_ID): PublicKey {
-  return getAta(deriveStockfloorAuthority(config), quoteMint, quoteTokenProgram);
+/** Vault authority PDA `["vault_authority", config]`: owns the vault, signs only redeem payouts. */
+export function deriveVaultAuthority(config: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync([Buffer.from("vault_authority"), config.toBuffer()], STOCKFLOOR_PROGRAM_ID)[0];
 }
 
-/** Authority base-token ATA (SPL Token): destination of base fees/leftovers, always burned. */
-export function deriveAuthorityBaseAccount(config: PublicKey, baseMint: PublicKey): PublicKey {
-  return splAta(deriveStockfloorAuthority(config), baseMint);
+/** Floor vault: ATA(vault authority, quote mint, quote token program). */
+export function deriveVault(config: PublicKey, quoteMint = SPYX_MINT, quoteTokenProgram = TOKEN_2022_PROGRAM_ID): PublicKey {
+  return getAta(deriveVaultAuthority(config), quoteMint, quoteTokenProgram);
+}
+
+/** Claimer base-token ATA (SPL Token): destination of base fees and donations, always burned. */
+export function deriveClaimerBaseAccount(config: PublicKey, baseMint: PublicKey): PublicKey {
+  return splAta(deriveClaimer(config), baseMint);
 }
 
 const dbcCpiAccounts = {
@@ -72,7 +81,8 @@ export async function createLaunchIx(a: {
       payer: a.payer,
       creator: a.creator,
       config: a.config,
-      authority: deriveStockfloorAuthority(a.config),
+      claimer: deriveClaimer(a.config),
+      vaultAuthority: deriveVaultAuthority(a.config),
       launch: deriveLaunch(a.config),
       quoteMint,
       baseMint: a.baseMint,
@@ -116,11 +126,11 @@ export async function harvestCurveFeesIx(a: {
     .accountsStrict({
       payer: a.payer,
       launch: deriveLaunch(k.config),
-      authority: deriveStockfloorAuthority(k.config),
+      claimer: deriveClaimer(k.config),
       config: k.config,
       pool: k.pool,
       vault: deriveVault(k.config, k.quoteMint, k.quoteTokenProgram),
-      authorityBaseAccount: deriveAuthorityBaseAccount(k.config, k.baseMint),
+      claimerBaseAccount: deriveClaimerBaseAccount(k.config, k.baseMint),
       dbcBaseVault: k.baseVault,
       dbcQuoteVault: k.quoteVault,
       baseMint: k.baseMint,
@@ -144,7 +154,7 @@ async function harvestQuoteFromDbcIx(
     [method]()
     .accountsStrict({
       launch: deriveLaunch(k.config),
-      authority: deriveStockfloorAuthority(k.config),
+      claimer: deriveClaimer(k.config),
       config: k.config,
       pool: k.pool,
       vault: deriveVault(k.config, k.quoteMint, k.quoteTokenProgram),
@@ -164,27 +174,16 @@ export const harvestMigrationFeeIx = (a: { keys: DbcPoolKeys; overrides?: Accoun
 export const harvestSurplusIx = (a: { keys: DbcPoolKeys; overrides?: AccountOverrides }) =>
   harvestQuoteFromDbcIx("harvestSurplus", a);
 
-export async function harvestLeftoverIx(a: {
-  payer: PublicKey;
-  keys: DbcPoolKeys;
-  overrides?: AccountOverrides;
-}): Promise<TransactionInstruction> {
-  const k = a.keys;
+/** Permissionless: burns the claimer's base ATA balance (the ATA must exist). No payer account. */
+export async function burnClaimerBaseIx(a: { config: PublicKey; baseMint: PublicKey; overrides?: AccountOverrides }): Promise<TransactionInstruction> {
   return stockfloorProgram()
-    .methods.harvestLeftover()
+    .methods.burnClaimerBase()
     .accountsStrict({
-      payer: a.payer,
-      launch: deriveLaunch(k.config),
-      authority: deriveStockfloorAuthority(k.config),
-      config: k.config,
-      pool: k.pool,
-      authorityBaseAccount: deriveAuthorityBaseAccount(k.config, k.baseMint),
-      dbcBaseVault: k.baseVault,
-      baseMint: k.baseMint,
+      launch: deriveLaunch(a.config),
+      claimer: deriveClaimer(a.config),
+      claimerBaseAccount: deriveClaimerBaseAccount(a.config, a.baseMint),
+      baseMint: a.baseMint,
       tokenProgram: TOKEN_PROGRAM_ID,
-      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-      systemProgram: SystemProgram.programId,
-      ...dbcCpiAccounts,
       ...a.overrides,
     })
     .instruction();
@@ -206,11 +205,11 @@ export async function harvestLpFeesIx(a: {
     .accountsStrict({
       payer: a.payer,
       launch: deriveLaunch(k.config),
-      authority: deriveStockfloorAuthority(k.config),
+      claimer: deriveClaimer(k.config),
       dammPool: a.dammPool,
       position: a.position,
       positionNftAccount: a.positionNftAccount,
-      authorityBaseAccount: deriveAuthorityBaseAccount(k.config, k.baseMint),
+      claimerBaseAccount: deriveClaimerBaseAccount(k.config, k.baseMint),
       vault: deriveVault(k.config, k.quoteMint, k.quoteTokenProgram),
       dammTokenAVault: a.dammTokenAVault,
       dammTokenBVault: a.dammTokenBVault,
@@ -240,7 +239,7 @@ export async function redeemIx(a: {
     .accountsStrict({
       holder: a.holder,
       launch: deriveLaunch(k.config),
-      authority: deriveStockfloorAuthority(k.config),
+      vaultAuthority: deriveVaultAuthority(k.config),
       pool: k.pool,
       baseMint: k.baseMint,
       holderBaseAccount: getAta(a.holder, k.baseMint, k.baseTokenProgram),

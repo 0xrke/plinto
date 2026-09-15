@@ -48,8 +48,8 @@ describe("SDK presets x vault shares on the real DBC and stockfloor programs", (
       it(`${preset} / ${share}%: DBC stores what the SDK port predicts; the vault gets the preview amount at graduation`, async () => {
         const fork = Fork.create({ stockfloor: true, spike: false });
         const L = await createStockfloorLaunch(fork, { preset, vaultSharePct: share });
-        const built = buildDbcConfigParams(L.input, L.authority, L.authority);
-        const port = validateDbcConfigParams(built, { leftoverReceiver: L.authority });
+        const built = buildDbcConfigParams(L.input, L.claimer, L.claimer);
+        const port = validateDbcConfigParams(built, { leftoverReceiver: L.claimer });
         const curve = computeLaunchCurve(L.input);
         const preview = previewLaunch(L.input);
 
