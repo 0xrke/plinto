@@ -116,7 +116,7 @@ function TokenHeader({ launch }: { launch: LaunchSummary }) {
           </div>
         </div>
       </div>
-      <PhaseStepper phase={launch.phase} />
+      <PhaseStepper phase={launch.phase} migrationFeeHarvested={launch.migrationFeeHarvested} />
     </header>
   );
 }
@@ -136,6 +136,8 @@ function GraduatedBody({ launch }: { launch: LaunchSummary }) {
   const floorUsd = launchFloorUsd(launch);
   const maxLoss = maxLossFraction(launch.priceUsd, floorUsd);
   const multiple = priceToFloorMultiple(launch.priceUsd, floorUsd);
+  // Migrated, but the migration fee is not in the vault yet: redemption is closed and the vault holds only fees.
+  const harvestPending = !launch.migrationFeeHarvested;
 
   return (
     <div className={BODY_GRID}>
@@ -147,6 +149,13 @@ function GraduatedBody({ launch }: { launch: LaunchSummary }) {
             </h2>
             <p className="text-xs text-ink-3">Floor = vault ÷ supply. No price oracle.</p>
           </div>
+          {harvestPending ? (
+            <p role="status" className="mt-4 rounded-lg bg-graduating-soft px-3 py-2 text-sm text-graduating">
+              The pool migrated to Meteora DAMM v2, but the migration fee has not been harvested into the vault yet.
+              Until then redemption is closed and the floor below counts only harvested fees. Anyone can run the crank to
+              harvest it.
+            </p>
+          ) : null}
           <dl className="mt-4 grid grid-cols-1 gap-4 min-[420px]:grid-cols-3">
             <div>
               <dt className="text-xs font-medium text-ink-3">Price</dt>
@@ -165,9 +174,11 @@ function GraduatedBody({ launch }: { launch: LaunchSummary }) {
             <FloorMeter priceUsd={launch.priceUsd} floorUsd={floorUsd} maxLoss={maxLoss} />
           </div>
           <p className="mt-4 text-sm text-ink-2">
-            {Number.isFinite(multiple) && multiple >= 1
-              ? `The price is ${formatMultiple(multiple)} the floor. If the market fell all the way to the floor, a buyer at today's price would lose ${formatPercent(maxLoss)} of the purchase. It cannot fall to zero while the vault holds ${launch.quote.asset.symbol}.`
-              : "The price is at or below the floor. Buying and redeeming returns at least the floor, minus the exit fee and trading fees."}
+            {harvestPending
+              ? "Redemption opens after the migration-fee harvest into the vault (run the crank). The floor shown will rise when it lands."
+              : Number.isFinite(multiple) && multiple >= 1
+                ? `The price is ${formatMultiple(multiple)} the floor. If the market fell all the way to the floor, a buyer at today's price would lose ${formatPercent(maxLoss)} of the purchase. It cannot fall to zero while the vault holds ${launch.quote.asset.symbol}.`
+                : "The price is at or below the floor. Buying and redeeming returns at least the floor, minus the exit fee and trading fees."}
           </p>
         </section>
       </div>
