@@ -136,7 +136,7 @@ e2e/                        local-fork end-to-end driver and page render check (
 
 ## Tests
 
-`pnpm --filter @stockfloor/app test` (part of the root `pnpm test`): 17 files, 129 tests.
+`pnpm --filter @stockfloor/app test` (part of the root `pnpm test`): 17 files, 130 tests.
 
 - `lib/data/chain.test.ts`: mapping of SDK `LaunchState`s built with the launch composer (presale,
   graduating, graduated, redeemable, paused, flat preset, missing metadata, unlisted quote, no pool) and
@@ -175,27 +175,34 @@ A browser wallet cannot be driven here, so `e2e/local-fork.e2e.ts` runs the exac
 for `signTransaction`, funds them through the running app's faucet route, and after each step compares
 the running app's `/api/launches/[mint]` JSON with a direct SDK read (vault, supply, reserve, phase,
 floor Q64, due crank actions). `e2e/render.e2e.tsx` then renders the real `TokenView` and `LaunchList`
-components in jsdom against the fork and checks them against the same JSON.
+components in jsdom against the fork and checks them against the same JSON, and drives
+`CreateLaunchForm`, the curve trade panel and the crank button with a keypair-backed wallet context.
 
-Recorded run, 2026-09-16 ~01:00 local, fresh surfnet (Surfpool 1.5.0, stockfloor.so sha256 `580ecbee…`),
-`next build && next start` of this commit's code, live Jupiter SPYx price $757.33, multiplier 1.005714560286254:
+Recorded run, 2026-09-16 ~01:07 local (22:07Z), fresh surfnet (Surfpool 1.5.0, stockfloor.so sha256
+`580ecbee…`), `next build && next start` of commit `80fe9a7`, live Jupiter SPYx price $757.28, on-chain
+multiplier 1.005714560286254. `pnpm e2e:local`: 11 + 3 tests passed.
 
 | Step | Verified |
 |---|---|
 | Guard | loopback RPC, SDK send guard mode `surfnet` (mainnet genesis + `surfnet-version` 1.5.0 + `surfnet_getLocalSignatures`) before any send; `GET /api/faucet` enabled, `/api/launches` source `chain` |
 | Faucet route | 415 for a non-JSON body, 400 for a bad wallet; three wallets got 10 SOL and exactly 500,000,000 raw SPYx |
-| Create launch | two transactions (config + `create_launch`; pool + `register_pool` + first buy of 0.1 SPYx UI), all steps done; the app lists "E2E Floor 37tg8z" / E2EF as presale with gentle preset, 50% vault share, 200 bps, image URL; `/`, `/create`, `/t/<mint>` return 200 |
+| Create launch | two transactions (config + `create_launch`; pool + `register_pool` + first buy of 0.1 SPYx UI), every step done; the app lists "E2E Floor 382qvl" / E2EF as presale, gentle preset, 50% vault share, 200 bps, image URL; `/`, `/create`, `/t/<mint>` return 200 |
 | Refusals | USDC buy on the fork → "Routing USDC through Jupiter works on mainnet only…"; redeem in presale → "Redeem opens after migration…"; empty wallet → "Trading needs at least 0.005 SOL… Use the local faucet"; nothing sent |
-| Curve trades | buys of 40,000,000 and 30,000,000 raw SPYx and a sell of 10% of a balance: spent and received amounts equal the SDK quotes exactly |
+| Curve trades | buys of 40,000,000 and 30,000,000 raw SPYx ("Paid 0.40228582 SPYx, received 217,417,683.41 $E2EF.") and a sell of 21,741,768,340,849 base for 4,190,052 raw: every spent and received amount equals the SDK quote |
 | Crank (presale) | `harvest_curve_fees`; vault increased, partner fee reset to 0 |
-| Completing buy | 200,000,000 raw requested, PartialFill used 56,950,136 and received 279,621,820,283,600 base (= quote); app shows `graduating`, progress 1, crank due `harvest_migration_fee`, `harvest_surplus`, `migrate`; a buy is refused while graduating |
-| Crank (graduation) | `harvest_curve_fees`, `harvest_migration_fee`, `harvest_surplus`, `migrate` (4 transactions); vault grew by at least the partner fee 65,645,992; app shows `graduated` / `redeemable`, DAMM v2 pool address, buy label "Price $0.0000016 · Floor $0.000000506 · Max loss if you buy now: −68.3%" |
-| DAMM v2 trades | buy 30,000,000 raw SPYx → 97,559,849,642,919 base; sell 86,985,439,874,044 base → 27,133,403 raw SPYx; both equal the SDK quotes |
+| Completing buy | 200,000,000 raw requested; PartialFill used 56,959,147 and received 279,648,004,926,911 base (= quote); the app shows `graduating`, progress 1, due `harvest_migration_fee`, `harvest_surplus`, `migrate`; a buy is refused while graduating |
+| Crank (graduation) | `harvest_curve_fees`, `harvest_migration_fee`, `harvest_surplus`, `migrate` (4 transactions); vault 66,440,819 (≥ the 65,650,462 partner fee); the app shows `graduated` / `redeemable`, the DAMM v2 pool, buy label "Price $0.0000016 · Floor $0.000000506 · Max loss if you buy now: −68.3%" |
+| DAMM v2 trades | buy 30,000,000 raw SPYx → 97,555,278,891,992 base; sell 86,988,750,348,138 base → 27,134,999 raw SPYx; both equal the SDK quotes |
 | Crank (LP fees) | `harvest_lp_fees` on the claimer position; the vault grew by exactly the pending quote fee |
-| Redeem | 146,624,265,899,190 base → net 9,612,341 raw SPYx, fee 196,171, both equal `previewRedeem`; vault and supply moved by exactly those amounts; floor Q64 1,234,005,238,093 → 1,238,245,712,284; a 1-raw redemption → "This amount is too small: the redemption would pay nothing." |
-| Page render | jsdom `TokenView`: heading, Graduated badge, the exact buy-label sentence (max loss equal to the route's), vault balance and supply equal to the JSON, redeem field open, local-fork routing note, crank panel consistent with due actions, disclosures; `LaunchList` links the launch to `/t/<mint>` |
-| Mainnet | 15 app signatures plus the surfnet's local signature list (26 in total) looked up with read-only `getSignatureStatuses` on mainnet: 0 found |
+| Redeem | 146,615,596,979,819 base → net 9,612,424 raw SPYx, fee 196,172, both equal `previewRedeem`; vault and supply moved by exactly those amounts; floor Q64 1,234,088,857,184 → 1,238,329,324,966; a 1-raw redemption → "This amount is too small: the redemption would pay nothing." |
+| After each step | `/api/launches/[mint]` equals a direct SDK read: vault, supply, quote reserve, SDK phase, floor Q64, due crank actions |
+| Page render (jsdom) | `TokenView`: heading, Graduated badge, the exact buy-label sentence (max loss equal to the route's), vault balance and supply equal to the JSON, redeem field open, local-fork routing note, crank panel consistent with due actions, disclosures; `LaunchList` links the launch to `/t/<mint>` |
+| UI-driven (jsdom) | a faucet-funded keypair wallet filled `CreateLaunchForm` ("UI Form 842j7", first buy 0.05 SPYx) and clicked Launch: two steps done, "Open the token page" link; on its `TokenView` it ticked the attestation, bought 0.1 SPYx in the curve panel ("Paid 0.1 SPYx, received … $UIFL.") and ran the crank button (curve fees harvested, vault 83,525 raw, nothing left due) |
+| Mainnet | the flow's 15 app signatures plus the surfnet's local signature list (26) looked up with read-only `getSignatureStatuses` on mainnet: 0 found; after the UI-driven run all 33 local signatures: 0 found |
 
-Final JSON for the launch (excerpt): `vaultRaw` 57,283,217 after the redemption, `supplyRaw`
-853,375,734,100,808, `crankDue` [], `priceSource` jupiter. `next dev` generates `AGENTS.md` and
+Final JSON (excerpt) for "E2E Floor 382qvl": `chainPhase` redeemable, `vaultRaw` 57,287,667, `supplyRaw`
+853,384,403,020,178, `crankDue` [], buy label "Price $0.00000171 · Floor $0.000000513 · Max loss if you
+buy now: −70.1%", `priceSource` jupiter. The surfnet and the app server were stopped afterwards.
+
+`next dev` generates `AGENTS.md` and
 `CLAUDE.md` in `app/`; `agentRules: false` in `next.config.ts` turns that off and both names are gitignored.
