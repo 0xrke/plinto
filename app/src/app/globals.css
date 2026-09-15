@@ -1,0 +1,157 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    "Noto Sans", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Neutrals */
+  --color-canvas: #f5f6f3;
+  --color-surface: #ffffff;
+  --color-sunken: #eef0ec;
+  --color-line: #e0e4de;
+  --color-line-strong: #c9cfc7;
+  --color-ink: #13202d;
+  --color-ink-2: #455260;
+  --color-ink-3: #5c6570;
+
+  /* Brand: deep navy for structure and primary actions */
+  --color-brand: #16324f;
+  --color-brand-hover: #0e243b;
+  --color-brand-soft: #e7edf4;
+
+  /* The floor: a solid, calm green */
+  --color-floor: #1f6f55;
+  --color-floor-strong: #155240;
+  --color-floor-soft: #dcede5;
+
+  /* Risk (distance between price and floor): rust, not alarm red */
+  --color-risk: #9a3d14;
+  --color-risk-soft: #fbece2;
+  --color-risk-line: #e3a47f;
+
+  /* Phases */
+  --color-presale: #1f4f94;
+  --color-presale-soft: #e4ecf8;
+  --color-graduating: #6a4a9c;
+  --color-graduating-soft: #efe9f7;
+
+  --color-focus: #2a78d6;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+  input[type="range"] {
+    accent-color: var(--color-brand);
+  }
+}
+
+@layer components {
+  .card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: 0.875rem;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.625rem;
+    padding: 0.625rem 1rem;
+    font-weight: 600;
+    font-size: 0.9375rem;
+    line-height: 1.25rem;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+    cursor: pointer;
+  }
+  .btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+  .btn-primary {
+    background: var(--color-brand);
+    color: #ffffff;
+  }
+  .btn-primary:not(:disabled):hover {
+    background: var(--color-brand-hover);
+  }
+  .btn-secondary {
+    background: var(--color-surface);
+    color: var(--color-ink);
+    border: 1px solid var(--color-line-strong);
+  }
+  .btn-secondary:not(:disabled):hover {
+    background: var(--color-sunken);
+  }
+  .btn-floor {
+    background: var(--color-floor);
+    color: #ffffff;
+  }
+  .btn-floor:not(:disabled):hover {
+    background: var(--color-floor-strong);
+  }
+  .field-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  .field-hint {
+    font-size: 0.8125rem;
+    color: var(--color-ink-3);
+  }
+  .input {
+    width: 100%;
+    border-radius: 0.625rem;
+    border: 1px solid var(--color-line-strong);
+    background: var(--color-surface);
+    padding: 0.625rem 0.75rem;
+    font-size: 1rem;
+    color: var(--color-ink);
+  }
+  .input::placeholder {
+    color: #8a929b;
+  }
+  .input:focus {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 0;
+    border-color: transparent;
+  }
+  .input[aria-invalid="true"] {
+    border-color: var(--color-risk);
+  }
+  .eyebrow {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-ink-3);
+  }
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  /* Diagonal hatch for the "at risk" band between floor and price. */
+  .hatch-risk {
+    background-color: var(--color-risk-soft);
+    background-image: repeating-linear-gradient(
+      135deg,
+      rgba(154, 61, 20, 0.22) 0 2px,
+      transparent 2px 7px
+    );
+  }
+}
