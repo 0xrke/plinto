@@ -21,7 +21,10 @@ export const DAMM_V2_PROGRAM_ID = new PublicKey(
 );
 
 export const LAUNCH_SEED = "launch";
+/** Seed of the claimer PDA (kept as "authority" for the DBC config's fee_claimer). */
 export const AUTHORITY_SEED = "authority";
+/** Seed of the vault authority PDA (owner of the vault). */
+export const VAULT_AUTHORITY_SEED = "vault_authority";
 
 const encoder = new TextEncoder();
 
@@ -34,8 +37,10 @@ export function launchPda(config: PublicKey): [PublicKey, number] {
 }
 
 /**
- * `Authority` PDA: seeds `["authority", config]` under the StockFloor program. It is the DBC
- * `fee_claimer` and `leftover_receiver`, owns the vault and the DAMM v2 position NFTs.
+ * Claimer PDA: seeds `["authority", config]` under the StockFloor program (the `claimer` account
+ * in the program IDL). It is the DBC `fee_claimer` and `leftover_receiver` (pass it for both when
+ * building the DBC config), owns the DAMM v2 position NFTs and signs the program's CPIs into DBC
+ * and DAMM v2. It has no authority over the vault.
  */
 export function authorityPda(config: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
@@ -44,16 +49,30 @@ export function authorityPda(config: PublicKey): [PublicKey, number] {
   );
 }
 
-/** Vault token account: the associated token account of the `Authority` PDA for the quote mint. */
+/**
+ * Vault authority PDA: seeds `["vault_authority", config]` under the StockFloor program. It owns
+ * the vault and signs only the payout transfer of `redeem`.
+ */
+export function vaultAuthorityPda(config: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [encoder.encode(VAULT_AUTHORITY_SEED), config.toBytes()],
+    STOCKFLOOR_PROGRAM_ID,
+  );
+}
+
+/**
+ * Vault token account: the associated token account of the vault authority PDA for the quote
+ * mint and its token program (Token-2022 for xStocks).
+ */
 export function vaultAddress(
   config: PublicKey,
   quoteMint: PublicKey,
   quoteTokenProgram: PublicKey,
 ): PublicKey {
-  const [authority] = authorityPda(config);
+  const [vaultAuthority] = vaultAuthorityPda(config);
   return getAssociatedTokenAddressSync(
     quoteMint,
-    authority,
+    vaultAuthority,
     true,
     quoteTokenProgram,
     ASSOCIATED_TOKEN_PROGRAM_ID,

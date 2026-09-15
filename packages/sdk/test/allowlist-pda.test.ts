@@ -23,7 +23,9 @@ import {
   QUOTE_ALLOWLIST,
   QUOTE_TOKEN_PROGRAM_ID,
   STOCKFLOOR_PROGRAM_ID,
+  VAULT_AUTHORITY_SEED,
   vaultAddress,
+  vaultAuthorityPda,
 } from "../src";
 
 describe("QUOTE_ALLOWLIST", () => {
@@ -109,11 +111,12 @@ describe("program ids and PDAs", () => {
     .uint8Array({ minLength: 32, maxLength: 32 })
     .map((b) => new PublicKey(b));
 
-  it("property: launch and authority PDAs use the documented seeds", () => {
+  it("property: launch, claimer (authority) and vault authority PDAs use the documented seeds", () => {
     fc.assert(
       fc.property(key, (config) => {
         const [launch, launchBump] = launchPda(config);
         const [authority, authorityBump] = authorityPda(config);
+        const [vaultAuthority, vaultAuthorityBump] = vaultAuthorityPda(config);
         const expLaunch = PublicKey.findProgramAddressSync(
           [Buffer.from("launch"), config.toBuffer()],
           STOCKFLOOR_PROGRAM_ID,
@@ -122,32 +125,47 @@ describe("program ids and PDAs", () => {
           [Buffer.from("authority"), config.toBuffer()],
           STOCKFLOOR_PROGRAM_ID,
         );
+        const expVaultAuthority = PublicKey.findProgramAddressSync(
+          [Buffer.from("vault_authority"), config.toBuffer()],
+          STOCKFLOOR_PROGRAM_ID,
+        );
         expect(launch.equals(expLaunch[0])).toBe(true);
         expect(launchBump).toBe(expLaunch[1]);
         expect(authority.equals(expAuthority[0])).toBe(true);
         expect(authorityBump).toBe(expAuthority[1]);
+        expect(vaultAuthority.equals(expVaultAuthority[0])).toBe(true);
+        expect(vaultAuthorityBump).toBe(expVaultAuthority[1]);
         expect(launch.equals(authority)).toBe(false);
+        expect(vaultAuthority.equals(authority)).toBe(false);
+        expect(vaultAuthority.equals(launch)).toBe(false);
         expect(PublicKey.isOnCurve(authority.toBytes())).toBe(false);
+        expect(PublicKey.isOnCurve(vaultAuthority.toBytes())).toBe(false);
       }),
       { numRuns: 50 },
     );
+    expect(VAULT_AUTHORITY_SEED).toBe("vault_authority");
   });
 
-  it("vault is the Authority PDA's associated token account for the quote mint", () => {
+  it("vault is the vault authority PDA's associated token account for the quote mint, not the claimer's", () => {
     const config = Keypair.generate().publicKey;
     const quoteMint = new PublicKey(DEFAULT_QUOTE_ASSET.mint);
+    const [vaultAuthority] = vaultAuthorityPda(config);
     const [authority] = authorityPda(config);
-    const [expected] = PublicKey.findProgramAddressSync(
-      [
-        authority.toBuffer(),
-        TOKEN_2022_PROGRAM_ID.toBuffer(),
-        quoteMint.toBuffer(),
-      ],
-      ASSOCIATED_TOKEN_PROGRAM_ID,
-    );
+    const ata = (owner: PublicKey, tokenProgram: PublicKey) =>
+      PublicKey.findProgramAddressSync(
+        [owner.toBuffer(), tokenProgram.toBuffer(), quoteMint.toBuffer()],
+        ASSOCIATED_TOKEN_PROGRAM_ID,
+      )[0];
+    const expected = ata(vaultAuthority, TOKEN_2022_PROGRAM_ID);
     expect(
       vaultAddress(config, quoteMint, TOKEN_2022_PROGRAM_ID).equals(expected),
     ).toBe(true);
+    // the claimer (DBC fee_claimer) never owns the vault
+    expect(
+      vaultAddress(config, quoteMint, TOKEN_2022_PROGRAM_ID).equals(
+        ata(authority, TOKEN_2022_PROGRAM_ID),
+      ),
+    ).toBe(false);
     // the token program is part of the derivation
     expect(
       vaultAddress(config, quoteMint, TOKEN_PROGRAM_ID).equals(expected),
