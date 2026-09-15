@@ -39,6 +39,20 @@ Environment:
 - `/` launches list: phase, progress to graduation, price, floor, max loss, quote asset.
 - `/create` launch form with a live `previewLaunch` preview and an optional creator first buy. Submitting
   runs the SDK launch composer's transactions with step-by-step progress (see below).
+  - **Graduation threshold (advanced)**: quick picks ($50, $100, $1,000 default, $10,000) plus a custom
+    USD amount. The preview (threshold in the quote asset, floor at graduation, vault, prices) follows it.
+    Validation is in `src/lib/launchForm.ts`: the field takes a dollar amount with at most two decimals
+    between the SDK's `MIN_THRESHOLD_USD` ($1) and `THRESHOLD_MAX_USD` ($10,000,000, an app bound so one
+    extra zero cannot 10× a raise), and `previewLaunchInput` then runs `previewLaunch` **and**
+    `buildDbcConfigParams`, the SDK's port of everything DBC's `create_config` checks on chain. A
+    threshold the chain would reject (the raw u64 threshold at the live quote price, the DBC sqrt-price
+    range) shows up on the field and disables Launch instead of failing at signing time. Below
+    `METEORA_KEEPER_MIN_THRESHOLD_USD` ($750) the form says that Meteora's keeper will not migrate the
+    pool and the permissionless crank has to. The $50 quick pick is the C2 mainnet demo threshold
+    (`docs/research/surfpool-e2e.md` §3), so the whole demo can be driven from the UI.
+  - Once a launch is on chain — and while a retry is pending, because a retry re-sends the transactions
+    built from the original input — every parameter fieldset is disabled, so the preview can never
+    promise a floor or a threshold other than the launched one.
 - `/t/[mint]` token page: phase stepper; presale progress and curve trade panel, whose buy button reads
   `Price $X · Floor at graduation (est.) $Y · Max loss if it graduates: −Z%` (there is no floor before
   graduation, and the page says so); after graduation the floor meter, the market panel with the honest buy
@@ -143,7 +157,7 @@ e2e/                        local-fork end-to-end driver and page render check (
 
 ## Tests
 
-`pnpm --filter @stockfloor/app test` (part of the root `pnpm test`): 17 files, 130 tests.
+`pnpm --filter @stockfloor/app test` (part of the root `pnpm test`): 19 files, 173 tests.
 
 - `lib/data/chain.test.ts`: mapping of SDK `LaunchState`s built with the launch composer (presale,
   graduating, graduated, redeemable, paused, flat preset, missing metadata, unlisted quote, no pool) and
@@ -159,9 +173,19 @@ e2e/                        local-fork end-to-end driver and page render check (
 - `lib/faucet/faucet.test.ts`: the localhost guard (mainnet URL, private IPs, `127.0.0.1.nip.io`,
   `localhost.evil.example`, credentials, other schemes refused without a probe; loopback non-surfnet
   refused), the request handler and the `/api/faucet` route module with stubbed env and fetch.
+- `lib/launchForm.test.ts`: the threshold field (parsing, the `MIN_THRESHOLD_USD` and `THRESHOLD_MAX_USD`
+  bounds) and `previewLaunchInput` (the floor scales with the threshold, max loss does not; a threshold
+  the chain would reject comes back as the chain's own message).
+- `components/create/CreateLaunchForm.test.tsx`: the threshold presets and the custom field move the
+  preview, an out-of-range threshold disables Launch, the chosen threshold is what reaches the action,
+  and the parameters are frozen after a launch and while a retry is pending.
 - `lib/chain/{cluster,errors,metadata,prices}.test.ts`, `components/token/TradePanels.test.tsx` (the buy
   label stays exactly the price / floor / max-loss sentence; USDC/SOL disabled on the fork; exact curve
   quote), plus the earlier format, metrics, estimates, form, card, floor meter and redeem panel tests.
+- Money-wording and rounding regressions: `RedeemPanel.test.tsx` checks that the post-redemption floor is
+  labelled "never falls in SPYx" (the per-token floor only rises in the quote asset; in USD it moves with
+  the underlying) and that the vault card's floor per token in the quote asset is rounded **down**;
+  `format.test.ts` covers `formatSignificantDown`.
 
 ## Local fork end-to-end
 
@@ -183,33 +207,38 @@ for `signTransaction`, funds them through the running app's faucet route, and af
 the running app's `/api/launches/[mint]` JSON with a direct SDK read (vault, supply, reserve, phase,
 floor Q64, due crank actions). `e2e/render.e2e.tsx` then renders the real `TokenView` and `LaunchList`
 components in jsdom against the fork and checks them against the same JSON, and drives
-`CreateLaunchForm`, the curve trade panel and the crank button with a keypair-backed wallet context.
+`CreateLaunchForm` (including the advanced threshold control), the curve trade panel, the crank button
+and the redeem panel with a keypair-backed wallet context.
 
-Recorded run, 2026-09-16 ~01:07 local (22:07Z), fresh surfnet (Surfpool 1.5.0, stockfloor.so sha256
-`580ecbee…`), `next build && next start` of commit `80fe9a7`, live Jupiter SPYx price $757.28, on-chain
-multiplier 1.005714560286254. `pnpm e2e:local`: 11 + 3 tests passed.
+Recorded run, 2026-09-16 ~02:40 local (2026-09-15 23:40Z), fresh surfnet (Surfpool 1.5.0,
+`target/deploy/stockfloor.so` 458,160 bytes, sha256
+`b1a1531ca855730382334c7e66cb9635e7bdde3d0cbc12cb8ae4f354243df0e3`, not rebuilt), `next build &&
+next start` of the working tree at commit `abf8c9b` plus the threshold control and the money-wording
+fixes, live Jupiter SPYx price $758.70 at launch. `pnpm e2e:local`: **11 + 4 tests passed**.
 
 | Step | Verified |
 |---|---|
 | Guard | loopback RPC, SDK send guard mode `surfnet` (mainnet genesis + `surfnet-version` 1.5.0 + `surfnet_getLocalSignatures`) before any send; `GET /api/faucet` enabled, `/api/launches` source `chain` |
 | Faucet route | 415 for a non-JSON body, 400 for a bad wallet; three wallets got 10 SOL and exactly 500,000,000 raw SPYx |
-| Create launch | two transactions (config + `create_launch`; pool + `register_pool` + first buy of 0.1 SPYx UI), every step done; the app lists "E2E Floor 382qvl" / E2EF as presale, gentle preset, 50% vault share, 200 bps, image URL; `/`, `/create`, `/t/<mint>` return 200 |
+| Create launch | two transactions (config + `create_launch`; pool + `register_pool` + first buy of 0.1 SPYx UI), every step done; the app lists "E2E Floor 3bdpk2" / E2EF (mint `3CyMi2YH…zNQgq`) as presale, gentle preset, 50% vault share, 200 bps, image URL; `/`, `/create`, `/t/<mint>` return 200 |
 | Refusals | USDC buy on the fork → "Routing USDC through Jupiter works on mainnet only…"; redeem in presale → "Redeem opens after migration…"; empty wallet → "Trading needs at least 0.005 SOL… Use the local faucet"; nothing sent |
-| Curve trades | buys of 40,000,000 and 30,000,000 raw SPYx ("Paid 0.40228582 SPYx, received 217,417,683.41 $E2EF.") and a sell of 21,741,768,340,849 base for 4,190,052 raw: every spent and received amount equals the SDK quote |
+| Curve trades | buys of 40,000,000 and 30,000,000 raw SPYx ("Paid 0.40228582 SPYx, received 217,809,165 $E2EF.") and a sell of 21,780,916,499,955 base for 4,190,557 raw: every spent and received amount equals the SDK quote |
 | Crank (presale) | `harvest_curve_fees`; vault increased, partner fee reset to 0 |
-| Completing buy | 200,000,000 raw requested; PartialFill used 56,959,147 and received 279,648,004,926,911 base (= quote); the app shows `graduating`, progress 1, due `harvest_migration_fee`, `harvest_surplus`, `migrate`; a buy is refused while graduating |
-| Crank (graduation) | `harvest_curve_fees`, `harvest_migration_fee`, `harvest_surplus`, `migrate` (4 transactions); vault 66,440,819 (≥ the 65,650,462 partner fee); the app shows `graduated` / `redeemable`, the DAMM v2 pool, buy label "Price $0.0000016 · Floor $0.000000506 · Max loss if you buy now: −68.3%" |
-| DAMM v2 trades | buy 30,000,000 raw SPYx → 97,555,278,891,992 base; sell 86,988,750,348,138 base → 27,134,999 raw SPYx; both equal the SDK quotes |
+| Completing buy | 200,000,000 raw requested; PartialFill used 56,710,884 and received 278,925,404,130,425 base (= quote); the app shows `graduating`, progress 1, due `harvest_migration_fee`, `harvest_surplus`, `migrate`; a buy is refused while graduating |
+| Crank (graduation) | `harvest_curve_fees`, `harvest_migration_fee`, `harvest_surplus`, `migrate`, `sync_migration` (5 transactions); vault 66,316,287 (≥ the 65,527,317 partner fee); the app shows `graduated` / `redeemable`, the DAMM v2 pool, buy label "Price $0.0000016 · Floor $0.000000506 · Max loss if you buy now: −68.3%" |
+| DAMM v2 trades | buy 30,000,000 raw SPYx → 97,681,355,424,988 base; sell 86,897,389,843,556 base → 27,091,006 raw SPYx; both equal the SDK quotes |
 | Crank (LP fees) | `harvest_lp_fees` on the claimer position; the vault grew by exactly the pending quote fee |
-| Redeem | 146,615,596,979,819 base → net 9,612,424 raw SPYx, fee 196,172, both equal `previewRedeem`; vault and supply moved by exactly those amounts; floor Q64 1,234,088,857,184 → 1,238,329,324,966; a 1-raw redemption → "This amount is too small: the redemption would pay nothing." |
+| Redeem | 146,854,801,962,294 base → net 9,610,133 raw SPYx, fee 196,126, both equal `previewRedeem`; vault and supply moved by exactly those amounts; floor Q64 1,231,785,098,657 → 1,236,025,751,674; a 1-raw redemption → "This amount is too small: the redemption would pay nothing." |
 | After each step | `/api/launches/[mint]` equals a direct SDK read: vault, supply, quote reserve, SDK phase, floor Q64, due crank actions |
 | Page render (jsdom) | `TokenView`: heading, Graduated badge, the exact buy-label sentence (max loss equal to the route's), vault balance and supply equal to the JSON, redeem field open, local-fork routing note, crank panel consistent with due actions, disclosures; `LaunchList` links the launch to `/t/<mint>` |
-| UI-driven (jsdom) | a faucet-funded keypair wallet filled `CreateLaunchForm` ("UI Form 842j7", first buy 0.05 SPYx) and clicked Launch: two steps done, "Open the token page" link; on its `TokenView` it ticked the attestation, bought 0.1 SPYx in the curve panel ("Paid 0.1 SPYx, received … $UIFL.") and ran the crank button (curve fees harvested, vault 83,525 raw, nothing left due) |
-| Mainnet | the flow's 15 app signatures plus the surfnet's local signature list (26) looked up with read-only `getSignatureStatuses` on mainnet: 0 found; after the UI-driven run all 33 local signatures: 0 found |
+| UI-driven, default threshold (jsdom) | a faucet-funded keypair wallet filled `CreateLaunchForm` ("UI Form bf1ab", first buy 0.05 SPYx) and clicked Launch: two steps done, "Open the token page" link, and the parameter fieldsets disabled afterwards; on its `TokenView` it ticked the attestation, bought 0.1 SPYx in the curve panel ("Paid 0.1 SPYx, received … $UIFL.") and ran the crank button (curve fees harvested, vault 83,525 raw, nothing left due) |
+| **UI-driven, $50 threshold (jsdom)** | the whole demo through the real components at the C2 threshold: the **$50** quick pick moved the preview off the $1,000 default (threshold row and floor at graduation) and showed the "Meteora's keeper does not migrate the pool for you" note; Launch created "UI $50 bf3kl" / UI50 (mint `896DLBzX…18BSF`) with a first buy of 0.02 SPYx and an on-chain threshold of **6,586,828 raw SPYx ≈ $50.26** at the read price (the $1,000 launches: 131,054,635 and 131,736,542 raw); one 0.2 SPYx curve buy completed the curve ("… The curve completed with this buy; the unused input stayed in your wallet."); the crank button ran the 5-step graduation crank; the page turned into the graduated view (Graduated badge, `Price $… · Floor $… · Max loss if you buy now: −…%`) and a Max redemption paid out with "Received … SPYx. The exit fee of … SPYx stayed in the vault." Afterwards: `phase` graduated, `redeemable` true, `crankDue` [], vault 1,089,548 raw, supply 313,392,654,522,230, floor Q64 61,440,109,317 → **64,132,368,203** (the exit fee raised it) |
+| Mainnet | the flow's 16 app signatures plus the surfnet's local signature list looked up with read-only `getSignatureStatuses` on mainnet: **0 of 27 found** |
 
-Final JSON (excerpt) for "E2E Floor 382qvl": `chainPhase` redeemable, `vaultRaw` 57,287,667, `supplyRaw`
-853,384,403,020,178, `crankDue` [], buy label "Price $0.00000171 · Floor $0.000000513 · Max loss if you
-buy now: −70.1%", `priceSource` jupiter. The surfnet and the app server were stopped afterwards.
+Final JSON (excerpt) for "E2E Floor 3bdpk2": `chainPhase` redeemable, `vaultRaw` 57,165,071, `supplyRaw`
+853,145,198,037,703, `crankDue` [], buy label "Price $0.00000171 · Floor $0.000000511 · Max loss if you
+buy now: −70.1%", `priceSource` jupiter. For "UI $50 bf3kl": "Price $0.0000000801 · Floor $0.0000000265 ·
+Max loss if you buy now: −66.9%". The surfnet and the app server were stopped afterwards.
 
 `next dev` generates `AGENTS.md` and
 `CLAUDE.md` in `app/`; `agentRules: false` in `next.config.ts` turns that off and both names are gitignored.
