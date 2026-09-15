@@ -29,8 +29,9 @@ pub struct Launch {
     /// `true` once the partner surplus has been moved into the vault.
     pub surplus_harvested: bool,
     /// Latched to `true` the first time this program sees the registered DBC pool fully
-    /// migrated to DAMM v2 (`harvest_migration_fee`, `harvest_surplus` or the first `redeem`). Once set, `redeem` never decodes DBC state again, so a later
-    /// DBC upgrade that changes the VirtualPool layout cannot lock redemptions.
+    /// migrated to DAMM v2 (`sync_migration`, `harvest_migration_fee`, `harvest_surplus` or the
+    /// first `redeem`). Once set, `redeem` never decodes DBC state again, so a later DBC upgrade
+    /// that changes the VirtualPool layout cannot lock redemptions.
     pub migrated: bool,
     /// DBC config (one config per launch).
     pub config: Pubkey,

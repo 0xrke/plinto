@@ -14,7 +14,8 @@ use crate::token_utils::{assert_quote_mint_transferable, assert_vault_not_frozen
 
 /// Burn `amount` base tokens and receive `floor(vault * amount / supply)` minus the exit
 /// fee in the quote asset. Only after the DBC pool migrated to DAMM v2 and the partner
-/// migration fee is in the vault. The migration check latches `launch.migrated`.
+/// migration fee is in the vault. The migration check latches `launch.migrated` (the crank latches
+/// it earlier with `sync_migration`).
 ///
 /// The payout is the only transfer out of the vault in this program, and the only thing the
 /// vault authority PDA ever signs. The claimer PDA is not involved.

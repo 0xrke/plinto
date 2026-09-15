@@ -64,6 +64,11 @@ pub mod stockfloor {
         instructions::harvest_dbc_quote::handle_harvest_surplus(ctx)
     }
 
+    /// Permissionless: latch `Launch.migrated` once the DBC pool migrated (idempotent).
+    pub fn sync_migration(ctx: Context<SyncMigration>) -> Result<()> {
+        instructions::sync_migration::handle_sync_migration(ctx)
+    }
+
     /// Permissionless: burn base tokens held by the claimer PDA (donations).
     pub fn burn_claimer_base(ctx: Context<BurnClaimerBase>) -> Result<()> {
         instructions::burn_claimer_base::handle_burn_claimer_base(ctx)

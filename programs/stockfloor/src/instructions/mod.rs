@@ -6,6 +6,7 @@ pub mod harvest_dbc_quote;
 pub mod harvest_lp_fees;
 pub mod redeem;
 pub mod register_pool;
+pub mod sync_migration;
 
 pub use burn_claimer_base::*;
 pub use create_launch::*;
@@ -15,3 +16,4 @@ pub use harvest_dbc_quote::*;
 pub use harvest_lp_fees::*;
 pub use redeem::*;
 pub use register_pool::*;
+pub use sync_migration::*;

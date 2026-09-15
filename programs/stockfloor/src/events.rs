@@ -53,6 +53,13 @@ pub struct SurplusHarvested {
     pub vault_balance: u64,
 }
 
+/// `Launch.migrated` latched by `sync_migration` (the harvests and `redeem` latch without an event).
+#[event]
+pub struct MigrationLatched {
+    pub launch: Pubkey,
+    pub pool: Pubkey,
+}
+
 #[event]
 pub struct ClaimerBaseBurned {
     pub launch: Pubkey,
