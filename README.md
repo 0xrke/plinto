@@ -612,18 +612,21 @@ Pages:
 
 The data source is mock until M4 wires the chain (see [`app/README.md`](app/README.md)).
 
-### Live local mainnet fork with Surfpool: TBD (M3/M4)
+### Live local mainnet fork with Surfpool (scripts landing in M3/M4)
 
-Surfpool runs a **local** simnet that forks mainnet state on demand. The scripts are being written now:
+Surfpool runs a **local** simnet that forks mainnet state on demand. It executes transactions in-process and
+uses the mainnet RPC only for reads. The helper scripts in `scripts/surfpool/` were just committed. The
+commands below are taken from their headers and have not been verified end to end for this README. The SDK
+scripts and the app's chain data source are still TBD.
 
 | Step | Command | Status |
 |---|---|---|
-| Start the local fork | `scripts/surfpool/*` | TBD |
-| Deploy `stockfloor` to the local fork (local deployer `keys/deployer.json`) | `scripts/surfpool/*` | TBD |
-| Fund demo wallets with SPYx | `scripts/surfpool/*` | TBD |
-| Create a launch | `packages/sdk/scripts/*` (`create-launch`) | TBD |
-| Run the crank (harvests, migration) | `packages/sdk/scripts/*` (`crank`) | TBD |
-| Redeem from the CLI | `packages/sdk/scripts/*` (`redeem`) | TBD |
+| Start the local fork, deploy `target/deploy/stockfloor.so` with `keys/deployer.json`, fund wallets with SOL and SPYx | `FUND_WALLETS="<pubkey> <pubkey>" FUND_SOL=10 FUND_SPYX=25 bash scripts/surfpool/up.sh` | committed (M3) |
+| Start or stop only the fork | `bash scripts/surfpool/start.sh` / `bash scripts/surfpool/stop.sh` | committed (M3) |
+| Fund one wallet | `bash scripts/surfpool/run.sh fund <wallet> --sol 10 --token SPYx --amount 5` | committed (M3) |
+| Create a launch | `packages/sdk/scripts/*` (`create-launch`) | TBD (M3) |
+| Run the crank (harvests, migration) | `packages/sdk/scripts/*` (`crank`) | TBD (M3) |
+| Redeem from the CLI | `packages/sdk/scripts/*` (`redeem`) | TBD (M3) |
 | App against the fork | `NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8899 NEXT_PUBLIC_DATA_SOURCE=chain pnpm --filter @stockfloor/app dev` | TBD (M4) |
 
 On the local fork buyers pay SPYx directly, because Jupiter routing is mainnet-only.
