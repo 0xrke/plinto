@@ -7,7 +7,7 @@ import { PublicKey } from "@solana/web3.js";
 import { redeemQuote } from "@stockfloor/sdk";
 import { AttestationProvider } from "@/lib/attestation";
 import { MockDataSource } from "@/lib/data/mock";
-import { StubLaunchActions } from "@/lib/data/actions";
+import { NOT_WIRED, StubLaunchActions } from "@/lib/data/actions";
 import { DataProvider } from "@/lib/data/context";
 import type { LaunchSummary } from "@/lib/data/types";
 import { formatTokenAmount } from "@/lib/format";
@@ -89,10 +89,7 @@ describe("<RedeemPanel />", () => {
     await act(async () => {
       fireEvent.click(button);
     });
-    expect(await screen.findByRole("status")).toHaveProperty(
-      "textContent",
-      "Not wired to the chain yet: transactions arrive with the M4 chain integration.",
-    );
+    expect(await screen.findByRole("status")).toHaveProperty("textContent", NOT_WIRED);
   });
 
   it("fills the balance with Max and rejects amounts above it", async () => {

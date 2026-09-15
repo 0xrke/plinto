@@ -16,11 +16,12 @@ import {
 
 const spyx = QUOTE_ALLOWLIST.find((a) => a.symbol === "SPYx")!;
 
-const market: QuoteMarket = { asset: spyx, priceUsd: 757.02, multiplier: 1.0057146, updatedAt: 0 };
+const market: QuoteMarket = { asset: spyx, priceUsd: 757.02, multiplier: 1.0057146, updatedAt: 0, priceSource: "mock" };
 
 function launch(overrides: Partial<LaunchSummary> = {}): LaunchSummary {
   return {
     mint: "mint",
+    launchAddress: "launch",
     config: "config",
     pool: "pool",
     dammPool: "damm",
@@ -42,7 +43,9 @@ function launch(overrides: Partial<LaunchSummary> = {}): LaunchSummary {
     vaultRaw: 68_410_000n,
     supplyRaw: 987_315_402_118_204n,
     migrationFeeHarvested: true,
+    quotePaused: false,
     projectedAtGraduation: null,
+    chain: null,
     ...overrides,
   };
 }

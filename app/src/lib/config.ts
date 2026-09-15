@@ -1,25 +1,48 @@
+import { isLoopbackRpcUrl } from "@stockfloor/sdk";
+
 /**
- * Public runtime configuration.
+ * Public runtime configuration. `NEXT_PUBLIC_*` values are inlined at build time.
  *
- * NEXT_PUBLIC_RPC_URL      RPC endpoint for the wallet adapter connection.
- *                          Defaults to a local mainnet fork (Surfpool) at http://127.0.0.1:8899.
- * NEXT_PUBLIC_DATA_SOURCE  "mock" (default) or "chain". The chain source lands in M4; until then
- *                          "chain" falls back to mock data and the UI says so.
+ * NEXT_PUBLIC_RPC_URL        RPC endpoint for reads, the wallet connection and sends.
+ *                            Defaults to a local mainnet fork (Surfpool) at http://127.0.0.1:8899.
+ * NEXT_PUBLIC_WS_URL         Optional WebSocket endpoint. Default: web3.js derives it (RPC port + 1).
+ * NEXT_PUBLIC_DATA_SOURCE    "mock" (default, design work and tests) or "chain" (on-chain launches).
+ * NEXT_PUBLIC_ALLOW_MAINNET  "1" enables sending transactions through a non-loopback RPC (checkpoint C2
+ *                            only). Without it the app sends only to a loopback surfnet or local validator.
  */
 export const DEFAULT_RPC_URL = "http://127.0.0.1:8899";
 
 export const RPC_URL: string = process.env.NEXT_PUBLIC_RPC_URL || DEFAULT_RPC_URL;
+
+export const WS_URL: string | undefined = process.env.NEXT_PUBLIC_WS_URL || undefined;
 
 export type DataSourceKind = "mock" | "chain";
 
 export const DATA_SOURCE: DataSourceKind =
   process.env.NEXT_PUBLIC_DATA_SOURCE === "chain" ? "chain" : "mock";
 
-/** Short network label for the header badge. */
+export const ALLOW_MAINNET_SENDS: boolean = process.env.NEXT_PUBLIC_ALLOW_MAINNET === "1";
+
+/** True when the RPC host is loopback (127.0.0.1, localhost, ::1): a local fork or validator. */
+export function isLocalRpcUrl(url: string): boolean {
+  return isLoopbackRpcUrl(url);
+}
+
+/** The configured RPC is a local cluster. Local-fork helpers (faucet, badge) show only then. */
+export const IS_LOCAL_RPC: boolean = isLocalRpcUrl(RPC_URL);
+
+/** Short network label for the header badge, from the parsed host (never a substring match). */
 export function networkLabel(url: string): string {
-  if (/127\.0\.0\.1|localhost/.test(url)) return "Local fork";
-  if (/devnet/.test(url)) return "Devnet";
-  if (/mainnet/.test(url)) return "Mainnet";
+  if (isLocalRpcUrl(url)) return "Local fork";
+  let host = "";
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return "Custom RPC";
+  }
+  const labels = host.split(".");
+  if (labels.some((l) => l.includes("devnet"))) return "Devnet";
+  if (labels.some((l) => l.includes("mainnet"))) return "Mainnet";
   return "Custom RPC";
 }
 
@@ -31,3 +54,14 @@ export const CURVE_TRADING_FEE_BPS = 100;
 export const VAULT_SHARE_MIN = 30;
 export const VAULT_SHARE_MAX = 70;
 export const VAULT_SHARE_DEFAULT = 50;
+
+/** React Query polling intervals for on-chain data (milliseconds). */
+export const POLL_MS = {
+  launches: 15_000,
+  launch: 6_000,
+  balances: 10_000,
+  markets: 60_000,
+} as const;
+
+/** Default slippage for trades (bps). */
+export const DEFAULT_SLIPPAGE_BPS = 100;

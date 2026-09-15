@@ -1,10 +1,12 @@
 "use client";
 
 import { useId, useMemo, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
   QUOTE_ALLOWLIST,
   previewLaunch,
+  uiToRaw,
   type CurvePreset,
   type LaunchInput,
   type LaunchPreview,
@@ -12,14 +14,19 @@ import {
 import {
   DEFAULT_EXIT_FEE_BPS,
   DEFAULT_THRESHOLD_USD,
+  IS_LOCAL_RPC,
   VAULT_SHARE_DEFAULT,
   VAULT_SHARE_MAX,
   VAULT_SHARE_MIN,
 } from "@/lib/config";
-import { useData, useQuoteMarkets } from "@/lib/data/context";
-import { formatPercent, formatUsd } from "@/lib/format";
+import type { LaunchResume } from "@/lib/data/types";
+import { useCluster, useData, useQuoteMarkets, useRefreshChainData, useTokenBalance, useTxFlow } from "@/lib/data/context";
+import { parseUiNumber } from "@/lib/estimates";
+import { formatPercent, formatTokenAmount, formatUsd } from "@/lib/format";
 import { validateLaunchForm, type LaunchFormValues } from "@/lib/launchForm";
+import { useActionGate } from "@/components/token/useActionGate";
 import { VolatilityTag } from "@/components/ui/QuoteChip";
+import { TxProgress } from "@/components/ui/TxProgress";
 import { LaunchPreviewPanel } from "./LaunchPreviewPanel";
 
 const PRESETS: { id: CurvePreset; title: string; body: string }[] = [
@@ -38,13 +45,18 @@ const PRESETS: { id: CurvePreset; title: string; body: string }[] = [
 type SubmitState =
   | { status: "idle" }
   | { status: "submitting" }
-  | { status: "done"; ok: boolean; message: string };
+  | { status: "done"; ok: boolean; message: string; mint?: string; resume?: LaunchResume };
 
 export function CreateLaunchForm() {
   const formId = useId();
   const wallet = useWallet();
-  const { actions } = useData();
+  const { actions, dataSource } = useData();
   const markets = useQuoteMarkets();
+  const cluster = useCluster();
+  const gate = useActionGate({ requireAttestation: false });
+  const refresh = useRefreshChainData();
+  const [flow, dispatch] = useTxFlow();
+  const [firstBuy, setFirstBuy] = useState("");
 
   const [values, setValues] = useState<LaunchFormValues>({
     name: "",
@@ -59,6 +71,26 @@ export function CreateLaunchForm() {
 
   const errors = validateLaunchForm(values);
   const market = markets.data?.find((m) => m.asset.symbol === values.quoteSymbol) ?? null;
+  const quoteBalance = useTokenBalance(market?.asset.mint ?? null);
+
+  let firstBuyRaw: bigint | null = null;
+  let firstBuyError: string | null = null;
+  if (firstBuy.trim() !== "" && market) {
+    try {
+      if (parseUiNumber(firstBuy) === null) throw new Error();
+      firstBuyRaw = uiToRaw(firstBuy.trim().replace(/,/g, ""), market.asset.decimals, market.multiplier);
+    } catch {
+      firstBuyError = "Enter a valid amount.";
+    }
+    if (firstBuyRaw !== null && wallet.connected && quoteBalance.data !== undefined && firstBuyRaw > quoteBalance.data) {
+      firstBuyError = `Amount exceeds your ${market.asset.symbol} balance.`;
+    }
+  }
+  // A launch prices its threshold with the live quote price; outside a local cluster a stale reference price is refused.
+  const priceError =
+    dataSource.kind === "chain" && market && market.priceSource !== "jupiter" && !IS_LOCAL_RPC
+      ? "The live quote price is unavailable (Jupiter). Launching needs it to set the graduation threshold."
+      : null;
 
   const input: LaunchInput | null = market
     ? {
@@ -104,23 +136,46 @@ export function CreateLaunchForm() {
 
   function update<K extends keyof LaunchFormValues>(key: K, value: LaunchFormValues[K]) {
     setValues((v) => ({ ...v, [key]: value }));
-    if (submit.status === "done") setSubmit({ status: "idle" });
+    if (submit.status === "done" && !submit.ok) {
+      setSubmit({ status: "idle" });
+      dispatch({ type: "reset" });
+    }
   }
 
   const hasErrors = Object.keys(errors).length > 0;
-  const canSubmit = !hasErrors && input !== null && wallet.connected && submit.status !== "submitting";
+  const locked = submit.status === "submitting" || (submit.status === "done" && (submit.ok || !!submit.resume));
+  const canSubmit =
+    !hasErrors && input !== null && gate.ready && !firstBuyError && !priceError && !locked;
+
+  async function run(resume?: LaunchResume) {
+    if (!input) return;
+    setSubmit({ status: "submitting" });
+    if (!resume) dispatch({ type: "reset" });
+    const result = await actions.createLaunch(input, wallet, {
+      dispatch,
+      firstBuyQuoteRaw: firstBuyRaw ?? undefined,
+      resume,
+    });
+    if (result.ok) refresh();
+    setSubmit({
+      status: "done",
+      ok: result.ok,
+      message: result.ok ? `Launch created: ${result.value.mint}` : result.error,
+      mint: result.ok ? result.value.mint : undefined,
+      resume: result.ok ? undefined : result.resume,
+    });
+  }
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setTouched({ name: true, symbol: true, imageUrl: true });
     if (hasErrors || !input) return;
-    setSubmit({ status: "submitting" });
-    const result = await actions.createLaunch(input, wallet);
-    setSubmit({
-      status: "done",
-      ok: result.ok,
-      message: result.ok ? `Launch created: ${result.value.mint}` : result.error,
-    });
+    await run();
+  }
+
+  function startOver() {
+    setSubmit({ status: "idle" });
+    dispatch({ type: "reset" });
   }
 
   const fieldError = (key: keyof LaunchFormValues) => (touched[key] ? errors[key] : undefined);
@@ -206,7 +261,7 @@ export function CreateLaunchForm() {
         <fieldset className="space-y-3">
           <legend className="text-base font-semibold text-ink">Quote asset</legend>
           <p className="field-hint -mt-1">
-            Buyers pay in this asset (the app routes USDC or SOL through Jupiter). The floor is held in it.
+            Buyers pay in this asset (on mainnet the app can route USDC or SOL through Jupiter). The floor is held in it.
             Index and gold trackers are calm; single stocks move more, and the floor moves with them in USD.
           </p>
           <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Quote asset">
@@ -306,6 +361,35 @@ export function CreateLaunchForm() {
           </p>
         </fieldset>
 
+        <fieldset className="space-y-3">
+          <legend className="text-base font-semibold text-ink">
+            Your first buy <span className="font-normal text-ink-3">(optional)</span>
+          </legend>
+          <div className="space-y-1.5">
+            <label htmlFor={`${formId}-first-buy`} className="field-label">
+              Amount in {market?.asset.symbol ?? "the quote asset"}
+            </label>
+            <input
+              id={`${formId}-first-buy`}
+              className="input tnum"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="0.00"
+              value={firstBuy}
+              aria-invalid={firstBuyError ? true : undefined}
+              onChange={(e) => setFirstBuy(e.target.value)}
+            />
+            <p className={firstBuyError ? "text-sm text-risk" : "field-hint"}>
+              {firstBuyError ??
+                `Bought on the curve in the same transaction that creates the pool, so nobody can buy before you.${
+                  wallet.connected && market && quoteBalance.data !== undefined
+                    ? ` Balance: ${formatTokenAmount(quoteBalance.data, market.asset.decimals, { multiplier: market.multiplier, maxFractionDigits: 8 })} ${market.asset.symbol}.`
+                    : ""
+                }`}
+            </p>
+          </div>
+        </fieldset>
+
         <fieldset className="space-y-2">
           <legend className="text-base font-semibold text-ink">Fixed terms</legend>
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
@@ -329,13 +413,43 @@ export function CreateLaunchForm() {
         </fieldset>
 
         <div className="space-y-3 border-t border-line pt-6">
-          <button type="submit" className="btn btn-primary w-full sm:w-auto" disabled={!canSubmit}>
-            {submit.status === "submitting" ? "Preparing launch…" : "Launch token"}
+          <button type="submit" className="btn btn-primary w-full sm:w-auto" disabled={!canSubmit} aria-busy={submit.status === "submitting"}>
+            {submit.status === "submitting" ? "Launching…" : "Launch token"}
           </button>
           {!wallet.connected ? (
-            <p className="field-hint">Connect a wallet to launch. You pay network fees only.</p>
+            <p className="field-hint">Connect a wallet to launch. You pay network fees and rent only (about 0.05 SOL).</p>
+          ) : !gate.ready ? (
+            <p className="field-hint">{gate.reason}</p>
           ) : null}
-          {submit.status === "done" ? (
+          {priceError ? <p className="text-sm text-risk">{priceError}</p> : null}
+          {dataSource.kind === "chain" && cluster.data?.kind === "local-fork" ? (
+            <p className="field-hint">Local fork: the launch is created on your Surfpool copy of mainnet, never on mainnet.</p>
+          ) : null}
+          <TxProgress
+            flow={flow}
+            title="Launch transactions"
+            actions={
+              submit.status === "done" ? (
+                submit.ok && submit.mint ? (
+                  <Link href={`/t/${submit.mint}`} className="btn btn-floor">
+                    Open the token page
+                  </Link>
+                ) : (
+                  <>
+                    {submit.resume ? (
+                      <button type="button" className="btn btn-primary" onClick={() => void run(submit.resume)}>
+                        Retry from the failed step
+                      </button>
+                    ) : null}
+                    <button type="button" className="btn btn-secondary" onClick={startOver}>
+                      {submit.resume ? "Start over" : "Dismiss"}
+                    </button>
+                  </>
+                )
+              ) : null
+            }
+          />
+          {submit.status === "done" && flow.status === "idle" ? (
             <p
               role="status"
               className={`rounded-lg px-3 py-2 text-sm ${

@@ -3,11 +3,12 @@
 import { useId, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import type { LaunchSummary } from "@/lib/data/types";
-import { useData, useTokenBalance } from "@/lib/data/context";
+import { useData, useRefreshChainData, useTokenBalance, useTxFlow } from "@/lib/data/context";
 import { formatPercent, formatTokenAmount, formatUsd, parseTokenInput, rawToDecimal } from "@/lib/format";
 import { estimateSellUsd, validateRedeemAmount } from "@/lib/estimates";
 import { previewRedeem } from "@/lib/metrics";
 import { AmountField } from "@/components/ui/AmountField";
+import { TxProgress } from "@/components/ui/TxProgress";
 import { useActionGate } from "./useActionGate";
 
 /** DAMM v2 pool fee used for the "sell at market instead" comparison. */
@@ -19,6 +20,8 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
   const { actions } = useData();
   const balance = useTokenBalance(launch.mint);
   const gate = useActionGate();
+  const refresh = useRefreshChainData();
+  const [flow, dispatch] = useTxFlow();
   const [input, setInput] = useState("");
   const [status, setStatus] = useState<{ pending: boolean; message: string | null }>({
     pending: false,
@@ -26,6 +29,7 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
   });
 
   const quote = launch.quote.asset;
+  // Redeem opens only once the pool migrated and the migration fee is in the vault (SDK phase "redeemable").
   const open = launch.phase === "graduated" && launch.migrationFeeHarvested;
   const amountRaw = input.trim() === "" ? null : parseTokenInput(input, launch.baseDecimals);
   const balanceRaw = wallet.connected ? (balance.data ?? null) : null;
@@ -37,13 +41,18 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
       ? estimateSellUsd(rawToDecimal(amountRaw, launch.baseDecimals).toNumber(), launch.priceUsd, MARKET_FEE_BPS)
       : 0;
 
-  const canSubmit = open && gate.ready && preview !== null && !zeroPayout && !status.pending;
+  const canSubmit = open && !launch.quotePaused && gate.ready && preview !== null && !zeroPayout && !status.pending;
 
   async function onRedeem() {
     if (!preview || amountRaw === null) return;
     setStatus({ pending: true, message: null });
-    const result = await actions.redeem({ launch, amountRaw }, wallet);
+    dispatch({ type: "reset" });
+    const result = await actions.redeem({ launch, amountRaw }, wallet, { dispatch });
     setStatus({ pending: false, message: result.ok ? "Redeemed." : result.error });
+    if (result.ok) {
+      setInput("");
+      refresh();
+    }
   }
 
   const quoteAmount = (raw: bigint) =>
@@ -62,6 +71,7 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
       {!open ? (
         <p className="mt-4 rounded-lg bg-sunken px-3 py-2 text-sm text-ink-2">
           Redemption opens after migration to DAMM v2 and the migration-fee harvest into the vault.
+          {launch.phase === "graduated" ? " The pool has migrated; the harvest is the next crank step." : ""}
         </p>
       ) : (
         <div className="mt-4 space-y-4">
@@ -72,6 +82,7 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
             onChange={(v) => {
               setInput(v);
               setStatus({ pending: false, message: null });
+              if (flow.status !== "running") dispatch({ type: "reset" });
             }}
             suffix={`$${launch.symbol}`}
             error={inputError}
@@ -127,6 +138,12 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
           {zeroPayout ? (
             <p className="text-sm text-risk">This amount is too small: the payout rounds down to zero.</p>
           ) : null}
+          {launch.quotePaused ? (
+            <p className="rounded-lg bg-risk-soft px-3 py-2 text-sm text-risk">
+              {quote.symbol} is paused by its issuer. Redemptions work again once it resumes; your tokens and the
+              vault stay untouched.
+            </p>
+          ) : null}
 
           <button type="button" className="btn btn-floor w-full" disabled={!canSubmit} onClick={onRedeem}>
             {status.pending
@@ -136,7 +153,8 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
                 : "Redeem"}
           </button>
           {!gate.ready ? <p className="field-hint">{gate.reason}</p> : null}
-          {status.message ? (
+          <TxProgress flow={flow} />
+          {flow.status === "idle" && status.message ? (
             <p role="status" className="rounded-lg bg-sunken px-3 py-2 text-sm text-ink-2">
               {status.message}
             </p>

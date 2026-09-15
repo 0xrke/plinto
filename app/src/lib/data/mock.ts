@@ -7,7 +7,8 @@ import type { LaunchDataSource, LaunchSummary, PayToken, QuoteMarket } from "./t
  * The numbers follow the launch economics of docs/BRIEF.md: a ~$1,000 migration
  * threshold, the vault share of that threshold harvested into the vault at graduation,
  * and a base supply near 1B tokens (tokens sold on the curve plus tokens migrated to
- * DAMM v2). All addresses below are random placeholders, not real accounts.
+ * DAMM v2). All addresses below are random placeholders, not real accounts. Mock launches carry
+ * no chain state (`chain: null`), so the UI falls back to price-based estimates.
  */
 
 /** Mock Jupiter prices (USD per UI token) and ScaledUiAmount multipliers. */
@@ -27,7 +28,7 @@ const OBSERVED_AT = Date.UTC(2026, 8, 15, 14, 0, 0);
 
 export function mockQuoteMarket(asset: QuoteAsset): QuoteMarket {
   const market = MOCK_MARKETS[asset.symbol] ?? { priceUsd: 100, multiplier: 1 };
-  return { asset, ...market, updatedAt: OBSERVED_AT };
+  return { asset, ...market, updatedAt: OBSERVED_AT, priceSource: "mock" };
 }
 
 function quoteBySymbol(symbol: string): QuoteMarket {
@@ -41,6 +42,7 @@ function buildMockLaunches(): LaunchSummary[] {
     {
       // Graduated, trading far above the floor: max loss if you buy now is about 92%.
       mint: "7yTsT2yJoiYJfohGvHQQwDx54qKS69MXAYMTPQ4QC3Ep",
+      launchAddress: "9kQd4ePbUq8JqzW7i1W9sjSo5tEAa1XWcX7iDqDwFZfU",
       config: "H8hjMFYP1ThcqSvcdqZbWstAj8mXmeQQt4aH8jH6u8oY",
       pool: "6gK1y49DSvNxqzpJood9SD2LgEQQhYAfTsHxr43wQDni",
       dammPool: "1nBuCWAitVgJRG8fcduckUPm2D8rhzh3X7qN2Za6LtT",
@@ -64,11 +66,14 @@ function buildMockLaunches(): LaunchSummary[] {
       vaultRaw: 68_410_000n,
       supplyRaw: 987_315_402_118_204n,
       migrationFeeHarvested: true,
+      quotePaused: false,
       projectedAtGraduation: null,
+      chain: null,
     },
     {
       // Graduated, trading just above the floor after a sell-off; some holders redeemed.
       mint: "3H988DdekGNJNvv8HEfHMRYUdKg3Hh2gMYg2T8pMybFa",
+      launchAddress: "5xUHzPq6X4TzGx2yqYk4r7XAn1dmzW9YjP8Jw2tbHc3N",
       config: "3i8X5gjSG2dbJkuCdk4q9aQXreXjPGbUFqhw8bnPDnhp",
       pool: "EuQEjdVLN3VHMDEuZmwFLXYz9JdxmWDNtDUd8ceC7tKv",
       dammPool: "8FdUVudgBBLCQgkmco96bENbzSGSJHbwh4Tf5T46n9Xm",
@@ -90,11 +95,14 @@ function buildMockLaunches(): LaunchSummary[] {
       vaultRaw: 178_650_000n,
       supplyRaw: 941_208_771_500_000n,
       migrationFeeHarvested: true,
+      quotePaused: false,
       projectedAtGraduation: null,
+      chain: null,
     },
     {
       // Presale at 62% of the threshold on a gentle curve.
       mint: "2mUk9buGnZxhZjJSXXRKXNbHP2nWDgFy4jhC3LbEXFyB",
+      launchAddress: "BMq2JYxYcHn4TRdoxW6G1ts8a6Zr4k8xKxrbZfXf5V1N",
       config: "BaaVn9GqB3uTcwvpUMqeNnuJ3yCapVfzGCFvWCMctQqU",
       pool: "7s3p8wr93xa1DuE2oQFR5JkjcVWq3gwCp41pyKSUDwFm",
       dammPool: null,
@@ -117,11 +125,14 @@ function buildMockLaunches(): LaunchSummary[] {
       // DBC mints the initial supply into the base vault at pool creation.
       supplyRaw: 1_050_000_000_000_000n,
       migrationFeeHarvested: false,
+      quotePaused: false,
       projectedAtGraduation: { vaultQuoteRaw: 73_194_540n, baseSupplyRaw: 1_000_000_000_000_000n },
+      chain: null,
     },
     {
       // Curve complete; waiting for the migration crank and the migration-fee harvest.
       mint: "6azS33DnDFBkR9jiSNMmL36JD4RJrsqv4nqndT5Giwmn",
+      launchAddress: "4vJ9JU1bJJE96FWSJKvHyMZDM2FXmX9Dq6XuD2LBf5jM",
       config: "8QUWCShsqmGumtachQrptqShhxM2hU1uS1VXG6jR6D4r",
       pool: "FyqzSu95yRQzVQkjAZKo4r4VR3YDdkTc1hdgauLRkpig",
       dammPool: null,
@@ -143,7 +154,9 @@ function buildMockLaunches(): LaunchSummary[] {
       vaultRaw: 0n,
       supplyRaw: 1_012_000_000_000_000n,
       migrationFeeHarvested: false,
+      quotePaused: false,
       projectedAtGraduation: { vaultQuoteRaw: 212_454_891n, baseSupplyRaw: 1_000_000_000_000_000n },
+      chain: null,
     },
   ];
 }
@@ -190,5 +203,10 @@ export class MockDataSource implements LaunchDataSource {
   async getTokenBalance(_owner: string, mint: string): Promise<bigint> {
     await this.delay();
     return MOCK_BALANCES[mint] ?? 0n;
+  }
+
+  async getSolBalance(_owner: string): Promise<bigint> {
+    await this.delay();
+    return 10_000_000_000n;
   }
 }

@@ -58,7 +58,7 @@ export function VaultStats({ launch }: { launch: LaunchSummary }) {
         <Row
           label={`${quote.asset.symbol} price`}
           value={formatUsd(quote.priceUsd)}
-          sub={`Dividend multiplier ${quote.multiplier.toFixed(4)}`}
+          sub={`${quote.priceSource === "reference" ? "Reference price (Jupiter unavailable) · " : quote.priceSource === "jupiter" ? "Jupiter · " : ""}Dividend multiplier ${quote.multiplier.toFixed(4)}`}
         />
         <Row
           label="Vault account"

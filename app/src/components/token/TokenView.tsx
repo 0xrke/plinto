@@ -17,6 +17,7 @@ import { PhaseBadge } from "@/components/ui/PhaseBadge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { QuoteChip } from "@/components/ui/QuoteChip";
 import { TokenAvatar } from "@/components/ui/TokenAvatar";
+import { CrankPanel } from "./CrankPanel";
 import { Disclosures } from "./Disclosures";
 import { FloorMeter } from "./FloorMeter";
 import { MarketBuyPanel } from "./MarketBuyPanel";
@@ -173,6 +174,7 @@ function GraduatedBody({ launch }: { launch: LaunchSummary }) {
       <div className={SIDE_COLUMN}>
         <MarketBuyPanel launch={launch} />
         <RedeemPanel launch={launch} />
+        <CrankPanel launch={launch} />
       </div>
       <div className="space-y-6 lg:col-start-1 lg:row-start-2">
         <VaultStats launch={launch} />
@@ -214,8 +216,8 @@ function PresaleBody({ launch }: { launch: LaunchSummary }) {
           </div>
           {graduating ? (
             <p className="mt-4 rounded-lg bg-graduating-soft px-3 py-2 text-sm text-graduating">
-              The raise is complete. The pool is migrating to Meteora DAMM v2 and the vault share is being harvested.
-              Redemption opens as soon as the vault is funded.
+              The raise is complete. Next, the pool migrates to Meteora DAMM v2 and the vault share is harvested (Meteora
+              keepers or anyone running the crank). Redemption opens as soon as the vault is funded.
             </p>
           ) : null}
           <dl className="mt-6 grid grid-cols-1 gap-4 border-t border-line pt-5 min-[420px]:grid-cols-2 sm:grid-cols-4">
@@ -246,6 +248,7 @@ function PresaleBody({ launch }: { launch: LaunchSummary }) {
       <div className={SIDE_COLUMN}>
         <PresaleTradePanel launch={launch} />
         <RedeemPanel launch={launch} />
+        <CrankPanel launch={launch} />
       </div>
       <div className="lg:col-start-1 lg:row-start-2">
         <section aria-labelledby="whatnext-heading" className="card p-5 sm:p-6">

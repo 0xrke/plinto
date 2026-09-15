@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WalletContext, type WalletContextState } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { QUOTE_ALLOWLIST, previewLaunch } from "@stockfloor/sdk";
+import { AttestationProvider } from "@/lib/attestation";
 import { StubLaunchActions } from "@/lib/data/actions";
 import { DataProvider } from "@/lib/data/context";
 import { MockDataSource, mockQuoteMarket } from "@/lib/data/mock";
@@ -43,7 +44,7 @@ function renderForm(connected: boolean) {
     <QueryClientProvider client={queryClient}>
       <WalletContext.Provider value={wallet(connected)}>
         <DataProvider dataSource={new MockDataSource(0)} actions={new StubLaunchActions(0)}>
-          {children}
+          <AttestationProvider>{children}</AttestationProvider>
         </DataProvider>
       </WalletContext.Provider>
     </QueryClientProvider>
