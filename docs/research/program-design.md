@@ -1,16 +1,17 @@
 # `stockfloor` program design
 
-Date: 2026-09-15 (M2). Program id `98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA`, Anchor 1.0.2.
+Date: 2026-09-15 (M2), updated 2026-09-16 after the post-M5 review (`sync_migration`, §4.6a).
+Program id `98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA`, Anchor 1.0.2.
 Source: `programs/stockfloor/src/`. IDL: `target/idl/stockfloor.json` (after a build). `Launch`
 layout version **2** (claimer / vault-authority split).
 
 ## 1. Status and evidence
 
-| Check | Command | Result (2026-09-15, M2) |
+| Check | Command | Result (2026-09-16, post-M5 review fixes) |
 |---|---|---|
 | Unit + property tests (math, config validation, account decoding, IDL layout cross-checks, Token-2022 checks, PDA and `Launch` layout) | `cargo test -p stockfloor` | 43 passed |
-| SBF build + IDL | `bash scripts/build-programs.sh -p stockfloor` | `target/deploy/stockfloor.so` 450,560 bytes (sha256 `580ecbee…`), `target/idl/stockfloor.json` |
-| Fork tests (LiteSVM + mainnet DBC 0.2.1, DAMM v2 0.2.4, Token-2022, SPYx, badges) | `pnpm --filter @stockfloor/tests test` | 13 files, 93 tests (§1.1) |
+| SBF build + IDL | `bash scripts/build-programs.sh -p stockfloor` | `target/deploy/stockfloor.so` 458,160 bytes (sha256 `b1a1531c…`), `target/idl/stockfloor.json` |
+| Fork tests (LiteSVM + mainnet DBC 0.2.1, DAMM v2 0.2.4, Token-2022, SPYx, badges) | `pnpm --filter @stockfloor/tests test` | 17 files, 112 tests (§1.1) |
 | Everything | `pnpm test` | ALL STEPS PASSED |
 
 ### 1.1 Fork test files
@@ -21,12 +22,16 @@ layout version **2** (claimer / vault-authority split).
 | `tests/integration/c1-adversarial.test.ts` | 17 | account substitution on every harvest (incl. the claimer and vault authority swapped), second pool, issuer controls, redemption edge cases, tracker self-check |
 | `tests/integration/review-regressions.test.ts` | 11 | M1 review findings (config shape, permissionless registration, migration latch, encumbered vault, floor view) |
 | `tests/integration/sdk-presets-fork.test.ts` | 7 | SDK presets × vault shares on the real programs, SDK negative codes vs DBC |
-| `tests/integration/instruction-errors.test.ts` | 7 | account and argument validation of `create_launch`, `register_pool`, `redeem`, `floor` (replaces the M1 smoke test) |
-| `tests/integration/vault-authority.test.ts` | 2 | the claimer never holds or controls the vault (harvest transactions, forged claimer signature) |
+| `tests/integration/instruction-errors.test.ts` | 7 | account and argument validation of `create_launch` (including an encumbered pre-created vault), `register_pool`, `redeem`, `floor` (replaces the M1 smoke test) |
+| `tests/integration/vault-authority.test.ts` | 3 | the claimer never holds or controls the vault (harvest transactions, forged claimer signature, closing an empty vault) |
 | `tests/integration/redeem-splits.test.ts` | 3 | 200 tiny, 100 dust and interleaved redemptions at 200 bps vs exact pro-rata and the continuous bound |
 | `tests/integration/floor-property.test.ts` | 1 | fast-check, seed 20260915, 40 runs × 10–40 random actions, invariants after every action |
-| `tests/integration/lp-positions.test.ts` | 3 | a second position transferred to the claimer, an empty position, a both-token DAMM v2 pool (base fee burn) |
+| `tests/integration/lp-positions.test.ts` | 4 | a second position transferred to the claimer, an empty position, a both-token DAMM v2 pool (base fee burn), SDK discovery and crank defaults |
 | `tests/integration/compute-budget.test.ts` | 1 | the lifecycle with production CU limits (≤ 200,000 per transaction) |
+| `tests/sdk/product-flow.test.ts` | 9 | the whole product flow through SDK APIs only |
+| `tests/sdk/crank-races.test.ts` | 3 | crank races with another cranker and a keeper, a failure that stays due, `runCrankAll` |
+| `tests/sdk/migration-latch.test.ts` | 3 | `sync_migration` after the SDK crank order; a re-typed DBC pool cannot block redeem; the pre-fix order as control; validation |
+| `tests/sdk/launch-lookup.test.ts` | 2 | duplicate pool-less `Launch` accounts for a live base mint never win the base-mint lookup |
 | `tests/spike/*.test.ts` | 21 | M1 spike program |
 
 ## 2. Code layout
@@ -168,6 +173,13 @@ Checks: `pool.config == launch.config` (`PoolConfigMismatch`); `pool.base_mint =
 freeze authority. The committed base mint identifies the one DBC pool of the launch, so anyone can
 register it and the creator cannot withhold it. Event: `PoolRegistered`.
 
+**Duplicate `Launch` accounts for one base mint.** `create_launch` does not require the base mint to be
+unused: anyone can create a pool-less `Launch` with their own DBC config that commits the base mint of a
+live launch (it can never get a pool, because the mint's only DBC pool belongs to the live launch's
+config). Such an account holds no funds and cannot affect the live launch, but it matches a
+`getProgramAccounts` lookup by base mint. Clients must pick the launch that owns the mint's DBC pool; the
+SDK's `resolveLaunchByBaseMint` does (`tests/sdk/launch-lookup.test.ts`).
+
 ### 4.3 `harvest_curve_fees()` — permissionless
 
 | # | Account | Flags | Constraint |
@@ -217,6 +229,26 @@ checks; `quote_reserve ≥ migration_quote_threshold` (`CurveNotComplete`); CPI 
 `withdraw_migration_fee(0)` / `partner_withdraw_surplus` into the vault, signed by the claimer; vault
 integrity and non-decrease; set the flag; latch `migrated` if the DBC pool is migrated. Events:
 `MigrationFeeHarvested`, `SurplusHarvested`.
+
+### 4.6a `sync_migration()` — permissionless (post-M5 review)
+
+| # | Account | Flags | Constraint |
+|---|---|---|---|
+| 0 | `launch` | w | pool registered (`PoolNotRegistered`) |
+| 1 | `pool` | | `== launch.pool` (`InvalidDbcPool`) |
+
+Flow: if `launch.migrated` is already set, return without reading anything (idempotent); otherwise decode
+the DBC pool (owner, discriminator, minimum size), require `is_migrated == 1` and `migration_progress ==
+CreatedPool` (`MigrationNotComplete`), set `migrated`. Event: `MigrationLatched { launch, pool }` (only when
+the flag flips). No token account, no signer, 5,684 CU.
+
+Why it exists: `harvest_migration_fee` and `harvest_surplus` latch `migrated` only when they run after the
+migration, and each runs once. The SDK crank (and the C2 plan) harvests both as soon as the curve
+completes, before `migration_damm_v2`, so neither latched, and nothing else did until the first successful
+redemption. Until then every `redeem` decoded the upgradeable DBC `VirtualPool`: a DBC upgrade in that
+window that re-types the pool or changes the migration encoding would block all redemptions (permanently
+once our upgrade authority is revoked). The crank now sends `sync_migration` right after the migration
+(`tests/sdk/migration-latch.test.ts` reproduces the gap with the pre-fix order and proves the fix).
 
 ### 4.6 `burn_claimer_base()` — permissionless (replaces `harvest_leftover`)
 
@@ -317,6 +349,7 @@ spread comes from PDA / ATA bump searches). Recommended limits are what the test
 | `harvest_curve_fees` | 51,107–52,607 | 80,000 |
 | `harvest_migration_fee` | 37,384 | 60,000 |
 | `harvest_surplus` | 37,390 | 60,000 |
+| `sync_migration` | 5,684 | 20,000 |
 | `burn_claimer_base` (empty) | 11,791–13,291 | 40,000 |
 | SPL transfer + `burn_claimer_base` | 13,733–15,233 | 45,000 |
 | `harvest_lp_fees` | 53,356–54,856 | 100,000 |
@@ -370,6 +403,7 @@ pro-rata 5,971,625, and 5,274 raw more than one redemption of the same total on 
 | Paused quote mint: clean failure | `QuoteMintPaused` pre-check, atomic transactions | issuer-controls test |
 | Future transfer hook fails cleanly | `QuoteMintTransferHookUnsupported` pre-check | issuer-controls test |
 | Migration fee harvested once | program flag + DBC status bit | lifecycle 8c |
+| `redeem` stops depending on DBC state right after the migration | `Launch.migrated` latch: `sync_migration` (crank), harvests after migration, first `redeem` | `migration-latch.test.ts`, review-regressions §3 |
 
 ## 7. Security model
 
@@ -400,7 +434,8 @@ pro-rata 5,971,625, and 5,274 raw more than one redemption of the same total on 
 - **Mint authority.** `register_pool` requires the base mint to have no mint and no freeze authority.
 - **Token-2022 quote.** Raw amounts only (ScaledUiAmount changes never affect the math);
   `transfer_checked`; paused mint, active hook and frozen vault pre-checked.
-- **DBC upgrades after migration.** `Launch.migrated` latches; `redeem` then never decodes DBC state.
+- **DBC upgrades after migration.** `Launch.migrated` latches (the crank sends `sync_migration` right after
+  the migration); `redeem` then never decodes DBC state.
 - **Issuer powers (not preventable).** SPYx's permanent delegate can move vault tokens, the issuer can
   pause or freeze. Disclose.
 - **Our upgrade authority** must be revoked before production (user decision, hard stop).
@@ -502,7 +537,14 @@ failures, for example `ConstraintSeeds` (a substituted PDA), `ConstraintAddress`
 ## 10. Known limitations
 
 - **Quote-mint transfer hooks are not supported.** If the issuer activates one, redemptions and
-  harvests fail with `QuoteMintTransferHookUnsupported` until an upgrade forwards hook accounts.
+  harvests fail with `QuoteMintTransferHookUnsupported`. `redeem` forwards no extra accounts to
+  `transfer_checked`, so no transaction shape can succeed; only a program upgrade that resolves the hook's
+  extra account metas can reopen redemptions. **Once the upgrade authority is revoked, an issuer-enabled
+  hook locks every vault permanently** (the SPYx TransferHook authority `5aMNNL…` can set a hook program at
+  any time). Options before revocation: (a) hook support in `redeem` (extra account metas from remaining
+  accounts, `invoke_transfer_checked`; first verify whether Token-2022 passes the vault authority's signer
+  privilege on to extra metas marked as signers, and reject such metas if it does), or (b) keep the upgrade
+  authority behind a multisig or timelock. The choice is part of the user's revocation decision.
 - **Issuer controls.** Pause, freeze of the vault, permanent-delegate transfers out of the vault (the
   floor drops), default-frozen accounts. Disclose.
 - **Stuck assets outside the vault.** Quote tokens sent to any account other than the vault (for
@@ -517,7 +559,9 @@ failures, for example `ConstraintSeeds` (a substituted PDA), `ConstraintAddress`
   (base, quote) and a claimer-held position; extra proceeds only raise the floor.
 - **Fees of other DBC pools on the same config** are never harvested (by design).
 - **Counters in `Launch` are informational** (saturating, not updated by donations).
-- **Upgrade authority** must be revoked before production (user decision).
+- **Upgrade authority** must be revoked before production (user decision). Revocation also turns two
+  temporary failures into permanent ones: an issuer-enabled transfer hook (above) and any future DBC or
+  DAMM v2 change that breaks a harvest CPI (unharvested fees stay in DBC / DAMM v2).
 
 ## 11. Notes for other agents
 
@@ -529,6 +573,7 @@ failures, for example `ConstraintSeeds` (a substituted PDA), `ConstraintAddress`
   vault authority's ATA. `create_launch` needs the config keypair as a signer.
 - **`floor`** returns 34 bytes: `u64 vault_raw, u64 supply, u16 exit_fee_bps, u128 floor_q64` (LE).
 - **Crank order after completion:** `harvest_curve_fees` (again), `harvest_migration_fee`,
-  `harvest_surplus`, DBC `migration_damm_v2` (permissionless), then `harvest_lp_fees` periodically and
-  `burn_claimer_base` whenever the claimer base ATA balance is non-zero.
+  `harvest_surplus`, DBC `migration_damm_v2` (permissionless), `sync_migration` (unless a harvest after the
+  migration already latched it), then `harvest_lp_fees` periodically and `burn_claimer_base` whenever the
+  claimer base ATA balance is non-zero.
 - **Compute unit limits:** see §4.10; simulate first when possible.

@@ -3,19 +3,21 @@
 This is the technical companion to the [README](../README.md). It covers the accounts, the flow of every
 instruction, the math, the on-chain checks, and each invariant with the tests that prove it.
 
-**Status of this document (2026-09-15).**
-- **Design version.** It describes the **M2 design**: two signer PDAs (claimer and vault authority), and
-  `burn_claimer_base` replacing `harvest_leftover`. M2 is being implemented in the working tree right now.
+**Status of this document (2026-09-16).**
+- **Design version.** It describes the program as implemented after M2 and the post-M5 review: two signer
+  PDAs (claimer and vault authority), `burn_claimer_base` instead of `harvest_leftover`, and `sync_migration`,
+  which latches the migration right after it happens.
 - **Where the evidence comes from.** The C1 fork evidence ([`research/c1-evidence.md`](research/c1-evidence.md))
-  was produced with the M1 layout at commit `3620335`, which had a single `["authority", config]` PDA. Every
-  token amount in that run is independent of the PDA split.
-- **Test names.** They are taken from `tests/integration/*.test.ts` and `programs/stockfloor/src/*.rs` as of
-  the M2 working tree. If they drift, `grep -n "it(" tests/integration/*.ts` and
-  `cargo test -p stockfloor -- --list` show the current names.
+  was first produced with the M1 layout at commit `3620335` and re-run on the M2 split. Every token amount is
+  independent of the PDA split and of `sync_migration`. The C2 rehearsal on a live local Surfpool fork is in
+  [`research/surfpool-e2e.md`](research/surfpool-e2e.md).
+- **Test names.** They are taken from `tests/**/*.test.ts` and `programs/stockfloor/src/*.rs` at the time of
+  writing. If they drift, `grep -rn "it(" tests/integration tests/sdk` and `cargo test -p stockfloor -- --list`
+  show the current names.
 
 Sources:
-- [`research/program-design.md`](research/program-design.md): M1 program design; parts are superseded by
-  [`DECISIONS.md`](DECISIONS.md)
+- [`research/program-design.md`](research/program-design.md): program design (accounts, every instruction,
+  CU, errors)
 - [`research/dbc-facts.md`](research/dbc-facts.md): DBC and DAMM v2 behaviour, with source line references
 - [`research/m1-spike.md`](research/m1-spike.md): PDA fee claimer proof, CPI account lists
 - [`research/c1-evidence.md`](research/c1-evidence.md): exact amounts of the fork lifecycle
@@ -221,11 +223,16 @@ sequenceDiagram
   DBC->>DAMM: pool with ceil(T × (100 − pct) / 100) minus 0.2% SPYx and the migration base amount
   DBC->>DBC: burn unsold base, is_migrated = 1, migration_progress = CreatedPool
   Note over DAMM: one position, permanent_locked_liquidity = pool liquidity, NFT account owner = claimer PDA
+  Cranker->>SF: sync_migration()
+  SF->>SF: decode VirtualPool once, require migrated, Launch.migrated = true, emit MigrationLatched
   Note over SF: redeem opens once DBC is migrated AND migration_fee_harvested
 ```
 
 `harvest_migration_fee` needs only a complete curve, not a finished migration. DBC allows the withdrawal
-before migration. That is why `redeem` checks both conditions. Migrating after an early fee harvest yields
+before migration. That is why `redeem` checks both conditions. It is also why `sync_migration` exists: the
+one-shot harvests latch `Launch.migrated` only when they run after the migration, and the crank runs them
+before it. Without the latch, every `redeem` until the first successful one decodes the upgradeable DBC
+pool (`tests/sdk/migration-latch.test.ts`). Migrating after an early fee harvest yields
 identical DAMM v2 reserves; see the test "fee harvested after completion but before migration: redeem stays
 closed until migration completes".
 
@@ -262,7 +269,7 @@ sequenceDiagram
   participant T22 as Token-2022
   Holder->>SF: redeem(amount)
   SF->>SF: amount > 0, payout account is not the vault
-  alt Launch.migrated is false
+  alt Launch.migrated is false (normally already latched by sync_migration)
     SF->>DBC: decode VirtualPool, require is_migrated = 1 and CreatedPool
     SF->>SF: Launch.migrated = true
   end
@@ -274,7 +281,12 @@ sequenceDiagram
   SF-->>Holder: Redeemed event with gross, fee, net, vault and supply before and after
 ```
 
-### 3.6 `floor()` view and `burn_claimer_base()`
+### 3.6 `floor()` view, `burn_claimer_base()` and `sync_migration()`
+
+- **`sync_migration()`** is permissionless and takes only `launch` and `pool` (`== launch.pool`). When
+  `Launch.migrated` is already set it returns without reading anything. Otherwise it decodes the DBC pool,
+  requires the migration to be complete (`MigrationNotComplete`), sets the flag and emits `MigrationLatched`.
+  It moves no tokens and signs nothing (5,684 CU).
 
 - **`floor()`** is read-only; call it with `simulateTransaction`. It takes `launch`, `vault` and `base_mint`,
   returns `FloorInfo { vault_raw: u64, supply: u64, exit_fee_bps: u16, floor_q64: u128 }` as 34 bytes of
@@ -293,8 +305,12 @@ sequenceDiagram
 3. `harvest_surplus`: once the curve is complete (dust).
 4. DBC `migration_damm_v2`: permissionless. Meteora's keepers may also run it; their policy is off-chain and
    was not verified.
-5. `harvest_lp_fees`: periodically.
-6. `burn_claimer_base`: only when base tokens have been sent to the claimer.
+5. `sync_migration`: right after the migration, unless a harvest that ran after the migration latched it.
+6. `harvest_lp_fees`: periodically. The SDK crank harvests only positions on the launch's own DAMM v2 pool,
+   only with at least 0.00001 quote token pending, at most 4 per pass. Anyone can create claimer-owned
+   positions on their own pool (DAMM v2 `create_position` takes any owner) and make each accrue a few raw of
+   fees, so harvesting those by default would let one swap trigger many paid transactions.
+7. `burn_claimer_base`: only when base tokens have been sent to the claimer.
 
 Operational notes:
 - **The final curve buy must use `swap2` PartialFill,** or be sized exactly. An exact-in buy that crosses the
@@ -305,13 +321,28 @@ Operational notes:
 - **CPI depth.** stockfloor → DBC → Token-2022, plus the DBC event self-CPI, reaches depth 3. Invoking
   stockfloor from yet another program is close to the limit.
 
-**Compute units** measured on the fork during M1, before the review fixes (to be re-measured after M2):
-- `create_launch` ≈ 41–64k
-- `harvest_curve_fees` ≈ 66–75k, including creating the base ATA
-- `harvest_migration_fee` ≈ 35k
-- `harvest_lp_fees` ≈ 51–54k
-- `redeem` ≈ 26k
-- DBC `migration_damm_v2` ≈ 158k
+**Compute units** measured on the fork by `compute-budget.test.ts` (M2 program, six runs with random keys;
+`sync_migration` one run after the review fix). The test sends each transaction at (measured − 1) and at the
+limit, so the limits are enforced, not just recorded. A Surfpool surfnet with the mainnet token programs
+reports the same units ([`research/surfpool.md`](research/surfpool.md)).
+
+| Transaction | Measured CU | Limit enforced by the test |
+|---|---|---|
+| DBC `create_config` (SPYx + badge) | 31,482 | 50,000 |
+| DBC `initialize_virtual_pool_with_spl_token` | 111,229–117,238 | 150,000 |
+| `create_launch` | 46,276–71,776 | 120,000 |
+| `register_pool` | 7,282 | 20,000 |
+| DBC `swap2` curve buy / sell / PartialFill completion | 33,626–38,317 | 60,000 |
+| `harvest_curve_fees` (creates the claimer base ATA) | 68,203–72,703 | 100,000 |
+| `harvest_curve_fees` | 51,107–52,607 | 80,000 |
+| DBC `migration_damm_v2` | 151,921–160,921 | 200,000 |
+| `sync_migration` | 5,684 | 20,000 |
+| `harvest_migration_fee` / `harvest_surplus` | 37,384 / 37,390 | 60,000 |
+| `burn_claimer_base` (empty / after a transfer) | 11,791–15,233 | 40,000 / 45,000 |
+| DAMM v2 `swap2` | 17,796–18,364 | 40,000 |
+| `harvest_lp_fees` | 53,356–54,856 | 100,000 |
+| `floor` (view) | 5,385 | 15,000 |
+| `redeem` | 25,977–25,978 | 40,000 |
 
 ---
 
@@ -372,6 +403,16 @@ the curve shape and the other `create_config` rules ([`research/dbc-facts.md`](r
 | After the CPI: vault balance did not decrease | harvests | `VaultDecreased` |
 | After the CPI: vault owner = vault authority, no delegate, no close authority, no CPI Guard, no required memos | harvests, `create_launch` | `VaultEncumbered` |
 | Malformed Token-2022 mint or account data | helpers | `InvalidQuoteMintData`, `InvalidTokenAccountData` |
+
+### 4.3a `sync_migration`
+
+| Check | Error |
+|---|---|
+| a pool is registered | `PoolNotRegistered` |
+| `pool == launch.pool` | `InvalidDbcPool` |
+| already latched: return without reading the pool | — |
+| `pool` owner = DBC, `VirtualPool` discriminator, minimum length | `InvalidDbcPool` |
+| `is_migrated == 1` and `migration_progress == CreatedPool` | `MigrationNotComplete` |
 
 ### 4.4 Decoding external accounts
 
@@ -437,6 +478,8 @@ Test file abbreviations:
 - `adv` = `tests/integration/c1-adversarial.test.ts`
 - `reg` = `tests/integration/review-regressions.test.ts`
 - `presets` = `tests/integration/sdk-presets-fork.test.ts`
+- `ie` = `tests/integration/instruction-errors.test.ts`, `va` = `tests/integration/vault-authority.test.ts`
+- `latch` = `tests/sdk/migration-latch.test.ts`, `lookup` = `tests/sdk/launch-lookup.test.ts`, `lp` = `tests/integration/lp-positions.test.ts`
 - `spike-life`, `spike-edge` = `tests/spike/lifecycle.test.ts`, `tests/spike/edge-cases.test.ts`
 - `sdk-math` = `packages/sdk/test/math.test.ts`, `sdk-presets` = `packages/sdk/test/presets.test.ts`
 - Rust tests are `module::tests::name` in `programs/stockfloor/src/`.
@@ -454,7 +497,7 @@ tracked states in the C1 run.
 | 6 | Redemption opens only after DBC migration **and** the migration fee harvest | `MigrationNotComplete`, `MigrationFeeNotHarvested` | `life` › "5a. adversarial: harvest_curve_fees for the rogue pool or into a non-vault account fails; redeem and harvest_migration_fee before completion fail", "6. a PartialFill buy completes the curve at the migration price; surplus = quote_reserve - threshold", "8a. adversarial: redeem after migration but before harvest_migration_fee is rejected"; `adv` › "fee harvested after completion but before migration: redeem stays closed until migration completes" |
 | 7 | `redeem` accepts only the launch's base mint and pays only from the launch's vault | `address =` constraints on the pool, base mint, vault and quote mint; launch PDA seeds | `adv` › "rogue pool fees, migration fee, surplus, leftover and LP position are unreachable; its tokens cannot redeem" |
 | 8 | Harvests pay only into the launch's vault, whoever signs | Pinned vault, canonical claimer ATA, PDA seeds, constant CPI program ids | `adv` › "harvest_curve_fees: substituted vault, base account, pool, config, launch or claimer are rejected", "harvest_migration_fee and harvest_surplus: substituted vault, pool, launch or claimer are rejected", "burn_claimer_base and harvest_lp_fees: substituted accounts and foreign positions are rejected", "direct DBC / DAMM v2 claims signed by the attacker fail: only the claimer PDA can claim", "cranking honestly, the attacker pays only SOL; every harvest pays exact amounts into the vault"; `spike-life` › "rejects a random signer claiming the partner trading fee directly from DBC", "rejects a random signer calling DBC withdraw_migration_fee(flag=0) directly" |
-| 9 | The claimer never owns or controls the vault; the vault is the vault authority's SPYx ATA with no delegate or close authority | Vault derivation; `VaultEncumbered` in `create_launch` and after harvest CPIs | `adv` › FloorTracker self-check › "rejects a vault owned by the claimer, a vault with a delegate and a vault with a close authority"; `reg` › "delegate, close authority or a foreign owner on the vault: every harvest fails atomically; redeem still works"; `token_utils::tests::clean_vault_passes`, `encumbered_vault_is_rejected` |
+| 9 | The claimer never owns or controls the vault; the vault is the vault authority's SPYx ATA with no delegate or close authority | Vault derivation; `VaultEncumbered` in `create_launch` and after harvest CPIs | `adv` › FloorTracker self-check › "rejects a vault owned by the claimer, a vault with a delegate and a vault with a close authority"; `reg` › "delegate, close authority or a foreign owner on the vault: every harvest fails atomically; redeem still works"; `ie` › "swapped or foreign PDAs, a vault at the claimer's ATA, …" (a pre-created vault with a delegate or close authority fails with `VaultEncumbered`); `va` › "a transaction carrying the claimer's signature cannot transfer, burn, approve, set a close authority on, re-own or close the vault", "an empty vault (fresh launch, before any harvest) cannot be closed with the claimer's signature; …"; `token_utils::tests::clean_vault_passes`, `encumbered_vault_is_rejected` |
 | 10 | The vault's quote mint is the config's quote mint | `create_launch` `QuoteMintMismatch`; vault is the ATA for that mint | `external::tests::every_config_check_has_its_error`; `life` › "3a. create_launch validates the config, commits the base mint and creates the Launch registry and the empty floor vault" |
 | 11 | Base tokens the program holds are burned in the same instruction; `mint.supply` equals the sum of all base accounts | `burn_all_signed` in every base-receiving instruction; `burn_claimer_base` | `life` › 12 (FloorTracker checks 3 and 4), "7. permissionless migration to DAMM v2 burns the unsold base; the claimer PDA owns the permanently locked position", "8f. burn_claimer_base: nothing to burn (DBC leftover never applies to dynamic supply), then burns a base donation to the claimer exactly"; `adv` › "rejects a floor decrease, a supply that does not reconcile, and base left at the Authority" |
 | 12 | Donations only raise the floor | Math; live balances | `math::tests::prop_donation_never_hurts`; `adv` › "SPYx donated straight to the vault raises the floor and is paid out pro rata" |
@@ -466,19 +509,26 @@ tracked states in the C1 run.
 | 18 | Only StockFloor-shaped DBC configs become launches | `validate_launch_config` | `reg` › "the real DBC accepts each out-of-shape config; create_launch rejects it and creates nothing", "a fixed-supply config really leaves DBC leftover base in the supply after migration (why it is rejected)", "the brief's anti-snipe schedule (exponential 20% -> ~1%, creator share 30%) is accepted at the bound", "the committed base mint must be a real candidate: default pubkey or the quote mint are rejected"; `external::tests::valid_config_passes`, `every_config_check_has_its_error` |
 | 19 | No rogue pool can be registered, and the creator cannot withhold registration | Committed base mint; permissionless `register_pool` | `life` › "3b. adversarial: a second pool on the same config can never be registered, whoever sends register_pool", "3c. register_pool by a random key (permissionless) records the canonical pool; floor invariants tracking starts"; `reg` › "the creator never registers; a random wallet registers, harvests the migration fee and holders redeem", "a creator who creates the committed pool under another creator key still cannot block registration", "create_launch can commit the base mint before the pool exists; registration works once DBC creates it" |
 | 20 | A second pool on the same config never feeds or drains the vault | Every instruction pins `launch.pool` and the base mint | `adv` › "rogue pool fees, migration fee, surplus, leftover and LP position are unreachable; its tokens cannot redeem"; `spike-edge` › "anyone can create a second pool on the same DBC config (fee claimer PDA is shared)" |
-| 21 | Once migration is latched, `redeem` does not depend on DBC state | `Launch.migrated` | `reg` › "after harvest_migration_fee latches Launch.migrated, a grown or re-typed DBC VirtualPool cannot lock redemptions", "without the latch (fee harvested before migration) the first redeem decodes DBC, then latches" |
+| 21 | Once migration is latched, `redeem` does not depend on DBC state, and the crank latches it right after the migration | `Launch.migrated`; `sync_migration` | `reg` › "after harvest_migration_fee latches Launch.migrated, a grown or re-typed DBC VirtualPool cannot lock redemptions", "without the latch (fee harvested before migration) the first redeem decodes DBC, then latches"; `latch` › "runCrank latches the migration with sync_migration; a re-typed DBC pool afterwards cannot block redeem", "control, pre-fix crank order without sync_migration: …", "sync_migration rejects an unregistered pool, a launch that has not migrated and a substituted pool; nothing changes" |
 | 22 | External accounts are decoded safely | Owner, discriminator and minimum length checks; offsets cross-checked | `external::tests::decoders_check_owner_discriminator_and_size`, `dbc_layout_matches_idl`, `damm_layout_matches_idl`, `dbc_offsets_match_vendored_layout`, `generated_sizes_match_vendored_sources`, `migration_and_curve_predicates`; `constants::tests::external_pdas_are_correct`, `external_ids_match_declared_programs` |
 | 23 | Edge redemptions: entire supply, maximum exit fee | Math and runtime checks | `adv` › "redeeming the entire supply (cheatcode: one holder owns all base) pays vault minus fee and leaves only the fee", "exit fee 500 bps (the cap): fee = ceil(gross * 5%) stays in the vault"; `math::tests::redeeming_entire_supply` |
 | 24 | A PDA works as DBC partner `fee_claimer` and DAMM v2 NFT owner with a badged Token-2022 quote | `invoke_signed` | `spike-life` › "claims the partner trading fee via spike CPI (PDA signer) into the PDA SPYx ATA", "withdraws the partner migration fee via spike CPI into the PDA SPYx ATA (exact amount)", "withdraws the partner surplus via spike CPI (80% x (100 - 30)% of surplus; rounding-only here)", "stretch: claims DAMM v2 LP fees for the PDA-owned position via spike CPI" |
 | 25 | The SDK config equals what DBC stores, and the vault equals the preview | SDK port of DBC math | `presets` › "${preset} / ${share}%: DBC stores what the SDK port predicts; the vault gets the preview amount at graduation" (parametrized over gentle and flat × 30, 50 and 70%), "each mutated SDK config fails in the port and on-chain with the same PoolError name"; `sdk-presets` › "max loss at graduation follows f / (sqrt(r) + 1 - f)" |
 | 26 | The floor view is consistent | `floor_q64 = (V << 64) / S` | `reg` › "floor_q64 = (vault << 64) / supply, 0 before registration and with an empty vault"; `math::tests::prop_floor_q64_consistent` |
+| 27 | (Client) A base mint resolves to the launch that owns its DBC pool, whatever else commits the mint | SDK `resolveLaunchByBaseMint` (a pool-less duplicate `Launch` is possible on-chain, see program-design §4.2) | `lookup` › "a fake pool-less Launch for a live launch's mint never wins, in either RPC order", "an existing but unregistered canonical pool also identifies the real launch" |
+| 28 | (Client) Every claimer-held position is found; the crank harvests only the launch pool by default | SDK `findClaimerPositions`, `planCrank` limits | `lp` › "the SDK finds every claimer position (the NFT in the claimer's ATA included); …"; `packages/sdk/test/crank-plan.test.ts` › "LP harvest limits: …" |
 
-**Not tested yet** (planned in M2 and before C2):
-- many small redemptions at 200 bps on the fork against the continuous bound;
-- a random multi-holder redemption property test on the fork;
-- a second DAMM v2 position donated to the claimer;
-- migration through a fixed-fee DAMM v2 config;
-- a Surfpool run against live mainnet state.
+Covered since the first version of this table: many small redemptions at 200 bps
+(`tests/integration/redeem-splits.test.ts`), a fork property test over random action sequences
+(`floor-property.test.ts`), extra DAMM v2 positions held by the claimer (`lp-positions.test.ts`), and the C2
+sequence on a live Surfpool mainnet fork ([`research/surfpool-e2e.md`](research/surfpool-e2e.md)).
+
+**Not tested yet:**
+- migration through a fixed-fee DAMM v2 config (the Meteora keeper path);
+- a substitute malicious DBC or DAMM v2 binary (the tests forge the signer privilege such a program would
+  receive, see `va`);
+- a quote mint with an active transfer hook program (only the clean `QuoteMintTransferHookUnsupported` failure
+  is tested; hooks are unsupported).
 
 ---
 
@@ -509,7 +559,8 @@ tracked states in the C1 run.
 See [README › Known limitations](../README.md#known-limitations).
 
 In short:
-- quote-mint transfer hooks are unsupported (clean failure);
+- quote-mint transfer hooks are unsupported (clean failure); after the upgrade authority is revoked, an
+  issuer-enabled hook would lock every vault permanently (README › Known limitations);
 - the issuer's permanent delegate can move or burn vault funds;
 - the floor denominator includes base tokens in the DAMM v2 pool and DBC's protocol migration base fee
   (conservative);

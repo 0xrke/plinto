@@ -44,6 +44,16 @@ after the fixes. The `register_pool` rows, the floor view values and the test co
 
 Every C1 amount below is unchanged by M2 (re-checked from the lifecycle log after the split).
 
+**Update after the post-M5 review (program commit `d988812`, 458,160-byte binary, sha256 `b1a1531c…`).**
+- **`sync_migration`** (permissionless, idempotent) latches `Launch.migrated` right after the migration. The
+  SDK crank harvests the migration fee and the surplus before `migration_damm_v2`, so neither harvest latched
+  the flag. Until the first redemption, `redeem` decoded the upgradeable DBC pool.
+  `tests/sdk/migration-latch.test.ts` reproduces the gap with the pre-fix crank order and proves the fix.
+- **New or tightened fork tests:** an encumbered pre-created vault in `create_launch`, closing an empty vault,
+  SDK position discovery (a position NFT in the claimer's ATA) with the crank's LP-fee limits, and the
+  base-mint lookup against duplicate pool-less `Launch` accounts.
+- No C1 amount changes: `sync_migration` moves no tokens.
+
 ## Environment
 
 | Item | Value |
@@ -72,12 +82,13 @@ few thousand, because PDA bump searches depend on the keys.
 | `tests/integration/review-regressions.test.ts` | One block per M1 review finding (11 tests); each block failed on the pre-fix binary |
 | `tests/integration/sdk-presets-fork.test.ts` | SDK presets `gentle`/`flat` × vault shares 30/50/70% on the real DBC and stockfloor programs, plus 15 negative SDK validation codes compared with DBC's errors (7 tests) |
 | `tests/integration/instruction-errors.test.ts` | M2: account and argument validation of `create_launch`, `register_pool`, `redeem` and `floor` (7 tests); replaces the M1 smoke test |
-| `tests/integration/vault-authority.test.ts` | M2: the claimer never holds or controls the vault (2 tests) |
+| `tests/integration/vault-authority.test.ts` | M2: the claimer never holds or controls the vault (3 tests, including closing an empty vault) |
 | `tests/integration/redeem-splits.test.ts` | M2: many tiny redemptions at 200 bps against the exact per-step and continuous bounds (3 tests) |
 | `tests/integration/floor-property.test.ts` | M2: fast-check property test over random action sequences on the fork (1 test, 40 runs) |
-| `tests/integration/lp-positions.test.ts` | M2: extra DAMM v2 positions held by the claimer (3 tests) |
+| `tests/integration/lp-positions.test.ts` | M2: extra DAMM v2 positions held by the claimer (4 tests, including SDK discovery and crank defaults) |
 | `tests/integration/compute-budget.test.ts` | M2: the lifecycle with production compute-unit limits (1 test) |
-| `tests/src/stockfloor.ts` | Instruction builders for all 9 stockfloor instructions (from `target/idl/stockfloor.json`), the Launch reader and the `floor` return-data decoder (34 bytes) |
+| `tests/sdk/*.test.ts` | M3 and later: SDK product flow (9), crank races (3), migration latch (3), base-mint lookup (2) |
+| `tests/src/stockfloor.ts` | Instruction builders for all 10 stockfloor instructions (from `target/idl/stockfloor.json`), the Launch reader and the `floor` return-data decoder (34 bytes) |
 | `tests/src/floor-invariants.ts` | `FloorTracker`: checks the floor invariants around every step |
 | `tests/src/stockfloor-scenario.ts` | Builds a launch through the SDK, with helpers to buy, complete and graduate |
 | `tests/src/anchor.ts` | `parseCpiEvents`: decodes the `emit_cpi!` events that DBC and DAMM v2 put in inner instructions, only from inner instructions of the given program id (DBC and DAMM v2 both define `EvtSwap2`) |
@@ -682,6 +693,7 @@ searches cause the spread):
 | DBC `migration_damm_v2` | 151,921–160,921 | 200,000 |
 | stockfloor `harvest_migration_fee` | 37,384 | 60,000 |
 | stockfloor `harvest_surplus` | 37,390 | 60,000 |
+| stockfloor `sync_migration` (post-M5, one run) | 5,684 | 20,000 |
 | stockfloor `burn_claimer_base` (empty) | 11,791–13,291 | 40,000 |
 | SPL transfer + stockfloor `burn_claimer_base` | 13,733–15,233 | 45,000 |
 | DAMM v2 `swap2` | 17,796–18,364 | 40,000 |

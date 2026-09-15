@@ -39,6 +39,7 @@ import { listLaunches, fetchLaunchState, getFloor, launchMetrics, previewRedeem 
 
 const launches = await listLaunches(sender);                                // [{ address, launch }] newest first
 const s = await fetchLaunchState(sender, { baseMint });                     // or { launch } / { config }; null if absent
+const m = await resolveLaunchByBaseMint(sender, baseMint);                  // { address, launch, canonical } | null
 s.phase;              // "presale" | "graduating" | "graduated" | "redeemable"
 s.progress;           // { quoteReserve, threshold, fraction 0..1 }
 s.vaultBalance; s.baseSupply; s.floor;                                      // raw bigint; floor = FloorInfo (vaultRaw, supply, exitFeeBps, floorQ64)
@@ -51,6 +52,14 @@ const r = previewRedeem(s, amountRaw);                                      // {
 
 App phase mapping: `presale` → presale, `graduating` → graduating, `graduated` and `redeemable` →
 graduated (redeem enabled only for `redeemable`).
+
+**Lookup by base mint.** `create_launch` accepts any base mint, so anyone can create extra pool-less
+`Launch` accounts that commit the mint of a live launch, and `getProgramAccounts` returns matches in no
+guaranteed order. `resolveLaunchByBaseMint` (used by `resolveLaunchAddress`, `getLaunch` and
+`fetchLaunchState({ baseMint })`) returns the launch that owns the mint's DBC pool — registered, or the
+canonical pool exists and belongs to the launch's config — and there can be at most one. A single
+pool-less match comes back with `canonical: false` (a launch between its two transactions; do not cache
+it), several throw `AmbiguousLaunchError`.
 
 ## Creating a launch
 
@@ -94,10 +103,20 @@ assert every quoted amount, fee and sqrt price equals the program's result.
 import { planCrank, buildCrankAction, runCrank, runCrankAll } from "@stockfloor/sdk";
 
 planCrank(s);         // pure: ordered due actions (register_pool, harvest_curve_fees, harvest_migration_fee,
-                      // harvest_surplus, migrate, harvest_lp_fees per position, burn_claimer_base)
+                      // harvest_surplus, migrate, sync_migration, harvest_lp_fees per position, burn_claimer_base)
 await runCrank(sender, { launch });   // executes until nothing is due; races are re-planned and skipped
 await runCrankAll(sender);            // every launch
 ```
+
+- **`sync_migration`** is planned as soon as DBC reports the migration while `Launch.migrated` is unset,
+  which is the normal case: the one-shot DBC harvests run before `migration_damm_v2` and latch nothing.
+  After it, `redeem` never decodes the (upgradeable) DBC pool again.
+- **LP fee harvests are limited by default** (`PlanCrankOptions`): only positions on the launch's own
+  DAMM v2 pool (`includeForeignPositions` opts in), only with at least `defaultMinLpFeeQuote(decimals)`
+  = 0.00001 quote token pending (`minLpFeeQuote`; `minLpFeeBase` enables base-only harvests), at most
+  `maxLpHarvests` = 4 per plan, largest first. DAMM v2 `create_position` takes an arbitrary owner, so
+  anyone can give the claimer dust positions on their own pool and make one swap trigger many paid
+  harvests.
 
 ## Guard, Jupiter, IDLs
 

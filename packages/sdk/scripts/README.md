@@ -11,10 +11,10 @@ pnpm --filter @stockfloor/sdk exec tsx scripts/<script>.ts [flags]   # same, fro
 
 | Script | What it does |
 |---|---|
-| `create-launch` | DBC `create_config` + `create_launch` (tx 1), DBC pool + `register_pool` (+ creator first buy) (tx 2, tx 3 only if the buy does not fit) |
+| `create-launch` | DBC `create_config` + `create_launch` (tx 1), DBC pool + `register_pool` (+ creator first buy) (tx 2, tx 3 only if the buy does not fit). Writes a session file with both throwaway keypairs before sending; `--resume` finishes an interrupted launch |
 | `buy` | Buy with the quote asset: DBC curve in presale (ExactIn, PartialFill when crossing the migration price), DAMM v2 after migration |
 | `sell` | Sell base tokens (same venues) |
-| `crank` | Everything due: `register_pool`, `harvest_curve_fees`, `harvest_migration_fee`, `harvest_surplus`, DBC `migration_damm_v2`, `harvest_lp_fees`, `burn_claimer_base`. One launch or all; `--loop` |
+| `crank` | Everything due: `register_pool`, `harvest_curve_fees`, `harvest_migration_fee`, `harvest_surplus`, DBC `migration_damm_v2`, `sync_migration`, `harvest_lp_fees`, `burn_claimer_base`. One launch or all; `--loop` |
 | `redeem` | Burn base tokens for the vault pro rata minus the exit fee (after migration and the migration-fee harvest) |
 | `status` | Read-only: phase, progress, vault, supply, floor (on-chain `floor` view by simulation), price and max loss, positions, due crank actions |
 
@@ -24,7 +24,7 @@ pnpm --filter @stockfloor/sdk exec tsx scripts/<script>.ts [flags]   # same, fro
 |---|---|
 | `--rpc <url>` | RPC endpoint, default `http://127.0.0.1:8899` |
 | `--keypair <path>` | Fee payer / signer. Must resolve inside the repo `keys/` directory (or a `stockfloor-test-*` temp dir created by tests). `~/.config/solana/id.json` and every other path are refused |
-| `--launch <addr>` / `--mint <base mint>` / `--config <dbc config>` | Which launch (`--mint` uses getProgramAccounts with a memcmp on the Launch base mint) |
+| `--launch <addr>` / `--mint <base mint>` / `--config <dbc config>` | Which launch. `--mint` uses getProgramAccounts with a memcmp on the Launch base mint and then keeps the launch that owns the mint's DBC pool (anyone can create extra pool-less `Launch` accounts for a mint); it fails with `AmbiguousLaunchError` when several matches have no pool yet. Public mainnet RPCs may refuse getProgramAccounts, so prefer `--launch` there |
 | `--amount <units>` / `--raw <raw>` / `--all` | Amounts: `units = raw / 10^decimals` (the ScaledUiAmount multiplier is **not** applied); SPYx has 8 decimals, launch tokens 6 |
 | `--slippage-bps <n>` | Trades, default 100 (quotes are exact program math, so this only absorbs state changes) |
 | `--priority-fee <micro-lamports>` | ComputeBudget unit price; every transaction also sets a compute unit limit from `CU_LIMITS` |
@@ -32,8 +32,31 @@ pnpm --filter @stockfloor/sdk exec tsx scripts/<script>.ts [flags]   # same, fro
 
 Script-specific flags are documented at the top of each file: `create-launch` (`--name --symbol --uri
 --quote --preset gentle|flat --vault-share --threshold-usd --exit-fee-bps --price-usd --first-buy
---out`), `buy` (`--no-partial-fill`), `crank` (`--loop --interval --skip-migration --max-actions
---dry-run`), `status` (`--price-usd | --live-price`).
+--session --resume --out`), `buy` (`--no-partial-fill`), `crank` (`--loop --interval --skip-migration
+--max-actions --dry-run --min-lp-fee-raw --min-lp-base-raw --max-lp-harvests
+--include-foreign-positions`), `status` (`--price-usd | --live-price`).
+
+The RPC endpoint is printed as scheme, host and port only: provider URLs carry API keys in the query
+string or the path, and CLI output may end up in a recording.
+
+## Resuming an interrupted launch
+
+`create-launch` spans two or three transactions and two throwaway keypairs (the DBC config, which signs
+tx 1, and the base mint, which signs the pool creation). `create_launch` commits the base mint in tx 1, so
+without that keypair the launch could never get its pool. Before the first transaction the script writes
+`keys/launches/<config>.json` (gitignored, mode 0600, `--session` to choose another path under `keys/`)
+with the launch input and both secret keys, and the `--out` file with the addresses and per-step status.
+It also refuses to start when the quote mint is paused or the creator cannot pay the first buy.
+
+```bash
+bash packages/sdk/scripts/run.sh create-launch --keypair keys/cli-creator.json --resume keys/launches/<config>.json \
+  --out launch.json
+# skip create_config+create_launch: Launch account exists
+# sent create_pool+register_pool+first_buy: 5avveqFL… (1036 bytes, 176421 CU)
+```
+
+The resume reads the chain first and sends only what is missing (checked on a local Surfpool fork by
+sending tx 1 alone and then resuming; a second resume sent nothing).
 
 ## Mainnet send guard
 
@@ -58,6 +81,11 @@ Tests: `test/guard-keypair.test.ts` (decision table, probe with mocked fetch, ke
 `test/cli.test.ts` (the scripts spawned against fake local JSON-RPC servers).
 
 ## End-to-end run on a local Surfpool mainnet fork (2026-09-16)
+
+Recorded before the post-M5 review fixes: the crank output below has no `sync_migration` step (the crank
+now sends it right after `migrate`), and LP-fee harvests had no minimum. Every other figure still holds.
+The C2 sequence was re-run on the current binary; see
+[`docs/research/surfpool-e2e.md`](../../../docs/research/surfpool-e2e.md).
 
 Surfpool 1.5.0 on 127.0.0.1:8899 / 8900 (`scripts/surfpool/*`), stockfloor `target/deploy/stockfloor.so`
 sha256 `580ecbee45bc952fc95f60700ebea1b24d610e9a591b82a37f6847f9dd8e5843`, real mainnet DBC 0.2.1, DAMM v2,
