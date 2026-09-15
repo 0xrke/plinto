@@ -10,7 +10,7 @@ The rest of BRIEF §8 (DAMM v2 trades, LP fee harvest, several redeemers, and in
 every step) is green too. **No step is skipped.** The C1 integration itself did not expose any bug
 in `programs/stockfloor` or `packages/sdk`.
 
-**Update after the M1 review (commit `f8644bd`).** Two independent reviews found issues outside
+**Update after the M1 review (program commits `f8644bd` and `a54b37e`).** Two independent reviews found issues outside
 the C1 happy path. Each was reproduced on the fork against the pre-fix binary first
 (`tests/integration/review-regressions.test.ts`, see "M1 review regressions" below), then fixed in
 the program:
@@ -38,7 +38,7 @@ after the fixes. The `register_pool` rows, the floor view values and the test co
 | Mainnet accounts | SPYx mint `XsoCS1…` (Token-2022, 8 decimals, Pausable, ScaledUiAmount, PermanentDelegate, TransferHook with null program); DBC token badge for SPYx `D2THzeQ…`; DBC pool authority `FhVo3…`; DAMM v2 pool authority; DAMM v2 Customizable config `A8gMrEP…` |
 | Fixture dump | `tests/fixtures/manifest.json`, generated 2026-09-15T17:56:10.864Z from `https://api.mainnet-beta.solana.com`, **slots 447312190–447312193** |
 | Fork clock | Starts at the dump time, so the SPYx `newMultiplier` 1.005714560286254 is in effect (effective since 2026-06-18) |
-| Our program | `stockfloor` `98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA`; C1 first proven at commit `f2986c8`, re-run on the M1 review fixes (program source at `f8644bd`) |
+| Our program | `stockfloor` `98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA`; C1 first proven at commit `f2986c8`, re-run on the M1 review fixes (program source last changed at `a54b37e`) |
 | Launch parameters | SDK `buildDbcConfigParams`: SPYx quote at $757.02 (the Jupiter price observed 2026-09-15; a constant, not fetched live), threshold $1,000, `gentle` preset, 50% vault share, 2% exit fee, 1% curve fee, creator trading share 30%, 100% partner permanent-locked liquidity, DAMM v2 Customizable 1% with quote-only fees, dynamic supply |
 
 No threshold scaling was needed. The default $1,000 threshold is 131,346,320 raw SPYx
