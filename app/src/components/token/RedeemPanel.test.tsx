@@ -13,6 +13,7 @@ import type { LaunchSummary } from "@/lib/data/types";
 import { formatTokenAmount } from "@/lib/format";
 import { Disclosures } from "./Disclosures";
 import { RedeemPanel } from "./RedeemPanel";
+import { VaultStats } from "./VaultStats";
 
 afterEach(() => {
   cleanup();
@@ -118,5 +119,43 @@ describe("<RedeemPanel />", () => {
     );
     expect(screen.getByText(/Redemption opens after migration/)).toBeTruthy();
     expect(screen.queryByLabelText("Amount to redeem")).toBeNull();
+  });
+});
+
+describe("vault guarantees are stated with their exceptions", () => {
+  it("disclosures name program upgradeability, with the on-chain upgrade authority when it is readable", async () => {
+    const launch = await harbor();
+    const source = new MockDataSource(0);
+    const authority = "BBU1tTr4BTrEeVfNG4wWLmrmyhDHdeLZeny5C5FsdstV";
+    source.getProgramUpgradeStatus = async () => ({ status: "upgradeable", authority, programData: "11111111111111111111111111111111" });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <WalletContext.Provider value={connectedWallet()}>
+          <DataProvider dataSource={source} actions={new StubLaunchActions(0)}>
+            <AttestationProvider>
+              <Disclosures launch={launch} />
+            </AttestationProvider>
+          </DataProvider>
+        </WalletContext.Provider>
+      </QueryClientProvider>,
+    );
+    expect(screen.getByText("The programs are upgradeable.")).toBeTruthy();
+    expect(screen.getByText(/Meteora DBC and DAMM v2 are upgradeable by Meteora/)).toBeTruthy();
+    expect(await screen.findByText(/Status on this cluster: upgradeable by BBU1…dstV\./)).toBeTruthy();
+  });
+
+  it("the vault card and the redeem panel do not claim more than the program guarantees", async () => {
+    const launch = await harbor();
+    render(
+      <Providers>
+        <VaultStats launch={launch} />
+        <RedeemPanel launch={launch} />
+      </Providers>,
+    );
+    expect(screen.queryByText(/Quote leaves the vault only through redemption\./)).toBeNull();
+    expect(screen.queryByText(/nobody can pause it except/)).toBeNull();
+    expect(screen.getByText(/The SPYx issuer's permanent delegate and a program upgrade are exceptions/)).toBeTruthy();
+    expect(screen.getByText(/a program upgrade could change the rules/)).toBeTruthy();
   });
 });

@@ -43,7 +43,8 @@ Environment:
   `Price $X · Floor at graduation (est.) $Y · Max loss if it graduates: −Z%` (there is no floor before
   graduation, and the page says so); after graduation the floor meter, the market panel with the honest buy
   label (`Price $X · Floor $Y · Max loss if you buy now: −Z%`). With an exact quote, X is the buy's average
-  price (pool fee and price impact included), so a thin pool does not understate the max loss; the redeem panel and vault stats; the permissionless crank panel; disclosures with the non-US
+  price (pool fee and price impact included), so a thin pool does not understate the max loss; the redeem panel and vault stats; the permissionless crank panel; disclosures (tracker certificate, issuer controls,
+  program upgradeability with the StockFloor upgrade authority read from chain, floor in USD, unaudited) with the non-US
   attestation on every token page, and on `/create` when the launch includes a first buy (a curve trade in the xStock).
 - `GET /api/launches`, `GET /api/launches/[mint]`: read-only JSON of the same `LaunchSummary` mapping the
   pages use (raw amounts as strings, floor, max loss, buy label, due crank actions).

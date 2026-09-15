@@ -69,7 +69,8 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
       </h2>
       <p className="mt-1 text-sm text-ink-2">
         Burn ${launch.symbol} and receive your pro-rata share of the vault in {quote.symbol}. Available to every
-        holder at any time; nobody can pause it except the {quote.symbol} issuer.
+        holder at any time: the program has no pause switch. The {quote.symbol} issuer can pause {quote.symbol}
+        transfers, and a program upgrade could change the rules (see disclosures).
       </p>
 
       {!open ? (

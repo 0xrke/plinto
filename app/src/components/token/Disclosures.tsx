@@ -3,11 +3,26 @@
 import { useId } from "react";
 import type { LaunchSummary } from "@/lib/data/types";
 import { AttestationCheckbox } from "@/components/ui/AttestationCheckbox";
-import { formatPercent } from "@/lib/format";
+import type { UpgradeStatus } from "@/lib/chain/upgradeAuthority";
+import { useProgramUpgradeStatus } from "@/lib/data/context";
+import { formatPercent, truncateAddress } from "@/lib/format";
+
+function upgradeStatusText(status: UpgradeStatus | undefined): string {
+  if (!status) return "Checking the upgrade authority on this cluster…";
+  switch (status.status) {
+    case "upgradeable":
+      return `Status on this cluster: upgradeable by ${truncateAddress(status.authority)}.`;
+    case "immutable":
+      return "Status on this cluster: the upgrade authority is revoked, so the program can no longer change.";
+    case "unknown":
+      return "Status on this cluster: not checked; assume it is upgradeable.";
+  }
+}
 
 export function Disclosures({ launch }: { launch: LaunchSummary }) {
   const id = useId();
   const quote = launch.quote.asset;
+  const upgrade = useProgramUpgradeStatus();
 
   return (
     <section id="disclosures" aria-labelledby={`${id}-heading`} className="card scroll-mt-20 p-5 sm:p-6">
@@ -32,6 +47,13 @@ export function Disclosures({ launch }: { launch: LaunchSummary }) {
           <span className="font-semibold text-ink">The floor protects from zero, not from loss.</span> If you buy
           above the floor, you can lose the difference. Redemptions pay a pro-rata share of the vault minus a{" "}
           {formatPercent(launch.exitFeeBps / 10_000)} exit fee that stays in the vault.
+        </li>
+        <li>
+          <span className="font-semibold text-ink">The programs are upgradeable.</span> The StockFloor program has no
+          admin, pause or withdraw instruction, but its deployer can upgrade it until the upgrade authority is
+          revoked, and an upgrade could change the rules, including how vault funds move. {upgradeStatusText(upgrade.data)}{" "}
+          Meteora DBC and DAMM v2 are upgradeable by Meteora; an upgrade there could stop or divert fees that are not
+          yet harvested into the vault.
         </li>
         <li>
           <span className="font-semibold text-ink">Unaudited software.</span> StockFloor is hackathon code that has

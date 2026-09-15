@@ -26,6 +26,7 @@ import {
 } from "@stockfloor/sdk";
 import { decodeMetaplexMetadata, imageUrlFromUri, metadataAddress, type TokenMetadata } from "../chain/metadata";
 import type { PriceProvider, UsdPrice } from "../chain/prices";
+import { readUpgradeStatus, type UpgradeStatus } from "../chain/upgradeAuthority";
 import type { LaunchDataSource, LaunchPhase, LaunchSummary, PayToken, QuoteMarket } from "./types";
 
 /** SDK read functions the data source uses (injectable for tests). */
@@ -305,5 +306,9 @@ export class ChainDataSource implements LaunchDataSource {
   async getSolBalance(owner: string): Promise<bigint> {
     const acc = await this.reader.getAccountInfo(new PublicKey(owner));
     return acc ? BigInt(acc.lamports) : 0n;
+  }
+
+  getProgramUpgradeStatus(): Promise<UpgradeStatus> {
+    return readUpgradeStatus(this.reader, STOCKFLOOR_PROGRAM_ID);
   }
 }

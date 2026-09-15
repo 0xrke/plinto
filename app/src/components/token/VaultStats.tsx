@@ -38,7 +38,14 @@ export function VaultStats({ launch }: { launch: LaunchSummary }) {
         <h2 id="vault-heading" className="text-lg font-semibold text-ink">
           Vault
         </h2>
-        <p className="text-xs text-ink-3">No admin, no withdraw. Quote leaves the vault only through redemption.</p>
+        <p className="text-xs text-ink-3">
+          The program has no admin or withdraw instruction: redemption is its only way out of the vault. The{" "}
+          {quote.asset.symbol} issuer&apos;s permanent delegate and a program upgrade are exceptions (see{" "}
+          <a href="#disclosures" className="underline">
+            disclosures
+          </a>
+          ).
+        </p>
       </div>
       <dl className="mt-2 divide-y divide-line">
         <Row

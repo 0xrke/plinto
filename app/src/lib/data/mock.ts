@@ -1,4 +1,5 @@
 import { QUOTE_ALLOWLIST, type QuoteAsset } from "@stockfloor/sdk";
+import type { UpgradeStatus } from "../chain/upgradeAuthority";
 import type { LaunchDataSource, LaunchSummary, PayToken, QuoteMarket } from "./types";
 
 /**
@@ -208,5 +209,9 @@ export class MockDataSource implements LaunchDataSource {
   async getSolBalance(_owner: string): Promise<bigint> {
     await this.delay();
     return 10_000_000_000n;
+  }
+
+  async getProgramUpgradeStatus(): Promise<UpgradeStatus> {
+    return { status: "unknown", reason: "mock data" };
   }
 }

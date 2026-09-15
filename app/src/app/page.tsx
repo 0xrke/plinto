@@ -12,7 +12,7 @@ const STEPS = [
   },
   {
     title: "Free market with a floor",
-    body: "Any holder can burn tokens for a pro-rata share of the vault at any time, minus a 2% exit fee that stays in the vault. There is no admin withdraw.",
+    body: "Any holder can burn tokens for a pro-rata share of the vault at any time, minus a 2% exit fee that stays in the vault. The program has no admin withdraw; the quote issuer's controls and program upgradeability are disclosed on every token page.",
   },
 ];
 

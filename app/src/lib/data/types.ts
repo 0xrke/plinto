@@ -2,6 +2,7 @@ import type { CurvePreset, LaunchInput, LaunchState, QuoteAsset } from "@stockfl
 import type { WalletContextState } from "@solana/wallet-adapter-react";
 import type { PriceSource } from "../chain/prices";
 import type { FlowDispatch } from "../chain/txFlow";
+import type { UpgradeStatus } from "../chain/upgradeAuthority";
 
 /**
  * Lifecycle phase of a launch as the UI presents it.
@@ -89,6 +90,8 @@ export interface LaunchDataSource {
   getTokenBalance(owner: string, mint: string): Promise<bigint>;
   /** Lamports of `owner` (0 when the account does not exist). */
   getSolBalance(owner: string): Promise<bigint>;
+  /** Whether the StockFloor program can still be upgraded on this cluster (disclosures). Optional for stubs. */
+  getProgramUpgradeStatus?(): Promise<UpgradeStatus>;
 }
 
 /** Subset of the wallet adapter state the write actions need. */

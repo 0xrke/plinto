@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { CLUSTER_SETTINGS, POLL_MS, RPC_URL } from "../config";
 import { getClusterInfo, type ClusterInfo } from "../chain/cluster";
+import type { UpgradeStatus } from "../chain/upgradeAuthority";
 import { IDLE_FLOW, txFlowReducer } from "../chain/txFlow";
 import type { LaunchActions, LaunchDataSource } from "./types";
 
@@ -110,6 +111,18 @@ export function useCluster() {
     queryFn: () => (cluster ? cluster() : getClusterInfo(RPC_URL, CLUSTER_SETTINGS)),
     enabled: dataSource.kind === "chain",
     staleTime: 60_000,
+    retry: 1,
+  });
+}
+
+/** The StockFloor program's upgrade status on this cluster (read once; it changes only by an explicit revoke). */
+export function useProgramUpgradeStatus() {
+  const { dataSource } = useData();
+  return useQuery({
+    queryKey: ["program-upgrade-status", dataSource.kind],
+    queryFn: (): Promise<UpgradeStatus> =>
+      dataSource.getProgramUpgradeStatus ? dataSource.getProgramUpgradeStatus() : Promise.resolve({ status: "unknown", reason: "not available" }),
+    staleTime: 5 * 60_000,
     retry: 1,
   });
 }
