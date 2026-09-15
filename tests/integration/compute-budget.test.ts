@@ -48,9 +48,12 @@ import { createAta, mintSupply, splAta, spyxAta, tokenAmount } from "../src/toke
 
 /**
  * Production compute-unit limits per transaction (what the SDK and the crank should request). Each is
- * the largest value measured over six runs with random keys plus headroom for PDA / ATA bump searches
- * (about 1,500 CU per extra iteration); create_launch has the most searches (claimer, vault authority,
- * launch, vault ATA). Every limit, DBC's migration included, is at most 200,000 CU.
+ * the largest value measured over six runs with random keys plus headroom for PDA / ATA bump searches:
+ * every extra search iteration costs about 1,500 CU and happens with probability 1/2, so each limit
+ * leaves at least ~16 iterations (24,000 CU) above the smallest measurement of a transaction that
+ * searches (create_launch has the most: claimer, vault authority, launch, vault ATA). Transactions
+ * that only use stored bumps (register_pool, harvest_migration_fee, harvest_surplus, floor, redeem)
+ * measure the same units on every run. Every limit, DBC's migration included, is at most 200,000 CU.
  */
 export const LIMITS = {
   "DBC create_config": 50_000,
@@ -65,8 +68,8 @@ export const LIMITS = {
   "DBC migration_damm_v2": 200_000,
   "stockfloor harvest_migration_fee": 60_000,
   "stockfloor harvest_surplus": 60_000,
-  "stockfloor burn_claimer_base (empty)": 25_000,
-  "SPL transfer + stockfloor burn_claimer_base (donation)": 30_000,
+  "stockfloor burn_claimer_base (empty)": 40_000,
+  "SPL transfer + stockfloor burn_claimer_base (donation)": 45_000,
   "DAMM v2 swap2": 40_000,
   "stockfloor harvest_lp_fees": 100_000,
   "stockfloor floor (view)": 15_000,

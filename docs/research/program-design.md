@@ -317,8 +317,8 @@ spread comes from PDA / ATA bump searches). Recommended limits are what the test
 | `harvest_curve_fees` | 51,107–52,607 | 80,000 |
 | `harvest_migration_fee` | 37,384 | 60,000 |
 | `harvest_surplus` | 37,390 | 60,000 |
-| `burn_claimer_base` (empty) | 11,791–13,291 | 25,000 |
-| SPL transfer + `burn_claimer_base` | 13,733–15,233 | 30,000 |
+| `burn_claimer_base` (empty) | 11,791–13,291 | 40,000 |
+| SPL transfer + `burn_claimer_base` | 13,733–15,233 | 45,000 |
 | `harvest_lp_fees` | 53,356–54,856 | 100,000 |
 | `floor` | 5,385 | 15,000 |
 | `redeem` | 25,977–25,978 | 40,000 |

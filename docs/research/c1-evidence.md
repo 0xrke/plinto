@@ -682,8 +682,8 @@ searches cause the spread):
 | DBC `migration_damm_v2` | 151,921–160,921 | 200,000 |
 | stockfloor `harvest_migration_fee` | 37,384 | 60,000 |
 | stockfloor `harvest_surplus` | 37,390 | 60,000 |
-| stockfloor `burn_claimer_base` (empty) | 11,791–13,291 | 25,000 |
-| SPL transfer + stockfloor `burn_claimer_base` | 13,733–15,233 | 30,000 |
+| stockfloor `burn_claimer_base` (empty) | 11,791–13,291 | 40,000 |
+| SPL transfer + stockfloor `burn_claimer_base` | 13,733–15,233 | 45,000 |
 | DAMM v2 `swap2` | 17,796–18,364 | 40,000 |
 | stockfloor `harvest_lp_fees` | 53,356–54,856 | 100,000 |
 | stockfloor `floor` (view) | 5,385 | 15,000 |
