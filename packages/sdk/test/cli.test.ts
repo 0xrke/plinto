@@ -13,7 +13,11 @@ import { Keypair } from "@solana/web3.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MAINNET_GENESIS_HASH } from "../src";
 import { TEST_KEYS_PREFIX } from "../src/node";
-import { amountArg, parseArgs, rawToUnits, unitsToRaw } from "../scripts/lib/cli";
+import { amountArg, parseArgs, rawToUnits, rpcDisplay, unitsToRaw } from "../scripts/lib/cli";
+import { defaultSessionPath, newLaunchSession, pendingLaunchSteps, readLaunchSession, writeLaunchSession } from "../scripts/lib/launchSession";
+import { buildLaunchTransactions, DEFAULT_QUOTE_ASSET } from "../src";
+import { REPO_KEYS_DIR } from "../src/node";
+import { statSync, readFileSync } from "node:fs";
 
 const SDK_DIR = join(__dirname, "..");
 
@@ -38,6 +42,93 @@ describe("CLI argument helpers", () => {
     expect(amountArg(parseArgs(["--raw", "42"]), 8)).toBe(42n);
     expect(amountArg(parseArgs(["--amount", "0.5"]), 6)).toBe(500_000n);
     expect(amountArg(parseArgs([]), 6)).toBeUndefined();
+  });
+});
+
+describe("RPC URL in CLI output", () => {
+  it("prints scheme, host and port only (API keys in the query, path or user info are hidden)", () => {
+    expect(rpcDisplay("http://127.0.0.1:8899")).toBe("http://127.0.0.1:8899");
+    expect(rpcDisplay("http://127.0.0.1:8899/")).toBe("http://127.0.0.1:8899");
+    expect(rpcDisplay("https://mainnet.helius-rpc.com/?api-key=SECRET123")).toBe("https://mainnet.helius-rpc.com/…");
+    expect(rpcDisplay("https://solana-mainnet.g.alchemy.com/v2/SECRET123")).toBe("https://solana-mainnet.g.alchemy.com/…");
+    expect(rpcDisplay("https://user:SECRET123@rpc.example.com")).toBe("https://rpc.example.com/…");
+    expect(rpcDisplay("not a url SECRET123")).toBe("<invalid RPC URL>");
+    for (const u of ["https://mainnet.helius-rpc.com/?api-key=SECRET123", "https://solana-mainnet.g.alchemy.com/v2/SECRET123", "https://user:SECRET123@rpc.example.com"]) {
+      expect(rpcDisplay(u)).not.toContain("SECRET123");
+    }
+  });
+});
+
+describe("create-launch sessions (keypairs persisted before the first transaction, resume plan)", () => {
+  const input = {
+    name: "Session",
+    symbol: "SESS",
+    uri: "https://example.com/s.json",
+    quote: DEFAULT_QUOTE_ASSET,
+    quotePriceUsd: 757.02,
+    quoteMultiplier: 1.0057,
+    preset: "gentle" as const,
+    vaultSharePct: 50,
+    thresholdUsd: 50,
+    exitFeeBps: 200,
+  };
+
+  it("round-trips the keypairs and input, rebuilds identical transactions, and stays under keys/ with mode 0600", () => {
+    const dir = mkdtempSync(join(tmpdir(), TEST_KEYS_PREFIX));
+    try {
+      const creator = Keypair.generate().publicKey;
+      const built = buildLaunchTransactions(input, creator, { firstBuy: { quoteAmount: 700_000n, slippageBps: 100 }, nowUnixSeconds: 1_789_000_000n });
+      const session = newLaunchSession({ creator, input, firstBuy: { quoteAmount: 700_000n, slippageBps: 100 }, configKeypair: built.configKeypair, baseMintKeypair: built.baseMintKeypair, addresses: built.addresses });
+      const path = join(dir, "launches", `${built.addresses.config.toBase58()}.json`);
+      const written = writeLaunchSession(path, session);
+      expect(statSync(written).mode & 0o777).toBe(0o600);
+      expect(readFileSync(written, "utf8")).toContain(built.addresses.launch.toBase58());
+
+      const loaded = readLaunchSession(written);
+      expect(loaded.creator.equals(creator)).toBe(true);
+      expect(loaded.configKeypair.publicKey.equals(built.addresses.config)).toBe(true);
+      expect(loaded.baseMintKeypair.publicKey.equals(built.addresses.baseMint)).toBe(true);
+      expect(loaded.firstBuy).toEqual({ quoteAmount: 700_000n, slippageBps: 100 });
+      const again = buildLaunchTransactions(loaded.input, loaded.creator, { configKeypair: loaded.configKeypair, baseMintKeypair: loaded.baseMintKeypair, firstBuy: loaded.firstBuy!, nowUnixSeconds: 1_789_000_000n });
+      expect(again.addresses).toEqual(built.addresses);
+      expect(again.curve.thresholdQuoteRaw).toBe(built.curve.thresholdQuoteRaw);
+      expect(again.transactions.map((t) => t.instructions.map((i) => Buffer.from(i.data).toString("hex")))).toEqual(built.transactions.map((t) => t.instructions.map((i) => Buffer.from(i.data).toString("hex"))));
+
+      // Another launch's session is never overwritten; a tampered keypair is refused.
+      const other = buildLaunchTransactions(input, creator);
+      expect(() => writeLaunchSession(written, newLaunchSession({ creator, input, firstBuy: null, configKeypair: other.configKeypair, baseMintKeypair: other.baseMintKeypair, addresses: other.addresses }))).toThrow(/another launch/);
+      const tampered = join(dir, "tampered.json");
+      writeFileSync(tampered, JSON.stringify({ ...session, baseMintSecretKey: Array.from(Keypair.generate().secretKey) }));
+      expect(() => readLaunchSession(tampered)).toThrow(/base mint keypair does not match/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses session paths outside keys/ and the Solana CLI wallet", () => {
+    const creator = Keypair.generate().publicKey;
+    const built = buildLaunchTransactions(input, creator);
+    const session = newLaunchSession({ creator, input, firstBuy: null, configKeypair: built.configKeypair, baseMintKeypair: built.baseMintKeypair, addresses: built.addresses });
+    expect(defaultSessionPath(built.addresses.config)).toBe(join(REPO_KEYS_DIR, "launches", `${built.addresses.config.toBase58()}.json`));
+    expect(() => writeLaunchSession(join(tmpdir(), "not-a-test-dir", "s.json"), session)).toThrow(/refusing keypair outside/);
+    expect(() => writeLaunchSession("~/.config/solana/id.json", session)).toThrow(/refusing/);
+    expect(() => writeLaunchSession(join(REPO_KEYS_DIR, "..", "session.json"), session)).toThrow(/refusing keypair outside/);
+  });
+
+  it("resume plan: only what is not on chain is sent; impossible states are refused", () => {
+    const labels2 = ["create_config+create_launch", "create_pool+register_pool+first_buy"];
+    const labels3 = ["create_config+create_launch", "create_pool+register_pool", "first_buy"];
+    const none = { launchExists: false, poolExists: false, poolRegistered: false, creatorBaseBalance: 0n };
+    const send = (labels: string[], p: typeof none) => pendingLaunchSteps(labels, p).map((d) => d.send);
+    expect(send(labels2, none)).toEqual([true, true]);
+    // tx1 landed, tx2 failed (e.g. the creator could not pay the first buy): only tx2 again.
+    expect(send(labels2, { ...none, launchExists: true })).toEqual([false, true]);
+    expect(send(labels2, { ...none, launchExists: true, poolExists: true, poolRegistered: true, creatorBaseBalance: 5n })).toEqual([false, false]);
+    expect(send(labels3, { ...none, launchExists: true, poolExists: true, poolRegistered: true })).toEqual([false, false, true]);
+    expect(send(labels3, { ...none, launchExists: true, poolExists: true, poolRegistered: true, creatorBaseBalance: 1n })).toEqual([false, false, false]);
+    expect(() => pendingLaunchSteps(labels2, { ...none, poolExists: true })).toThrow(/Launch does not/);
+    expect(() => pendingLaunchSteps(labels2, { ...none, launchExists: true, poolExists: true })).toThrow(/not registered/);
+    expect(() => pendingLaunchSteps(["something_else"], none)).toThrow(/unknown launch transaction/);
   });
 });
 

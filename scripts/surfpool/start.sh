@@ -90,9 +90,15 @@ if [[ ! -f "$AIRDROP_KEYPAIR_ABS" ]]; then
   echo "airdrop keypair not found: $AIRDROP_KEYPAIR_ABS" >&2
   exit 1
 fi
-AIRDROP_KEYPAIR_ABS="$(cd "$(dirname "$AIRDROP_KEYPAIR_ABS")" && pwd)/$(basename "$AIRDROP_KEYPAIR_ABS")"
+if [[ -L "$AIRDROP_KEYPAIR_ABS" ]]; then
+  echo "refusing symlinked airdrop keypair: $AIRDROP_KEYPAIR_ABS" >&2
+  exit 1
+fi
+# Physical paths (symlinks resolved) on both sides, so keys/../x or a symlinked directory cannot escape.
+AIRDROP_KEYPAIR_ABS="$(cd "$(dirname "$AIRDROP_KEYPAIR_ABS")" && pwd -P)/$(basename "$AIRDROP_KEYPAIR_ABS")"
+KEYS_DIR_REAL="$(cd "$ROOT/keys" 2>/dev/null && pwd -P)" || KEYS_DIR_REAL="$ROOT/keys"
 case "$AIRDROP_KEYPAIR_ABS" in
-  "$ROOT"/keys/*) ;;
+  "$KEYS_DIR_REAL"/*) ;;
   *)
     echo "refusing airdrop keypair outside $ROOT/keys/: $AIRDROP_KEYPAIR_ABS" >&2
     exit 1

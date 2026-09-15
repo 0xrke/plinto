@@ -73,12 +73,26 @@ for tool in solana surfpool curl; do
 done
 [[ -x "$TSX" ]] || { echo "tsx not found at $TSX (pnpm install)" >&2; exit 1; }
 [[ -f "$SO" ]] || { echo "$SO not found (bash scripts/build-programs.sh -p stockfloor)" >&2; exit 1; }
+# require_repo_key <path>: the path must be a relative keys/... path without . or .. segments whose
+# physical directory (symlinks resolved) is the repo keys/ directory or below it, and the file itself
+# must not be a symlink. Every keypair this script passes to the Solana CLI or the SDK CLI goes through
+# it (the SDK CLI and setup.ts apply their own realpath check too; the Solana CLI does not).
+KEYS_DIR_REAL="$(cd "$ROOT/keys" 2>/dev/null && pwd -P)" || { echo "missing $ROOT/keys/" >&2; exit 1; }
+require_repo_key() {
+  local p="$1" dir
+  case "$p" in keys/*) ;; *) echo "refusing keypair outside keys/: $p" >&2; exit 1 ;; esac
+  case "/$p/" in */../* | */./*) echo "refusing keypair path with . or .. segments: $p" >&2; exit 1 ;; esac
+  dir="$(cd "$ROOT/$(dirname "$p")" 2>/dev/null && pwd -P)" || { echo "keypair directory not found: $p" >&2; exit 1; }
+  case "$dir/" in "$KEYS_DIR_REAL"/*) ;; *) echo "refusing keypair outside $KEYS_DIR_REAL (symlinks resolved): $p" >&2; exit 1 ;; esac
+  [[ ! -L "$ROOT/$p" ]] || { echo "refusing symlinked keypair: $p" >&2; exit 1; }
+}
+
 for k in "$DEPLOYER_KEY" "$CREATOR_KEY" "$BUYER1_KEY" "$BUYER2_KEY" "$CRANKER_KEY" "$PROGRAM_KEY"; do
-  case "$k" in keys/*) ;; *) echo "refusing keypair outside keys/: $k" >&2; exit 1 ;; esac
+  require_repo_key "$k"
   [[ -f "$k" ]] || { echo "keypair not found: $k" >&2; exit 1; }
 done
 
-case "$BUFFER_KEY" in keys/*) ;; *) echo "refusing buffer keypair outside keys/: $BUFFER_KEY" >&2; exit 1 ;; esac
+require_repo_key "$BUFFER_KEY"
 if [[ ! -f "$BUFFER_KEY" ]]; then
   solana-keygen new --no-bip39-passphrase --silent --outfile "$BUFFER_KEY" >/dev/null
   echo "created deploy buffer keypair $BUFFER_KEY"

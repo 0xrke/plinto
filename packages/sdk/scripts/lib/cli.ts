@@ -117,6 +117,20 @@ export function rpcUrl(args: Args): string {
   return str(args, "rpc") ?? DEFAULT_RPC;
 }
 
+/**
+ * The RPC endpoint for logs: scheme, host and port only. Provider URLs carry API keys in the query
+ * string (`?api-key=`) or the path (`/v2/<key>`), and CLI output may be recorded for the demo.
+ */
+export function rpcDisplay(url: string): string {
+  try {
+    const u = new URL(url);
+    const hidden = u.pathname.replace(/\/+$/, "") !== "" || u.search !== "" || u.username !== "" || u.password !== "";
+    return hidden ? `${u.origin}/…` : u.origin;
+  } catch {
+    return "<invalid RPC URL>";
+  }
+}
+
 export function connectionFor(url: string): Connection {
   return new Connection(url, { commitment: "confirmed" });
 }
@@ -155,7 +169,7 @@ export async function sendingContext(args: Args): Promise<SendingContext> {
       lastCheck = Date.now();
     },
   });
-  log(`rpc ${url} (${decision.mode}: ${decision.reason})`);
+  log(`rpc ${rpcDisplay(url)} (${decision.mode}: ${decision.reason})`);
   log(`fee payer ${keypair.publicKey.toBase58()}`);
   return { rpcUrl: url, connection, sender, decision };
 }
