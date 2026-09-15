@@ -103,12 +103,12 @@ build brief (§12).
 | | |
 |---|---|
 | **Screen** | Click **"Launch a token"** (or **Create** in the header) to open `/create` |
-| **Actions** | 1. **Name:** `StockFloor Demo`, **Symbol:** `SFDEMO` (a clearly fictional demo token). 2. **Quote asset:** keep **SPYx** and point at its "calm" tag. 3. **Curve preset:** **Gentle**. 4. Drag **"Share of the raise locked in the floor vault"** from 50% to 70%, then back to 50%. Keep the right-hand preview in frame: "Floor at graduation", "Floor vs graduation price", "Max loss at graduation price". 5. Point at **Fixed terms**: Exit fee 2%, Graduation threshold, Curve trading fee 1%, Team allocation None. 6. Click **"Launch token"** and approve in the wallet. |
+| **Actions** | 1. **Name:** `StockFloor Demo`, **Symbol:** `SFDEMO` (a clearly fictional demo token). 2. **Quote asset:** keep **SPYx** and point at its "calm" tag. 3. **Curve preset:** **Gentle**. 4. Drag **"Share of the raise locked in the floor vault"** from 50% to 70%, then back to 50%. Keep the right-hand preview in frame: "Floor at graduation", "Floor vs graduation price", "Max loss at graduation price". 5. Point at **Fixed terms**: Exit fee 2%, Graduation threshold, Curve trading fee 1%, Team allocation None. 6. **Fork take:** click **"Launch token"** and approve in the wallet. **Mainnet take:** cut to a 5 s terminal shot of `create-launch --threshold-usd 50 …` (the form's threshold is fixed at $1,000), then back to the new token page. |
 | **Expected preview values** | From the SDK formula `floor / price = f / (√r + 1 − f)`. Gentle at 50%: floor ≈ 31% of the graduation price, max loss ≈ 69%. Gentle at 70%: ≈ 50% and ≈ 50%. If the app shows something else, stop and report it. |
 | **Voiceover** | "A creator launches a token quoted in SPYx, on a gentle IPO-style curve. They choose how much of the raise becomes the floor: at fifty percent, the preview shows the floor at graduation and the maximum loss for a buyer at the opening price. No team allocation, no free tokens." |
 | **Proof** | Solscan: DBC config creation and `create_launch` transactions, TBD (C2) |
 
-### Scene 3: Presale · 0:35–1:00 · `MAINNET (C2)` for USDC; `FORK` with SPYx
+### Scene 3: Presale · 0:35–1:00 · `MAINNET (C2)` or `FORK`, paying in SPYx
 
 | | |
 |---|---|
@@ -127,7 +127,7 @@ build brief (§12).
 | **Voiceover** | "The curve hits its threshold and graduates. A permissionless crank migrates the pool to Meteora DAMM v2 with all liquidity locked forever, and our program pulls the migration fee — half the raise by default — into the vault. The floor is live." |
 | **Proof** | Solscan: completing buy, `migration_damm_v2`, `harvest_migration_fee`, DAMM v2 pool, position NFT account. All TBD (C2) |
 
-### Scene 5: Market · 1:20–1:40 · `MAINNET (C2)` (Jupiter); fork variant below
+### Scene 5: Market · 1:20–1:40 · `MAINNET (C2)` or `FORK`, paying in SPYx
 
 | | |
 |---|---|
