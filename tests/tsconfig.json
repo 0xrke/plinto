@@ -13,5 +13,5 @@
     "baseUrl": ".",
     "paths": { "@stockfloor/sdk": ["../packages/sdk/src/index.ts"] }
   },
-  "include": ["src/**/*.ts", "spike/**/*.ts", "integration/**/*.ts", "unit/**/*.ts", "fixtures/**/*.ts", "vitest.config.ts"]
+  "include": ["src/**/*.ts", "spike/**/*.ts", "integration/**/*.ts", "unit/**/*.ts", "sdk/**/*.ts", "fixtures/**/*.ts", "vitest.config.ts"]
 }

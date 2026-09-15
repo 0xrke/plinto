@@ -9,7 +9,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["spike/**/*.test.ts", "integration/**/*.test.ts", "unit/**/*.test.ts"],
+    include: ["spike/**/*.test.ts", "integration/**/*.test.ts", "unit/**/*.test.ts", "sdk/**/*.test.ts"],
     testTimeout: 600_000,
     hookTimeout: 600_000,
     // LiteSVM instances are memory heavy (several MB of programs each); run files in forks.
