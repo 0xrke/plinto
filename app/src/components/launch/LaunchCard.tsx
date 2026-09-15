@@ -18,7 +18,7 @@ export function LaunchCard({ launch }: { launch: LaunchSummary }) {
   const maxLoss = maxLossFraction(launch.priceUsd, floorUsd);
 
   return (
-    <article className="card group relative flex flex-col gap-4 p-4 transition-shadow hover:shadow-md sm:p-5">
+    <article className="card group relative flex min-w-0 flex-col gap-4 p-4 transition-shadow hover:shadow-md sm:p-5">
       <header className="flex items-start gap-3">
         <TokenAvatar symbol={launch.symbol} imageUrl={launch.imageUrl} size={44} />
         <div className="min-w-0 flex-1">
@@ -34,7 +34,7 @@ export function LaunchCard({ launch }: { launch: LaunchSummary }) {
 
       {graduated ? (
         <div className="space-y-3">
-          <dl className="grid grid-cols-3 gap-3 text-sm">
+          <dl className="grid grid-cols-2 gap-3 text-sm min-[440px]:grid-cols-3">
             <div className="min-w-0">
               <dt className="text-xs text-ink-3">Price</dt>
               <dd className="truncate font-semibold text-ink">{formatUsd(launch.priceUsd)}</dd>

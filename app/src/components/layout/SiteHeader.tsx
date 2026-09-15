@@ -18,12 +18,12 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-canvas/90 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:gap-6 sm:px-6">
+      <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-3 sm:gap-6 sm:px-6">
         <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight text-ink">
           <LogoMark className="h-7 w-7" />
           <span className="text-[1.0625rem]">StockFloor</span>
         </Link>
-        <nav aria-label="Main" className="flex items-center gap-1">
+        <nav aria-label="Main" className="flex items-center gap-0.5 sm:gap-1">
           {NAV.map((item) => {
             const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
@@ -31,7 +31,7 @@ export function SiteHeader() {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`rounded-md px-2.5 py-1.5 text-sm font-medium ${
+                className={`rounded-md px-2 py-1.5 text-sm font-medium sm:px-2.5 ${
                   active ? "bg-brand-soft text-brand" : "text-ink-2 hover:text-ink"
                 }`}
               >
@@ -52,6 +52,11 @@ export function SiteHeader() {
           <WalletButton />
         </div>
       </div>
+      {dataSource.kind === "mock" ? (
+        <p className="border-t border-line bg-sunken px-4 py-1.5 text-center text-xs text-ink-2 md:hidden">
+          {networkLabel(RPC_URL)} · Demo data, launches are simulated
+        </p>
+      ) : null}
     </header>
   );
 }

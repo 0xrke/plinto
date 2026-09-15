@@ -36,11 +36,15 @@ export function WalletButton() {
   );
 
   const address = publicKey?.toBase58() ?? null;
-  const label = connecting
-    ? "Connecting…"
-    : connected && address
-      ? truncateAddress(address)
-      : "Connect wallet";
+  const label = connecting ? (
+    "Connecting…"
+  ) : connected && address ? (
+    truncateAddress(address)
+  ) : (
+    <span>
+      Connect<span className="hidden min-[420px]:inline"> wallet</span>
+    </span>
+  );
 
   async function copyAddress() {
     if (!address) return;
@@ -57,7 +61,7 @@ export function WalletButton() {
     <div className="relative" ref={rootRef}>
       <button
         type="button"
-        className={connected ? "btn btn-secondary tnum" : "btn btn-primary"}
+        className={`${connected ? "btn btn-secondary tnum" : "btn btn-primary"} whitespace-nowrap px-3 sm:px-4`}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}

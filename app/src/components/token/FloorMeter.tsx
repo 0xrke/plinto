@@ -75,7 +75,7 @@ export function FloorMeter({ priceUsd, floorUsd, maxLoss, compact = false }: Flo
         </span>
         <span className="inline-flex items-center gap-2">
           <span aria-hidden className="hatch-risk h-3 w-3 rounded-sm border border-risk-line" />
-          <span className="text-ink-2">Above the floor</span>
+          <span className="text-ink-2">At risk above the floor</span>
           <span className="font-semibold text-risk">{formatMaxLoss(maxLoss)}</span>
         </span>
         <span className="text-ink-3">

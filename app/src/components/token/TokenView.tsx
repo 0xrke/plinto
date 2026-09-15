@@ -25,6 +25,14 @@ import { PresaleTradePanel } from "./PresaleTradePanel";
 import { RedeemPanel } from "./RedeemPanel";
 import { FloorHistoryPlaceholder, VaultStats } from "./VaultStats";
 
+/**
+ * Two-column layout on large screens: the primary card (row 1) and the secondary cards
+ * (row 2) on the left, the action panels spanning both rows on the right. On small screens
+ * the DOM order puts the action panels right after the primary card.
+ */
+const BODY_GRID = "grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:grid-rows-[auto_1fr]";
+const SIDE_COLUMN = "space-y-6 lg:sticky lg:top-20 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start";
+
 export function TokenView({ mint }: { mint: string }) {
   const { data: launch, isPending, isError, error, refetch } = useLaunch(mint);
 
@@ -129,8 +137,8 @@ function GraduatedBody({ launch }: { launch: LaunchSummary }) {
   const multiple = priceToFloorMultiple(launch.priceUsd, floorUsd);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:items-start">
-      <div className="space-y-6">
+    <div className={BODY_GRID}>
+      <div className="lg:col-start-1 lg:row-start-1">
         <section aria-labelledby="meter-heading" className="card p-5 sm:p-6">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 id="meter-heading" className="text-lg font-semibold text-ink">
@@ -161,12 +169,14 @@ function GraduatedBody({ launch }: { launch: LaunchSummary }) {
               : "The price is at or below the floor. Buying and redeeming returns at least the floor, minus the exit fee and trading fees."}
           </p>
         </section>
-        <VaultStats launch={launch} />
-        <FloorHistoryPlaceholder quoteSymbol={launch.quote.asset.symbol} underlying={launch.quote.asset.underlying} />
       </div>
-      <div className="space-y-6 lg:sticky lg:top-20">
+      <div className={SIDE_COLUMN}>
         <MarketBuyPanel launch={launch} />
         <RedeemPanel launch={launch} />
+      </div>
+      <div className="space-y-6 lg:col-start-1 lg:row-start-2">
+        <VaultStats launch={launch} />
+        <FloorHistoryPlaceholder quoteSymbol={launch.quote.asset.symbol} underlying={launch.quote.asset.underlying} />
       </div>
     </div>
   );
@@ -182,8 +192,8 @@ function PresaleBody({ launch }: { launch: LaunchSummary }) {
   const graduating = launch.phase === "graduating";
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:items-start">
-      <div className="space-y-6">
+    <div className={BODY_GRID}>
+      <div className="lg:col-start-1 lg:row-start-1">
         <section aria-labelledby="progress-heading" className="card p-5 sm:p-6">
           <h2 id="progress-heading" className="text-lg font-semibold text-ink">
             {graduating ? "Curve complete" : "Progress to graduation"}
@@ -232,7 +242,12 @@ function PresaleBody({ launch }: { launch: LaunchSummary }) {
             </div>
           </dl>
         </section>
-
+      </div>
+      <div className={SIDE_COLUMN}>
+        <PresaleTradePanel launch={launch} />
+        <RedeemPanel launch={launch} />
+      </div>
+      <div className="lg:col-start-1 lg:row-start-2">
         <section aria-labelledby="whatnext-heading" className="card p-5 sm:p-6">
           <h2 id="whatnext-heading" className="text-lg font-semibold text-ink">
             What happens at graduation
@@ -256,10 +271,6 @@ function PresaleBody({ launch }: { launch: LaunchSummary }) {
             </li>
           </ol>
         </section>
-      </div>
-      <div className="space-y-6 lg:sticky lg:top-20">
-        <PresaleTradePanel launch={launch} />
-        <RedeemPanel launch={launch} />
       </div>
     </div>
   );
