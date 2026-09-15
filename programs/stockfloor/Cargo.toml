@@ -1,7 +1,7 @@
 [package]
 name = "stockfloor"
 version = "0.1.0"
-description = "Created with Anchor"
+description = "StockFloor: DBC launches with a redeemable stock-backed floor vault"
 edition = "2021"
 
 [lib]
@@ -14,21 +14,20 @@ cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
-idl-build = ["anchor-lang/idl-build"]
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 anchor-debug = []
 custom-heap = []
 custom-panic = []
 
 
 [dependencies]
-anchor-lang = "1.0.2"
+anchor-lang = { version = "=1.0.2", features = ["init-if-needed"] }
+anchor-spl = { version = "=1.0.2", default-features = false, features = ["token", "token_2022", "associated_token"] }
+bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
 
 [dev-dependencies]
-litesvm = "0.10.0"
-solana-message = "3.0.1"
-solana-transaction = "3.0.2"
-solana-signer = "3.0.0"
-solana-keypair = "3.0.1"
+proptest = "1"
+serde_json = "1"
 
 
 [lints.rust]

@@ -1,0 +1,118 @@
+use anchor_lang::prelude::*;
+use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
+
+use crate::constants::{AUTHORITY_SEED, LAUNCH_SEED, LAUNCH_VERSION};
+use crate::events::LaunchCreated;
+use crate::external::{load_dbc_config, validate_launch_config};
+use crate::state::Launch;
+
+/// Create the launch registry and the floor vault for a freshly created DBC config.
+///
+/// Account order (clients must follow it):
+/// 0. `payer`                    signer, writable: pays rent for `launch` and `vault`
+/// 1. `creator`                  signer: recorded as the launch creator
+/// 2. `config`                   signer: the DBC config keypair (proves the caller created it)
+/// 3. `authority`                PDA `["authority", config]`
+/// 4. `launch`                   writable: PDA `["launch", config]`, created here
+/// 5. `quote_mint`               must equal `config.quote_mint`
+/// 6. `vault`                    writable: ATA(authority, quote_mint, quote_token_program)
+/// 7. `quote_token_program`      owner of `quote_mint` (Token or Token-2022)
+/// 8. `associated_token_program`
+/// 9. `system_program`
+#[derive(Accounts)]
+pub struct CreateLaunch<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    pub creator: Signer<'info>,
+
+    /// CHECK: DBC PoolConfig; owner, discriminator, size and fields are validated in the
+    /// handler. It must sign so that nobody can front-run `create_launch` for a config
+    /// they did not create.
+    #[account(signer)]
+    pub config: UncheckedAccount<'info>,
+
+    /// CHECK: PDA signer for all CPIs, holds no data.
+    #[account(seeds = [AUTHORITY_SEED, config.key().as_ref()], bump)]
+    pub authority: UncheckedAccount<'info>,
+
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + Launch::INIT_SPACE,
+        seeds = [LAUNCH_SEED, config.key().as_ref()],
+        bump,
+    )]
+    pub launch: Box<Account<'info, Launch>>,
+
+    #[account(mint::token_program = quote_token_program)]
+    pub quote_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    /// `init_if_needed` so that a third party pre-creating the ATA cannot block the launch.
+    #[account(
+        init_if_needed,
+        payer = payer,
+        associated_token::mint = quote_mint,
+        associated_token::authority = authority,
+        associated_token::token_program = quote_token_program,
+    )]
+    pub vault: Box<InterfaceAccount<'info, TokenAccount>>,
+
+    pub quote_token_program: Interface<'info, TokenInterface>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
+}
+
+pub fn handle_create_launch(ctx: Context<CreateLaunch>, exit_fee_bps: u16) -> Result<()> {
+    let (migration_fee_percentage, migration_quote_threshold) = {
+        let config = load_dbc_config(&ctx.accounts.config.to_account_info())?;
+        validate_launch_config(
+            &config,
+            &ctx.accounts.authority.key(),
+            &ctx.accounts.quote_mint.key(),
+            exit_fee_bps,
+        )?;
+        (config.migration_fee_percentage, config.migration_quote_threshold)
+    };
+
+    let now = Clock::get()?.unix_timestamp;
+    let quote_token_program = *ctx.accounts.quote_mint.to_account_info().owner;
+
+    let launch = &mut ctx.accounts.launch;
+    launch.version = LAUNCH_VERSION;
+    launch.bump = ctx.bumps.launch;
+    launch.authority_bump = ctx.bumps.authority;
+    launch.exit_fee_bps = exit_fee_bps;
+    launch.migration_fee_harvested = false;
+    launch.surplus_harvested = false;
+    launch.config = ctx.accounts.config.key();
+    launch.creator = ctx.accounts.creator.key();
+    launch.pool = Pubkey::default();
+    launch.base_mint = Pubkey::default();
+    launch.quote_mint = ctx.accounts.quote_mint.key();
+    launch.quote_token_program = quote_token_program;
+    launch.vault = ctx.accounts.vault.key();
+    launch.created_at = now;
+    launch.total_harvested_quote = 0;
+    launch.total_burned_base = 0;
+    launch.total_redeemed_base = 0;
+    launch.total_redeemed_quote = 0;
+    launch.total_exit_fees = 0;
+    launch.reserved = [0u8; 64];
+
+    emit!(LaunchCreated {
+        launch: launch.key(),
+        config: launch.config,
+        creator: launch.creator,
+        authority: ctx.accounts.authority.key(),
+        quote_mint: launch.quote_mint,
+        quote_token_program,
+        vault: launch.vault,
+        exit_fee_bps,
+        migration_fee_percentage,
+        migration_quote_threshold,
+        created_at: now,
+    });
+    Ok(())
+}

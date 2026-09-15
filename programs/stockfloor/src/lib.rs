@@ -1,16 +1,80 @@
+//! StockFloor: token launches on Meteora DBC where the partner migration fee (a share
+//! of the raise) becomes a redeemable floor vault in a tokenized stock.
+//!
+//! There is no admin, withdraw or sweep instruction. Quote leaves the vault only
+//! through `redeem`. Every crank is permissionless; the per-launch Authority PDA
+//! signs CPIs whose destinations are constrained to the vault or its own base ATA.
+//!
+//! See `docs/research/program-design.md` for accounts, seeds, invariants and
+//! limitations.
+
 use anchor_lang::prelude::*;
 
+pub mod constants;
+pub mod errors;
+pub mod events;
+pub mod external;
+pub mod instructions;
+pub mod math;
+pub mod state;
+pub mod token_utils;
+
+pub use instructions::*;
+pub use state::*;
+
 declare_id!("98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA");
+
+// CPI clients and account layouts generated from idls/dynamic_bonding_curve.json
+// (DBC 0.2.1) and idls/cp_amm.json (DAMM v2 0.2.4).
+declare_program!(dynamic_bonding_curve);
+declare_program!(cp_amm);
 
 #[program]
 pub mod stockfloor {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        msg!("Greetings from: {:?}", ctx.program_id);
-        Ok(())
+    /// Validate a DBC config and create the launch registry and floor vault.
+    pub fn create_launch(ctx: Context<CreateLaunch>, exit_fee_bps: u16) -> Result<()> {
+        instructions::create_launch::handle_create_launch(ctx, exit_fee_bps)
+    }
+
+    /// Register the canonical DBC pool (creator signs, once).
+    pub fn register_pool(ctx: Context<RegisterPool>) -> Result<()> {
+        instructions::register_pool::handle_register_pool(ctx)
+    }
+
+    /// Permissionless: partner trading fees from the DBC curve into the vault.
+    pub fn harvest_curve_fees(ctx: Context<HarvestCurveFees>) -> Result<()> {
+        instructions::harvest_curve_fees::handle_harvest_curve_fees(ctx)
+    }
+
+    /// Permissionless: partner migration fee into the vault (once).
+    pub fn harvest_migration_fee(ctx: Context<HarvestQuoteFromDbc>) -> Result<()> {
+        instructions::harvest_dbc_quote::handle_harvest_migration_fee(ctx)
+    }
+
+    /// Permissionless: partner curve surplus into the vault (once).
+    pub fn harvest_surplus(ctx: Context<HarvestQuoteFromDbc>) -> Result<()> {
+        instructions::harvest_dbc_quote::handle_harvest_surplus(ctx)
+    }
+
+    /// Permissionless: DBC leftover base tokens (fixed supply) to the Authority, burned.
+    pub fn harvest_leftover(ctx: Context<HarvestLeftover>) -> Result<()> {
+        instructions::harvest_leftover::handle_harvest_leftover(ctx)
+    }
+
+    /// Permissionless: DAMM v2 LP fees; quote into the vault, base burned.
+    pub fn harvest_lp_fees(ctx: Context<HarvestLpFees>) -> Result<()> {
+        instructions::harvest_lp_fees::handle_harvest_lp_fees(ctx)
+    }
+
+    /// Burn base tokens for a pro-rata share of the vault minus the exit fee.
+    pub fn redeem(ctx: Context<Redeem>, amount: u64) -> Result<()> {
+        instructions::redeem::handle_redeem(ctx, amount)
+    }
+
+    /// View: vault balance, supply and exit fee (return data + event).
+    pub fn floor(ctx: Context<FloorView>) -> Result<FloorInfo> {
+        instructions::floor::handle_floor(ctx)
     }
 }
-
-#[derive(Accounts)]
-pub struct Initialize {}
