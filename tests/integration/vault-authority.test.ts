@@ -13,6 +13,8 @@
  * - A transaction that carries the claimer's signature (forged here with LiteSVM signature
  *   verification off, which is exactly the privilege an upgraded DBC or DAMM v2 would receive through
  *   the CPI) cannot transfer, burn, approve, set a close authority on, re-own or close the vault.
+ *   Closing is checked on an empty vault (a fresh launch before any harvest), the only state in which
+ *   Token-2022 checks the closing authority at all; a non-empty vault cannot be closed by anyone.
  *   Positive controls show the forged signatures are effective where the key has authority.
  */
 import {
@@ -202,5 +204,35 @@ describe("the claimer PDA never holds or controls the vault", () => {
     expect(tokenAmount(fork, attackerQuote)).toBe(1n);
     // Signature verification is back on: an unsigned PDA signer is rejected again.
     expect(() => fork.sendTx([createTransferCheckedInstruction(L.vault, SPYX_MINT, attackerQuote, L.vaultAuthority, 1n, SPYX_DECIMALS, [], TOKEN_2022_PROGRAM_ID)], [attacker])).toThrow();
+  });
+
+  it("an empty vault (fresh launch, before any harvest) cannot be closed with the claimer's signature; the vault authority's forged signature can (control)", async () => {
+    const fresh = await createStockfloorLaunch(fork);
+    const attacker = fork.newWallet(1);
+    expect(tokenAmount(fork, fresh.vault)).toBe(0n);
+    expect(tokenAccountCloseAuthority(fork, fresh.vault)).toBeNull();
+    const lamports = fork.lamports(fresh.vault);
+
+    // With a zero balance Token-2022 checks the closing authority (close authority, else owner).
+    for (const [label, signer] of [
+      ["the claimer", fresh.claimer],
+      ["the attacker", attacker.publicKey],
+      ["another launch's vault authority", L.vaultAuthority],
+    ] as const) {
+      const res = fork.sendTxForgedSigners([createCloseAccountInstruction(fresh.vault, attacker.publicKey, signer, [], TOKEN_2022_PROGRAM_ID)], [attacker]);
+      expect(res.ok, label).toBe(false);
+      expect(tokenErrorCode(res), `${label}: ${res.ok ? "" : res.error}`).toBe(TokenError.OwnerMismatch);
+      expect(fork.getAccount(fresh.vault), label).not.toBeNull();
+      expect(tokenAccountOwner(fork, fresh.vault).equals(fresh.vaultAuthority), label).toBe(true);
+    }
+
+    // Control: the same close signed (forged) by this launch's vault authority succeeds, so the checks
+    // above are the owner check itself. That key signs nothing but redeem payouts in the program.
+    const before = fork.lamports(attacker.publicKey);
+    const ctl = fork.sendTxForgedSigners([createCloseAccountInstruction(fresh.vault, attacker.publicKey, fresh.vaultAuthority, [], TOKEN_2022_PROGRAM_ID)], [attacker]);
+    expect(ctl.ok).toBe(true);
+    expect(fork.getAccount(fresh.vault)).toBeNull();
+    // The rent goes to the destination; the fee payer pays 5,000 lamports per signature (itself + the forged signer).
+    expect(fork.lamports(attacker.publicKey) - before).toBe(lamports - 2n * 5_000n);
   });
 });

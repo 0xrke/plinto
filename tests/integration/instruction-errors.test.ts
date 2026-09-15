@@ -141,9 +141,30 @@ describe("create_launch validation", () => {
     });
     expect(errName(fork.sendExpectFail([unsigned], [L.partner, L.creator]))).toBe("AccountNotSigner");
 
-    // A vault pre-created by a third party (the canonical ATA) does not block the launch.
+    // A vault pre-created by a third party (the canonical ATA) does not block the launch, but it is
+    // checked like a vault after a harvest: a delegate or a close authority (cheatcodes: only the vault
+    // authority could set them) makes create_launch fail with VaultEncumbered and create nothing, and
+    // an owner other than the vault authority is rejected by the ATA constraint first.
     const stranger = fork.newWallet(1);
     createAta(fork, stranger, L.vaultAuthority, SPYX_MINT, TOKEN_2022_PROGRAM_ID);
+    const cleanVault = Buffer.from(fork.mustGetAccount(L.vault).data);
+    // SPL / Token-2022 base account layout: owner at 32, delegate COption at 72 (+4), delegated_amount at 121,
+    // close_authority COption at 129 (+4).
+    const encumbered: Array<[string, (d: Buffer) => void, string]> = [
+      ["pre-created vault with a delegate", (d) => { d.writeUInt32LE(1, 72); stranger.publicKey.toBuffer().copy(d, 76); d.writeBigUInt64LE(1n, 121); }, "VaultEncumbered"],
+      ["pre-created vault with a close authority", (d) => { d.writeUInt32LE(1, 129); stranger.publicKey.toBuffer().copy(d, 133); }, "VaultEncumbered"],
+      ["pre-created vault with a delegate and a close authority (the vault authority itself)", (d) => { d.writeUInt32LE(1, 72); L.vaultAuthority.toBuffer().copy(d, 76); d.writeUInt32LE(1, 129); L.vaultAuthority.toBuffer().copy(d, 133); }, "VaultEncumbered"],
+      ["pre-created vault owned by the claimer", (d) => L.claimer.toBuffer().copy(d, 32), "ConstraintTokenOwner"],
+    ];
+    for (const [label, mutate, expected] of encumbered) {
+      fork.patchAccount(L.vault, (d) => {
+        cleanVault.copy(d);
+        mutate(d);
+      });
+      expect(errName(fork.sendExpectFail([await createLaunchFor(L, 200)], signers)), label).toBe(expected);
+      expect(fork.getAccount(deriveLaunch(L.config)), label).toBeNull();
+    }
+    fork.patchAccount(L.vault, (d) => cleanVault.copy(d));
     const res = fork.send([await createLaunchFor(L, 200)], signers);
     const launch = fetchLaunch(fork, L.config);
     expect(launch.vault.equals(L.vault)).toBe(true);
