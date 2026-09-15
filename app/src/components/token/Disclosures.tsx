@@ -2,12 +2,11 @@
 
 import { useId } from "react";
 import type { LaunchSummary } from "@/lib/data/types";
-import { useAttestation } from "@/lib/attestation";
+import { AttestationCheckbox } from "@/components/ui/AttestationCheckbox";
 import { formatPercent } from "@/lib/format";
 
 export function Disclosures({ launch }: { launch: LaunchSummary }) {
   const id = useId();
-  const { attested, setAttested } = useAttestation();
   const quote = launch.quote.asset;
 
   return (
@@ -39,18 +38,7 @@ export function Disclosures({ launch }: { launch: LaunchSummary }) {
           not been audited. Smart contract bugs can lose funds.
         </li>
       </ul>
-      <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg border border-line bg-sunken/60 p-3 text-sm">
-        <input
-          type="checkbox"
-          className="mt-0.5 h-4 w-4 accent-brand"
-          checked={attested}
-          onChange={(e) => setAttested(e.target.checked)}
-        />
-        <span className="text-ink">
-          I confirm that I am not a US person, and that I am not located in or a resident of a jurisdiction where
-          xStocks or this product are restricted.
-        </span>
-      </label>
+      <AttestationCheckbox className="mt-5" />
     </section>
   );
 }

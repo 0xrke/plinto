@@ -24,7 +24,9 @@ import { useCluster, useData, useQuoteMarkets, useRefreshChainData, useTokenBala
 import { parseUiNumber } from "@/lib/estimates";
 import { formatPercent, formatTokenAmount, formatUsd } from "@/lib/format";
 import { launchPriceError, validateLaunchForm, type LaunchFormValues } from "@/lib/launchForm";
+import { useAttestation } from "@/lib/attestation";
 import { useActionGate } from "@/components/token/useActionGate";
+import { AttestationCheckbox } from "@/components/ui/AttestationCheckbox";
 import { VolatilityTag } from "@/components/ui/QuoteChip";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { LaunchPreviewPanel } from "./LaunchPreviewPanel";
@@ -54,6 +56,7 @@ export function CreateLaunchForm() {
   const markets = useQuoteMarkets();
   const cluster = useCluster();
   const gate = useActionGate({ requireAttestation: false });
+  const { attested } = useAttestation();
   const refresh = useRefreshChainData();
   const [flow, dispatch] = useTxFlow();
   const [firstBuy, setFirstBuy] = useState("");
@@ -139,10 +142,14 @@ export function CreateLaunchForm() {
     }
   }
 
+  // The first buy is a curve trade in the quote xStock: the same eligibility attestation as token pages applies.
+  const firstBuyNeedsAttestation = firstBuyRaw !== null && firstBuyRaw > 0n;
+  const attestationMissing = firstBuyNeedsAttestation && !attested;
+
   const hasErrors = Object.keys(errors).length > 0;
   const locked = submit.status === "submitting" || (submit.status === "done" && (submit.ok || !!submit.resume));
   const canSubmit =
-    !hasErrors && input !== null && gate.ready && !firstBuyError && !priceError && !locked;
+    !hasErrors && input !== null && gate.ready && !firstBuyError && !priceError && !attestationMissing && !locked;
 
   async function run(resume?: LaunchResume) {
     if (!input) return;
@@ -385,6 +392,7 @@ export function CreateLaunchForm() {
                 }`}
             </p>
           </div>
+          {firstBuyNeedsAttestation ? <AttestationCheckbox /> : null}
         </fieldset>
 
         <fieldset className="space-y-2">
@@ -417,6 +425,8 @@ export function CreateLaunchForm() {
             <p className="field-hint">Connect a wallet to launch. You pay network fees and rent only (about 0.05 SOL).</p>
           ) : !gate.ready ? (
             <p className="field-hint">{gate.reason}</p>
+          ) : attestationMissing ? (
+            <p className="field-hint">Confirm your eligibility under “Your first buy”, or remove the first buy.</p>
           ) : null}
           {priceError ? <p className="text-sm text-risk">{priceError}</p> : null}
           {dataSource.kind === "chain" && cluster.data?.kind === "local-fork" ? (

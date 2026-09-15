@@ -42,7 +42,7 @@ Environment:
 - `/t/[mint]` token page: phase stepper; presale progress and curve trade panel; after graduation the
   floor meter, the market panel with the honest buy label (`Price $X · Floor $Y · Max loss if you buy now:
   −Z%`), the redeem panel and vault stats; the permissionless crank panel; disclosures with the non-US
-  attestation on every token page.
+  attestation on every token page, and on `/create` when the launch includes a first buy (a curve trade in the xStock).
 - `GET /api/launches`, `GET /api/launches/[mint]`: read-only JSON of the same `LaunchSummary` mapping the
   pages use (raw amounts as strings, floor, max loss, buy label, due crank actions).
 - `GET|POST /api/faucet`: local-fork faucet (below).

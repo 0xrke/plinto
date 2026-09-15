@@ -130,6 +130,8 @@ describe("page components render the on-chain launch from the local fork", () =>
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: uiName } });
     fireEvent.change(screen.getByLabelText("Symbol"), { target: { value: "uifl" } });
     fireEvent.change(screen.getByLabelText(/^Amount in SPYx/), { target: { value: "0.05" } });
+    // A first buy is a curve trade: the form asks for the non-US attestation.
+    fireEvent.click(screen.getByRole("checkbox", { name: /not a US person/ }));
     const launchButton = screen.getByRole("button", { name: "Launch token" }) as HTMLButtonElement;
     await waitFor(() => expect(launchButton.disabled).toBe(false), { timeout: 15_000 });
     await act(async () => {
@@ -140,6 +142,8 @@ describe("page components render the on-chain launch from the local fork", () =>
     expect(screen.getAllByText("(done)")).toHaveLength(2);
     expect(screen.getByText(`Launch created. Mint ${uiMint}`)).toBeTruthy();
     form.unmount();
+    // Start the token page un-attested, as the page flow below expects.
+    window.localStorage.clear();
 
     const created = (await (await fetch(`${APP}/api/launches/${uiMint}`)).json()) as { launch: LaunchJson };
     expect(created.launch).toMatchObject({ name: uiName, symbol: "UIFL", phase: "presale" });
