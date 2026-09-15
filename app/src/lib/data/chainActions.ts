@@ -323,8 +323,9 @@ export class ChainLaunchActions implements LaunchActions {
     const spent = side === "buy" ? quote0 - quote1 : base0 - base1;
     const received = side === "buy" ? base1 - base0 : quote1 - quote0;
     const partialFill = trade.quote.venue === "dbc" && trade.quote.mode === DbcSwapMode.PartialFill;
-    const quoteFmt = (raw: bigint) => `${formatTokenAmount(raw, q.asset.decimals, { multiplier: q.multiplier, maxFractionDigits: 8 })} ${q.asset.symbol}`;
-    const baseFmt = (raw: bigint) => `${formatTokenAmount(raw, launch.baseDecimals)} $${launch.symbol}`;
+    // Amounts that moved are shown rounded to nearest (0.0999999976 SPYx paid reads as 0.1).
+    const quoteFmt = (raw: bigint) => `${formatTokenAmount(raw, q.asset.decimals, { multiplier: q.multiplier, maxFractionDigits: 8, roundNearest: true })} ${q.asset.symbol}`;
+    const baseFmt = (raw: bigint) => `${formatTokenAmount(raw, launch.baseDecimals, { roundNearest: true })} $${launch.symbol}`;
     const summary =
       side === "buy"
         ? `Paid ${quoteFmt(spent)}, received ${baseFmt(received)}.${partialFill ? " The curve completed with this buy; the unused input stayed in your wallet." : ""}`
@@ -465,7 +466,7 @@ export class ChainLaunchActions implements LaunchActions {
       const built = buildRedeem(state, w.publicKey, request.amountRaw);
       await this.requireLamports(w, MIN_TRADE_LAMPORTS, cluster, "Redeeming");
       const q = launch.quote;
-      const quoteFmt = (raw: bigint) => `${formatTokenAmount(raw, q.asset.decimals, { multiplier: q.multiplier, maxFractionDigits: 8 })} ${q.asset.symbol}`;
+      const quoteFmt = (raw: bigint) => `${formatTokenAmount(raw, q.asset.decimals, { multiplier: q.multiplier, maxFractionDigits: 8, roundNearest: true })} ${q.asset.symbol}`;
       const label = `Redeem ${formatTokenAmount(request.amountRaw, launch.baseDecimals)} $${launch.symbol} for ${quoteFmt(built.preview.net)}`;
       dispatch({ type: "start", steps: [{ id: "redeem", label }] });
       const quote0 = await getAtaBalance(reader, w.publicKey, quoteMint, quoteTokenProgram);

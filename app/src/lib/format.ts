@@ -123,6 +123,11 @@ export interface FormatTokenOptions {
   maxFractionDigits?: number;
   /** Compact notation for values of at least one million ("987.3M"). */
   compact?: boolean;
+  /**
+   * Round to the nearest digit instead of down. Only for amounts that already moved (a paid or
+   * received amount), never for balances or limits, which must not be overstated.
+   */
+  roundNearest?: boolean;
 }
 
 /** Converts raw units to an exact decimal UI amount (raw / 10^decimals × multiplier). */
@@ -144,7 +149,7 @@ export function formatTokenAmount(raw: bigint, decimals: number, options: Format
   }
   const maxDigits =
     options.maxFractionDigits ?? (ui.gte(1000) ? 2 : ui.gte(1) ? 4 : Math.min(6, decimals));
-  const rounded = ui.toDecimalPlaces(maxDigits, Decimal.ROUND_DOWN);
+  const rounded = ui.toDecimalPlaces(maxDigits, options.roundNearest ? Decimal.ROUND_HALF_UP : Decimal.ROUND_DOWN);
   if (rounded.isZero()) {
     return `${sign}<${new Decimal(10).pow(-maxDigits).toFixed(maxDigits)}`;
   }

@@ -7,17 +7,18 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { useState, type ReactNode } from "react";
-import { describe, expect, it } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WalletContext, type WalletContextState } from "@solana/wallet-adapter-react";
-import { Keypair } from "@solana/web3.js";
+import { Keypair, Transaction, VersionedTransaction, type PublicKey } from "@solana/web3.js";
 import { getClusterInfo } from "@/lib/chain/cluster";
 import { createBackend } from "@/lib/data";
 import { DataProvider } from "@/lib/data/context";
 import type { LaunchJson } from "@/lib/data/serialize";
 import { AttestationProvider } from "@/lib/attestation";
 import { formatTokenAmount } from "@/lib/format";
+import { CreateLaunchForm } from "@/components/create/CreateLaunchForm";
 import { LaunchList } from "@/components/launch/LaunchList";
 import { TokenView } from "@/components/token/TokenView";
 
@@ -47,12 +48,25 @@ const walletState: WalletContextState = {
   signIn: undefined,
 };
 
-function App({ children }: { children: ReactNode }) {
+/** A connected wallet backed by an in-memory keypair (stands in for the browser wallet's signTransaction). */
+function keypairWalletState(kp: Keypair): WalletContextState {
+  return {
+    ...walletState,
+    publicKey: kp.publicKey as PublicKey,
+    signTransaction: (async <T extends Transaction | VersionedTransaction>(tx: T) => {
+      if (tx instanceof VersionedTransaction) tx.sign([kp]);
+      else tx.partialSign(kp);
+      return tx;
+    }) as WalletContextState["signTransaction"],
+  };
+}
+
+function App({ children, wallet = walletState }: { children: ReactNode; wallet?: WalletContextState }) {
   const [backend] = useState(() => createBackend("chain", RPC));
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: 1 } } }));
   return (
     <QueryClientProvider client={queryClient}>
-      <WalletContext.Provider value={walletState}>
+      <WalletContext.Provider value={wallet}>
         <DataProvider dataSource={backend.dataSource} actions={backend.actions} cluster={() => getClusterInfo(RPC, false)}>
           <AttestationProvider>{children}</AttestationProvider>
         </DataProvider>
@@ -60,6 +74,8 @@ function App({ children }: { children: ReactNode }) {
     </QueryClientProvider>
   );
 }
+
+afterEach(cleanup);
 
 describe("page components render the on-chain launch from the local fork", () => {
   const { mint, name } = JSON.parse(readFileSync(REPORT, "utf8")) as { mint: string; name: string };
@@ -96,6 +112,66 @@ describe("page components render the on-chain launch from the local fork", () =>
     if (json.crankDue.length === 0) expect(within(crank).getByText("Nothing is due right now.")).toBeTruthy();
     else expect(within(crank).getByRole("button", { name: `Run crank (${json.crankDue.length} step${json.crankDue.length === 1 ? "" : "s"})` })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Disclosures" })).toBeTruthy();
+  });
+
+  it("UI-driven: the create form launches a token, the curve panel buys, the crank panel harvests", async () => {
+    const kp = Keypair.generate();
+    const funded = await fetch(`${APP}/api/faucet`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ wallet: kp.publicKey.toBase58() }) });
+    expect(funded.status).toBe(200);
+    const wallet = keypairWalletState(kp);
+    const uiName = `UI Form ${Date.now().toString(36).slice(-5)}`;
+
+    const form = render(
+      <App wallet={wallet}>
+        <CreateLaunchForm />
+      </App>,
+    );
+    await screen.findByText("Floor at graduation", {}, { timeout: 30_000 });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: uiName } });
+    fireEvent.change(screen.getByLabelText("Symbol"), { target: { value: "uifl" } });
+    fireEvent.change(screen.getByLabelText(/^Amount in SPYx/), { target: { value: "0.05" } });
+    const launchButton = screen.getByRole("button", { name: "Launch token" }) as HTMLButtonElement;
+    await waitFor(() => expect(launchButton.disabled).toBe(false), { timeout: 15_000 });
+    await act(async () => {
+      fireEvent.click(launchButton);
+    });
+    const open = await screen.findByRole("link", { name: "Open the token page" }, { timeout: 90_000 });
+    const uiMint = open.getAttribute("href")!.replace("/t/", "");
+    expect(screen.getAllByText("(done)")).toHaveLength(2);
+    expect(screen.getByText(`Launch created. Mint ${uiMint}`)).toBeTruthy();
+    form.unmount();
+
+    const created = (await (await fetch(`${APP}/api/launches/${uiMint}`)).json()) as { launch: LaunchJson };
+    expect(created.launch).toMatchObject({ name: uiName, symbol: "UIFL", phase: "presale" });
+    expect(created.launch.crankDue).toContain("harvest_curve_fees");
+
+    const page = render(
+      <App wallet={wallet}>
+        <TokenView mint={uiMint} />
+      </App>,
+    );
+    await screen.findByRole("heading", { name: uiName, level: 1 }, { timeout: 30_000 });
+    fireEvent.click(screen.getByRole("checkbox", { name: /not a US person/ }));
+    fireEvent.change(await screen.findByLabelText("You pay"), { target: { value: "0.1" } });
+    const buy = screen.getByRole("button", { name: "Buy $UIFL on the curve" }) as HTMLButtonElement;
+    await waitFor(() => expect(buy.disabled).toBe(false), { timeout: 15_000 });
+    await act(async () => {
+      fireEvent.click(buy);
+    });
+    const trade = screen.getByRole("heading", { name: "Trade on the curve" }).closest("section")!;
+    await waitFor(() => expect(within(trade).getByText(/^Paid 0\.1 SPYx, received [\d,.]+ \$UIFL\.$/)).toBeTruthy(), { timeout: 60_000, interval: 250 });
+    expect(within(trade).getAllByText("(done)")).toHaveLength(1);
+
+    const crankButton = await screen.findByRole("button", { name: /^Run crank \(\d+ steps?\)$/ }, { timeout: 30_000 });
+    await act(async () => {
+      fireEvent.click(crankButton);
+    });
+    await screen.findByText(/^\d+ crank transactions? confirmed/, {}, { timeout: 60_000 });
+    page.unmount();
+
+    const after = (await (await fetch(`${APP}/api/launches/${uiMint}`)).json()) as { launch: LaunchJson };
+    expect(BigInt(after.launch.vaultRaw)).toBeGreaterThan(0n);
+    expect(after.launch.crankDue).toEqual([]);
   });
 
   it("launch list: a card for the launch linking to its token page", async () => {

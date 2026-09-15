@@ -109,6 +109,12 @@ describe("formatTokenAmount", () => {
     expect(formatTokenAmount(19_999_999n, 8, { multiplier: 1.5, maxFractionDigits: 2 })).toBe("0.29");
   });
 
+  it("rounds to nearest only when asked (amounts that already moved)", () => {
+    // 0.1 UI SPYx typed → 9,943,179 raw → 0.0999999976 UI: shown as paid 0.1, never as a balance of 0.1.
+    expect(formatTokenAmount(9_943_179n, 8, { multiplier: 1.005714560286254, maxFractionDigits: 8 })).toBe("0.09999999");
+    expect(formatTokenAmount(9_943_179n, 8, { multiplier: 1.005714560286254, maxFractionDigits: 8, roundNearest: true })).toBe("0.1");
+  });
+
   it("marks tiny non-zero amounts instead of showing zero", () => {
     expect(formatTokenAmount(1n, 8)).toBe("<0.000001");
     expect(formatTokenAmount(1n, 6, { maxFractionDigits: 2 })).toBe("<0.01");
