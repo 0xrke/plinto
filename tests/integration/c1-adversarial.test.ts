@@ -412,7 +412,10 @@ describe("C1 adversarial: a second pool on the same config never feeds or drains
 
 // ====================================================================================================
 
-describe("C1 edge: harvest_surplus with a non-trivial surplus (cheatcode state)", () => {
+// Routing check on patched state: the CPI into the real DBC binary and the destination are real, but
+// the surplus itself is a cheatcode (no DBC 0.2.1 swap can overshoot the threshold). In the real
+// flow the surplus is rounding dust; c1-lifecycle 8e ties that amount to DBC's own surplus event.
+describe("C1 edge: harvest_surplus routing with a non-trivial surplus (cheatcode state, not reachable by DBC 0.2.1 swaps)", () => {
   it("pays exactly floor(floor(surplus * 80%) * (100 - 30)%) of DBC's surplus into the vault", async () => {
     const fork = Fork.create({ stockfloor: true, spike: false });
     const L = await createStockfloorLaunch(fork);
