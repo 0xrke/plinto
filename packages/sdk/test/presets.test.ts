@@ -242,7 +242,8 @@ describe("curve presets", () => {
         // The SDK agrees too.
         expect(() => validateConfigParameters(params)).not.toThrow();
 
-        // Derived values match the preview model and the program's stored values.
+        // Derived values match the preview model. (Both are SDK code; the values the real DBC
+        // program stores are compared on the fork in tests/integration/sdk-presets-fork.test.ts.)
         expect(result.swapBaseAmount).toBe(curve.swapBaseAmount);
         expect(result.migrationBaseThreshold).toBe(curve.migrationBaseAmount);
         expect(result.partnerMigrationFee).toBe(curve.partnerMigrationFee);
