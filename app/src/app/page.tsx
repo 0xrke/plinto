@@ -27,7 +27,7 @@ export default function HomePage() {
           </h1>
           <p className="mt-4 max-w-xl text-base leading-relaxed text-ink-2 sm:text-lg">
             A large share of every raise becomes a redeemable vault in stocks the moment the market opens. The
-            token can go up without limit. It cannot go to zero.
+            token can go up without limit, and while the vault holds its stock token, it cannot fall to zero.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link href="#launches" className="btn btn-primary">

@@ -35,7 +35,8 @@ export default function OpengraphImage() {
             Token launches with a floor in tokenized S&amp;P 500
           </div>
           <div style={{ fontSize: 30, color: "#455260", maxWidth: 900, lineHeight: 1.35 }}>
-            A share of every raise becomes a redeemable vault. The token can go up without limit; it cannot go to zero.
+            A share of every raise becomes a redeemable vault. The token can go up without limit; while the vault
+            holds its stock token, it cannot fall to zero.
           </div>
         </div>
         <div style={{ display: "flex", fontSize: 24, color: "#5c6570" }}>
