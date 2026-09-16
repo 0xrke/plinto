@@ -767,9 +767,18 @@ if step_begin deploy; then
     fi
     run_cmd "${DEPLOY_CMD[@]}" ||
       abort_run "the deploy failed. Resuming this run re-runs the same command, which continues writing into the same buffer (keys/stockfloor-deploy-buffer.json) instead of paying for the writes again; the preflight compares what is already in that buffer with the local binary. 'solana program show --buffers --keypair keys/deployer.json' lists a stranded buffer and 'solana program close --buffers --keypair keys/deployer.json' returns its rent."
-    set +e
-    AFTER="$("$TSX" "$ROOT/scripts/c2/checks.ts" program-state --rpc "$RPC" --so "$SO" 2>&1)"
-    set -e
+    # A provider endpoint load-balances across nodes, so the account written by the last deploy
+    # transaction is not visible to every one of them at once. Observed on mainnet: this check read
+    # "absent" seconds after a deploy that had in fact landed (the dumped ELF matched byte for byte).
+    # Poll before believing it.
+    AFTER=""
+    for _ in $(seq 1 20); do
+      set +e
+      AFTER="$("$TSX" "$ROOT/scripts/c2/checks.ts" program-state --rpc "$RPC" --so "$SO" 2>&1)"
+      set -e
+      [[ "$AFTER" == "match" ]] && break
+      sleep 3
+    done
     [[ "$AFTER" == "match" ]] || abort_run "after the deploy the on-chain ELF does not match the local binary: $AFTER"
     echo "   verified: the deployed ELF matches $SO"
     add_address "stockfloor program" "$PROGRAM_ID"
