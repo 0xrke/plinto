@@ -27,13 +27,17 @@ and a handful of decisions only the user can make.
 1. **Host the app** so a judge can click through the live mainnet launch. Hosting is publishing, so it needs the OK,
    the env of `app/README.md` ("Deploying the app") and a mainnet RPC for the browser bundle.
 2. **Record the video** — `docs/demo-script.md` now carries the real links and numbers.
-3. **Organizer question:** whether one project may enter both the main track and the DBC bounty. Also note the
-   hackathon page now shows a Sep 25 deadline while the rules block still says Sep 18.
+3. **Organizer question:** whether one project may enter both the main track and the DBC bounty.
+   The deadline is now Fri 2026-09-25 (the user confirmed the extension on 2026-09-16).
 4. **Upgrade authority:** keep (recommended while the transfer-hook limitation stands) or revoke at C3.
 5. **Address for the leftover SOL** (~2.7 SOL on the deployer, minus whatever C3 needs). Not the exchange address
    the funding came from.
 6. **Optional:** the Pyth market-data bounty is a cheap fit (USD valuation of the floor, xStock premium/discount);
    PreStocks and Tessera are not reachable without a redesign (their mints carry transfer fees, which DBC rejects).
+7. **Product name:** the user is reconsidering "StockFloor" now that there is time. Rejected so far: Stoa (a Stoa
+   Protocol exists or existed; stoa.xyz and stoa.fun are taken) and Stowa (a German watch brand). A rename would be
+   user-facing only: the program id, the crate name and the immutable demo token (`StockFloor Demo` / `SFDEMO`) keep
+   the old name.
 
 ## Next (local)
 - Nothing is blocking. Remaining work is the app deploy and the recording, both of which need the decisions above.

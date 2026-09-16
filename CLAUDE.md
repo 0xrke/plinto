@@ -1,7 +1,7 @@
 # StockFloor — project rules
 
 Working name. Hackathon project for **Stocklana** (Solana Foundation), targeting the **Best Use of Meteora DBC** bounty and the main track.
-**Hard deadline: Friday 2026-09-18, 16:00 ET.** Read `docs/BRIEF.md` before doing anything else. It is the full spec.
+**Hard deadline: Friday 2026-09-25** (extended from Fri 2026-09-18, 16:00 ET; confirm the new closing time on the hackathon page). Read `docs/BRIEF.md` before doing anything else. It is the full spec.
 
 ## Language (strict)
 - Talk to the user **in Russian**. That covers chat replies and questions to the user.

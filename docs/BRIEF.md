@@ -1,7 +1,7 @@
 # StockFloor — Build Brief
 
 Status: approved concept, ready to build. Written 2026-09-15.
-**Deadline: Friday 2026-09-18, 16:00 ET.** Read `CLAUDE.md` first for the language rule, the autonomy rules, the hard stops and the checkpoints.
+**Deadline: Friday 2026-09-25** (extended from Fri 2026-09-18, 16:00 ET). Read `CLAUDE.md` first for the language rule, the autonomy rules, the hard stops and the checkpoints.
 
 ---
 
@@ -21,7 +21,7 @@ The product is **not** a memecoin casino. Present it as launches for communities
 
 Source: https://hackathons.solana.com/hackathons/stocklana
 
-- **Timeline:** submissions close Fri 2026-09-18 16:00 ET. Judging runs through 2026-10-02.
+- **Timeline:** submissions close Fri 2026-09-25 (extended from Fri 2026-09-18 16:00 ET; confirm the exact time on the page). Judging was announced to run through 2026-10-02.
 - **Main track ($100K, Solana Foundation).** One question: *"could this be a real app that people will actually use?"* Judges look for a real user and problem, a working end-to-end demo, a reason it belongs on Solana, and quality of execution.
 - **Bounty: Best Use of Meteora DBC ($5,000).** Verbatim:
   > Meteora's Dynamic Bonding Curve (DBC) is a fully configurable token launch primitive: you control the curve shape, fee schedule, quote token, graduation threshold, and how the pool migrates into Meteora DAMM v2 liquidity. Most launches today use it for memecoins. We want to see what it looks like for tokenized stocks. Build something on DBC that outlasts the current meme-stock meta. Ideas we'd love to see: launch mechanics tuned for equity-like assets (price discovery for thinly traded or newly tokenized stock pairs), novel curve or fee configurations, creative graduation rules, or tooling that helps issuers configure and monitor DBC pools. **Working code on mainnet beats slides.** Judging: originality of the DBC configuration or use case, technical soundness, and whether the idea has a life after the hackathon.
