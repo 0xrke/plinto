@@ -573,4 +573,4 @@ In short:
 - a dust-sized unlocked creator position can appear at migration in rounding edge cases;
 - LiteSVM is not a validator;
 - the code is unaudited;
-- the upgrade authority is not yet revoked (user decision, TBD (C2)).
+- the upgrade authority is still held by the deployer after the mainnet deploy of 2026-09-16; whether to revoke it is the user's decision at C3.

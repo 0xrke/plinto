@@ -1,6 +1,9 @@
 # C2 runbook — the mainnet run
 
-**Nothing in this file has been executed on mainnet.** It is the plan the user approves, and the
+**Executed on mainnet on 2026-09-16.** The run and its every signature are in
+[`../scripts/c2/reports/c2-20260916T071644Z.md`](../scripts/c2/reports/c2-20260916T071644Z.md); four guards had to be
+taught to poll a load-balanced RPC before it completed (see `docs/DECISIONS.md`). What follows is the plan it
+executed, still accurate for a repeat run. It is the plan the user approves, and the
 scripts that run it. The whole sequence was rehearsed on a live Surfpool mainnet fork
 (`docs/research/surfpool-e2e.md`) and the runbook's own scripts were verified with a dry run on the
 current binary, 2026-09-16 (`scripts/c2/reports/dry-20260916T020703Z.md`: 15 lifecycle transactions
