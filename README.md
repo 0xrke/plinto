@@ -29,6 +29,30 @@ what is coming. Every row below is reproducible from this repository.
 | **Audit** | None. This is unaudited hackathon code. |
 | **Eligibility** | Not for US persons. See [Eligibility and disclaimers](#eligibility-and-disclaimers). |
 
+### Screenshots
+
+The app on a **local Surfpool fork of live mainnet** — the real DBC, DAMM v2, Token-2022 and SPYx programs
+and accounts, forked onto one machine — captured headlessly on **2026-09-16**. **None of these tokens exists
+on mainnet.** They were created on the fork by [`app/scripts/seed-fork.sh`](app/scripts/seed-fork.sh) and
+every amount below is read from that fork's chain state, not from mock data; the USD figures convert it at
+the live Jupiter SPYx price. Re-capture with [`app/scripts/screenshots.ts`](app/scripts/screenshots.ts) —
+commands in [`app/README.md`](app/README.md#screenshots).
+
+[![StockFloor token page on a local mainnet fork: price and floor meter, vault, and the buy panel](docs/screenshots/token-graduated.png)](docs/screenshots/token-graduated.png)
+
+<sub>**A graduated launch, local mainnet fork, 2026-09-16 (not mainnet).** Price $0.00000187 over a floor of
+$0.000000515 backed by 0.651635 SPYx (≈ $494.70) in the vault, and the buy button spelling out the downside:
+`Price $0.00000195 · Floor $0.000000515 · Max loss if you buy now: −73.5%` (that price is the average for the
+0.02 SPYx buy in the field, pool fee and price impact included).</sub>
+
+| [![The create form with its live launch preview](docs/screenshots/create-preview.png)](docs/screenshots/create-preview.png) | [![The list of launches](docs/screenshots/launches.png)](docs/screenshots/launches.png) |
+|---|---|
+| <sub>**`/create`, local mainnet fork, 2026-09-16.** The preview prices the launch before it exists: a $1,000 raise at a 50% vault share opens the market with a floor of $0.0000005 per token, 31.3% of the graduation price, so a buyer at the open can lose at most 68.7%.</sub> | <sub>**The launch list, local mainnet fork, 2026-09-16.** Two presales filling toward their threshold, two graduated tokens with a live floor. Kestrel Outfitters used a 70% vault share, which is why its worst case is −46% and Harbor Roasters' is −72.5%.</sub> |
+
+[<img src="docs/screenshots/token-mobile.png" alt="The same token page at phone width" width="260">](docs/screenshots/token-mobile.png)
+
+<sub>**The same token page at 400 px wide, local mainnet fork, 2026-09-16.**</sub>
+
 ### For the Meteora DBC bounty
 
 The DBC configuration *is* the product here, not packaging around it:

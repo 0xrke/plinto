@@ -312,3 +312,30 @@ Max loss if you buy now: −66.9%". The surfnet and the app server were stopped 
 
 `next dev` generates `AGENTS.md` and
 `CLAUDE.md` in `app/`; `agentRules: false` in `next.config.ts` turns that off and both names are gitignored.
+
+## Screenshots
+
+The four images in [`docs/screenshots/`](../docs/screenshots), shown in the root README, come from this app
+running against a **local Surfpool mainnet fork** — never from mock data, never from mainnet. Regenerate
+them (about three minutes, Playwright's Chromium downloads into the user cache on the first run):
+
+```bash
+bash app/scripts/seed-fork.sh     # from the repo root: fork on RPC 28899, deploy, four launches; SKIP_UP=1 reuses a running fork
+cd app
+export NEXT_PUBLIC_DATA_SOURCE=chain NEXT_PUBLIC_RPC_URL=http://127.0.0.1:28899 \
+       STOCKFLOOR_RPC_URL=http://127.0.0.1:28899 STOCKFLOOR_NEXT_DIST_DIR=.next-screens
+pnpm build:local
+pnpm exec next start -p 3288 -H 127.0.0.1 &
+pnpm exec playwright install chromium   # first run only
+pnpm screenshots                        # writes ../docs/screenshots/*.png
+RPC_PORT=28899 bash ../scripts/surfpool/stop.sh
+```
+
+`scripts/screenshots.ts` reads `/api/launches` and shoots the graduated launch with the largest vault
+(override with `STOCKFLOOR_SCREENSHOT_MINT`; `STOCKFLOOR_SCREENSHOT_APP_URL` and
+`STOCKFLOOR_SCREENSHOT_DIR` move the source and the target). It types a buy and a redemption so both panels
+show exact on-chain quotes, and it **fails instead of saving** when a skeleton or an error state is still on
+the page, when any value is still a "—" placeholder, when the buy button is not the exact
+`Price $X · Floor $Y · Max loss if you buy now: −Z%` sentence, or when the header does not say "Local fork".
+That last check is what keeps the README's captions true; pointing the script at a hosted mainnet build means
+dropping it and rewriting those captions.
