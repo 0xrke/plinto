@@ -15,6 +15,7 @@ M2–M5 done, plus a full review pass (program security, SDK, app, docs, C2 proc
 - **C2 runbook, preflight and gated run script** (`docs/c2-runbook.md`, `scripts/c2/`): a structurally read-only go/no-go preflight (19 checks), a one-command run with per-step confirmation, resume and abort guards, and a committed dry-run report. The dry run passed on a local fork (15 transactions, relay check 0 of 502).
 - **C2 rehearsal on a live Surfpool mainnet fork**, re-run on the current binary (`docs/research/surfpool-e2e.md`, report `scripts/e2e/reports/20260916T000744Z.md`): deploy, launch, buys, graduation crank, DAMM trade, LP fee harvest, redemptions. All quotes exact, **495 mainnet-equivalent transactions**, none sent to mainnet (verified: 0 of 988 local signatures exist on mainnet). The documented §9 command blocks were then replayed verbatim (`replay-20260916T001340Z`, 0 of 503 signatures on mainnet).
 - **Independent reviews** (program security, SDK/scripts, app+docs): no critical or high findings in the program; every medium/low finding fixed with a regression test or documented, see `docs/DECISIONS.md` 2026-09-16.
+- **Headline claim made consistent:** the home-page hero and the link-preview image promised "it cannot go to zero" unconditionally while the README and the token page already carried the two conditions; both now say "while the vault holds its stock token, it cannot fall to zero".
 - **Test run (`pnpm test`, own verification, rebuilt binaries): 571 tests, all steps passed** — Rust unit + property 44, SDK 214, LiteSVM fork integration 113, web app 200. Re-verified from a fresh clone with no `keys/` (clone + `pnpm install --frozen-lockfile` + `pnpm test`, 97 s): the build falls back to `--ignore-keys` and every suite passes.
 
 ## Blocked on user
@@ -28,7 +29,7 @@ M2–M5 done, plus a full review pass (program security, SDK, app, docs, C2 proc
 5. **Organizer question, still unanswered:** whether one project may enter both the main track and the DBC bounty. The README is structured so either answer works (a "For the Meteora DBC bounty" block sits directly under the status table), but the question gates how the submission is framed and should be asked today.
 
 ## Next (local, while waiting)
-- **Screenshots.** The repository still contains no image of the app, and the live URL and video are both "not yet". Three screenshots (token page with the floor meter and the max-loss buy label, `/create` with the live preview, the redeem panel) plus a short GIF of the crank are the cheapest remaining points per minute. Needs someone who can run the app and capture a browser.
+- **Screenshots — in progress.** Captured headlessly (Playwright, no user browser) from the app running against a local Surfpool mainnet fork with a seeded presale launch and a cranked graduated launch: token page with the floor meter and the max-loss buy label, `/create` with the live preview, the launch list, and a 400 px mobile shot. The capture is scripted so the images can be regenerated against the real mainnet launch after C2.
 - Hosted app deploy checklist, so a judge opens the real mainnet launch rather than the example data.
 
 ## Risks / surprises
