@@ -227,6 +227,28 @@ async function ask(question: string): Promise<string> {
 }
 
 /** Ask until the answer is yes/no; anything else is asked again (never treated as an answer). */
+/**
+ * Read a value from chain until it satisfies `ok`, or give up and return the last read.
+ *
+ * A provider endpoint load-balances across nodes, so the balance read straight after a
+ * confirmed transaction can still come from a node that has not seen it. Observed on
+ * mainnet during the C2 funding run: the transfer had landed (the signature was confirmed
+ * and the recipient did hold the SOL) while `getBalance` still returned the old value.
+ */
+async function waitForChain<T>(
+  read: () => Promise<T>,
+  ok: (value: T) => boolean,
+  tries = 20,
+  delayMs = 1000,
+): Promise<T> {
+  let value = await read();
+  for (let i = 1; i < tries && !ok(value); i++) {
+    await sleep(delayMs);
+    value = await read();
+  }
+  return value;
+}
+
 async function confirm(question: string, auto: boolean): Promise<boolean> {
   if (auto) {
     console.log(`${question} yes (--yes)`);
@@ -912,7 +934,13 @@ main(async () => {
       computeUnitLimit: CU_TRANSFER,
       label: id,
     });
-    const after = await rpc.balance(w.pubkey);
+    // A confirmed transaction is not immediately visible to every node behind a
+    // load-balanced endpoint, so poll instead of reading once (observed on mainnet:
+    // the transfer had landed while getBalance still returned the old value).
+    const after = await waitForChain(
+      () => rpc.balance(w.pubkey),
+      (v) => v >= w.solTarget,
+    );
     if (after < w.solTarget)
       throw new Error(
         `${id}: ${w.role} still holds ${fmtSol(after)} after ${res.signature}`,
@@ -1272,8 +1300,13 @@ main(async () => {
       computeUnitLimit: CU_ATA_AND_TRANSFER,
       label: id,
     });
-    const accAfter = await rpc.accountInfo(ata.toBase58());
-    const after = accAfter ? decodeTokenAccount(accAfter.data).amount : 0n;
+    const after = await waitForChain(
+      async () => {
+        const acc = await rpc.accountInfo(ata.toBase58());
+        return acc ? decodeTokenAccount(acc.data).amount : 0n;
+      },
+      (v) => v >= w.spyxTarget,
+    );
     if (after < w.spyxTarget) {
       throw new Error(
         `${id}: ${w.role} holds ${fmtInt(after)} raw after ${res.signature}, target ${fmtInt(w.spyxTarget)}`,

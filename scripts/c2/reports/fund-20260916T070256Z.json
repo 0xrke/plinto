@@ -1,0 +1,351 @@
+{
+  "runId": "20260916T070256Z",
+  "mode": "mainnet",
+  "cluster": "mainnet",
+  "rpc": "https://mainnet.helius-rpc.com/…",
+  "swapProvider": "jupiter",
+  "prices": {
+    "spyxUsd": 758.9752656780902,
+    "solUsd": 97.352056268971,
+    "spyxMultiplier": 1.005714560286254,
+    "source": "Jupiter Price V3 lite-api",
+    "at": "2026-09-16T07:07:37.145Z"
+  },
+  "plan": {
+    "wallets": [
+      {
+        "role": "creator",
+        "pubkey": "EFSrr7pe6fJqRLXWMBYzNCJj2uVBxtn9fxYM91U2vY5f",
+        "solTarget": "60000000",
+        "solBalance": "60000000",
+        "solToSend": "0",
+        "spyxPlanned": "740000",
+        "spyxLive": "661656",
+        "spyxLiveWithHeadroom": "727822",
+        "spyxTarget": "740000",
+        "spyxBalance": "0",
+        "spyxToSend": "740000"
+      },
+      {
+        "role": "buyer1",
+        "pubkey": "ED77vdfSwwJzrvQqUo7RtQRYsMA3bGSP213ZEBoBin99",
+        "solTarget": "20000000",
+        "solBalance": "0",
+        "solToSend": "20000000",
+        "spyxPlanned": "3660000",
+        "spyxLive": "3304974",
+        "spyxLiveWithHeadroom": "3635472",
+        "spyxTarget": "3660000",
+        "spyxBalance": "0",
+        "spyxToSend": "3660000"
+      },
+      {
+        "role": "buyer2",
+        "pubkey": "5WgdkguwV2EcLuPE8sGCjrRqcxXui5kbkaxdHE4viAJJ",
+        "solTarget": "20000000",
+        "solBalance": "0",
+        "solToSend": "20000000",
+        "spyxPlanned": "3660000",
+        "spyxLive": "3308282",
+        "spyxLiveWithHeadroom": "3639111",
+        "spyxTarget": "3660000",
+        "spyxBalance": "0",
+        "spyxToSend": "3660000"
+      },
+      {
+        "role": "cranker",
+        "pubkey": "FhaZVX91912MJTxoPDW3JtmbeDEuZdRjDQ9QfkaWohyC",
+        "solTarget": "40000000",
+        "solBalance": "0",
+        "solToSend": "40000000",
+        "spyxPlanned": "0",
+        "spyxLive": "0",
+        "spyxLiveWithHeadroom": "0",
+        "spyxTarget": "0",
+        "spyxBalance": "0",
+        "spyxToSend": "0"
+      }
+    ],
+    "solToSend": "80000000",
+    "spyxToTransfer": "8060000",
+    "spyxToBuy": "8060000",
+    "atasToCreate": 4,
+    "ataRentLamports": "1559560",
+    "swapLamportsEstimate": "650922821",
+    "deployerBalance": "6047993000",
+    "deployerSpend": "742161061",
+    "deployerLeft": "5305831939",
+    "minDeployerLamports": "5050000000",
+    "usd": {
+      "sol": 7.78816450151768,
+      "spyx": 63.368675096749335,
+      "ataRent": 0.6073054914993457,
+      "total": 71.76414508976636
+    }
+  },
+  "stages": [
+    {
+      "id": "confirm:plan",
+      "status": "done",
+      "at": "2026-09-16T07:02:56.607Z",
+      "note": "--yes"
+    },
+    {
+      "id": "confirm:plan",
+      "status": "done",
+      "at": "2026-09-16T07:07:37.148Z",
+      "note": "--yes"
+    },
+    {
+      "id": "sol:creator",
+      "status": "skipped",
+      "at": "2026-09-16T07:07:37.204Z",
+      "note": "already holds 0.060000 SOL"
+    },
+    {
+      "id": "sol:buyer1",
+      "status": "done",
+      "at": "2026-09-16T07:07:48.904Z",
+      "signature": "51UrwYj1sGjEcoUkYf26HX6TXXo49oC6VpRnhWe3Rzw5UYS8EhZ4C5Cw5f7D7MsFGdybJ5zAX6JhgtohBZLEdTEc",
+      "note": "0.020000 SOL to buyer1",
+      "detail": {
+        "to": "ED77vdfSwwJzrvQqUo7RtQRYsMA3bGSP213ZEBoBin99",
+        "lamports": "20000000",
+        "balanceAfter": "20000000"
+      }
+    },
+    {
+      "id": "sol:buyer2",
+      "status": "done",
+      "at": "2026-09-16T07:07:59.066Z",
+      "signature": "3HqeMSaWGpQkw9EB77xss9i8BShEx3qsG4wfgEPeFsmwot92zcvx5Amb6tnanXVT356etiEuyp2KY8KL39wKXh9A",
+      "note": "0.020000 SOL to buyer2",
+      "detail": {
+        "to": "5WgdkguwV2EcLuPE8sGCjrRqcxXui5kbkaxdHE4viAJJ",
+        "lamports": "20000000",
+        "balanceAfter": "20000000"
+      }
+    },
+    {
+      "id": "sol:cranker",
+      "status": "done",
+      "at": "2026-09-16T07:08:09.147Z",
+      "signature": "2iAkbUdGgLubo61r8bqfL6dnzX89m7ngvfzMChdZGdBggXyQPnZFL4VwKVdHPs3egRgTw9abDzWfAmS7DJHm7NPj",
+      "note": "0.040000 SOL to cranker",
+      "detail": {
+        "to": "FhaZVX91912MJTxoPDW3JtmbeDEuZdRjDQ9QfkaWohyC",
+        "lamports": "40000000",
+        "balanceAfter": "40000000"
+      }
+    },
+    {
+      "id": "ata:deployer",
+      "status": "done",
+      "at": "2026-09-16T07:08:10.328Z",
+      "signature": "5sBjUqEy6kTAryWJ8VFqR9Zm4bVXgvGbGpSWeQRKsEsixUkHVgnajb9NghXkoh8dkCfvgfxz1TYHQrMob9mb6Fja",
+      "note": "SPYx token account for the deployer",
+      "detail": {
+        "ata": "4oJneqBAR3MZkYpmfR5WTSB3FjNfKWvY3WccmPJhAcJZ"
+      }
+    },
+    {
+      "id": "swap:test",
+      "status": "pending",
+      "at": "2026-09-16T07:08:10.710Z",
+      "note": "about to swap 0.051360 SOL",
+      "detail": {
+        "spyxBefore": "0",
+        "minOut": "650968",
+        "quotedOut": "654240",
+        "lamportsIn": "51359984",
+        "requestId": "01a0a90b-6197-7368-8b09-7be35ee8f0fe",
+        "router": "metis"
+      }
+    },
+    {
+      "id": "swap:test",
+      "status": "done",
+      "at": "2026-09-16T07:08:20.793Z",
+      "signature": "5tHPbFHitwAoj2Wc4XgXVkUFF5BCMYHA97b2JrgnCMYywPWSgHNWTQBadWwTUrsZkK2NnWuGywejuMpafnNX3ijk",
+      "note": "Jupiter Ultra (metis), in 51308625 lamports, out 654212 raw",
+      "detail": {
+        "lamportsIn": "51359984",
+        "quotedOut": "654240",
+        "minOut": "650968",
+        "received": "654212",
+        "impliedUsdPerSpyx": 759.9030331119832,
+        "midUsdPerSpyx": 758.9752656780902,
+        "deviationBps": 12,
+        "router": "metis",
+        "status": "Success"
+      }
+    },
+    {
+      "id": "confirm:swap",
+      "status": "done",
+      "at": "2026-09-16T07:08:20.833Z",
+      "note": "--yes"
+    },
+    {
+      "id": "swap:main",
+      "status": "pending",
+      "at": "2026-09-16T07:08:21.502Z",
+      "note": "about to swap 0.587304 SOL",
+      "detail": {
+        "spyxBefore": "654212",
+        "minOut": "7443133",
+        "quotedOut": "7480536",
+        "lamportsIn": "587303785",
+        "requestId": "01a0a90b-8b94-714f-a703-a169946e1c78",
+        "router": "metis"
+      }
+    },
+    {
+      "id": "swap:main",
+      "status": "done",
+      "at": "2026-09-16T07:08:32.625Z",
+      "signature": "5bFYfyx3VrCTjXReyn934R8GZZXoiMKMi2v5kuNJCE8PXKNyiWQiL5FZdJWUatsrVHWoWuSquuw1LJo8MFGtSDnu",
+      "note": "Jupiter Ultra (metis), in 586716482 lamports, out 7480491 raw",
+      "detail": {
+        "lamportsIn": "587303785",
+        "quotedOut": "7480536",
+        "minOut": "7443133",
+        "received": "7480491",
+        "impliedUsdPerSpyx": 759.977043566452,
+        "midUsdPerSpyx": 758.9752656780902,
+        "deviationBps": 13,
+        "router": "metis",
+        "status": "Success"
+      }
+    },
+    {
+      "id": "ata:creator",
+      "status": "done",
+      "at": "2026-09-16T07:08:34.354Z",
+      "signature": "sZA81TgRTyyshsU4G4q11DYNCQDMUkYapUVPFFkQQmJFQYjXVBH5sDrbBLeijHKuGEP42pczVu6x5vH5s9fcu2n",
+      "note": "SPYx token account for creator",
+      "detail": {
+        "ata": "FdnXxcQGsSkKaB9QbGG5XvtcJvQQMtRzg1xD8svZmjC6",
+        "owner": "EFSrr7pe6fJqRLXWMBYzNCJj2uVBxtn9fxYM91U2vY5f"
+      }
+    },
+    {
+      "id": "spyx:creator",
+      "status": "done",
+      "at": "2026-09-16T07:08:44.394Z",
+      "signature": "2m3mYguUyEmN7aWQ8H8wszV1rUz9jq5rDdwbb7Krtnn8FsCm9igzYFcP1oXvMcJmY1RSK8HquafWiFpdvxdgA1R2",
+      "note": "740,000 raw SPYx to creator",
+      "detail": {
+        "to": "EFSrr7pe6fJqRLXWMBYzNCJj2uVBxtn9fxYM91U2vY5f",
+        "ata": "FdnXxcQGsSkKaB9QbGG5XvtcJvQQMtRzg1xD8svZmjC6",
+        "raw": "740000",
+        "balanceAfter": "740000"
+      }
+    },
+    {
+      "id": "ata:buyer1",
+      "status": "done",
+      "at": "2026-09-16T07:08:45.127Z",
+      "signature": "2bKwTfwTS2w9ZMFukQpAD4BcnEi2GWELkLXyFWwgQzddePeKZUyEgn7aoq3bi7jaWvP8KaoGujgSqh3kPQV4WidW",
+      "note": "SPYx token account for buyer1",
+      "detail": {
+        "ata": "36Tokq1b2aD32bK3Tt47j8p5SWZfhVzhEmiLxuy3kXBL",
+        "owner": "ED77vdfSwwJzrvQqUo7RtQRYsMA3bGSP213ZEBoBin99"
+      }
+    },
+    {
+      "id": "spyx:buyer1",
+      "status": "done",
+      "at": "2026-09-16T07:08:56.309Z",
+      "signature": "4BMiBtJT82nJR4rfmFMPttghQzGgb4W2a9tVs5U1TgLn3NTZ7C1jiJesoKgoxAkP6kJY75xyGZ9qzSg8KraTLz7n",
+      "note": "3,660,000 raw SPYx to buyer1",
+      "detail": {
+        "to": "ED77vdfSwwJzrvQqUo7RtQRYsMA3bGSP213ZEBoBin99",
+        "ata": "36Tokq1b2aD32bK3Tt47j8p5SWZfhVzhEmiLxuy3kXBL",
+        "raw": "3660000",
+        "balanceAfter": "3660000"
+      }
+    },
+    {
+      "id": "ata:buyer2",
+      "status": "done",
+      "at": "2026-09-16T07:08:57.028Z",
+      "signature": "2fyzvm89v3XHSzcRjwq3TvNVz7cKAc7cYRz8bS69u8fTTo31wwftmW9PghE6fUeHxLYhqVvFigGJ7h7tGeVF1GSU",
+      "note": "SPYx token account for buyer2",
+      "detail": {
+        "ata": "F2pQwuR9VDc7egMJyax8zLgPkCnXKscCgPYj451j5fnZ",
+        "owner": "5WgdkguwV2EcLuPE8sGCjrRqcxXui5kbkaxdHE4viAJJ"
+      }
+    },
+    {
+      "id": "spyx:buyer2",
+      "status": "done",
+      "at": "2026-09-16T07:09:08.209Z",
+      "signature": "4324NxPdfiYMD34mNaMkvwVWhrcbnHDxaQWy5aV5oXALrkRpimVKwzWGAEtXgKcY1KXgv3uAHyceNdLSPad4RgDY",
+      "note": "3,660,000 raw SPYx to buyer2",
+      "detail": {
+        "to": "5WgdkguwV2EcLuPE8sGCjrRqcxXui5kbkaxdHE4viAJJ",
+        "ata": "F2pQwuR9VDc7egMJyax8zLgPkCnXKscCgPYj451j5fnZ",
+        "raw": "3660000",
+        "balanceAfter": "3660000"
+      }
+    },
+    {
+      "id": "verify",
+      "status": "done",
+      "at": "2026-09-16T07:09:08.630Z",
+      "note": "every wallet matches the plan"
+    }
+  ],
+  "endState": {
+    "ok": true,
+    "shortfalls": [],
+    "rows": [
+      [
+        "OK",
+        "deployer",
+        "BBU1tTr4…",
+        "5.321489 SOL",
+        ">= 5.050000 SOL",
+        "74,703",
+        "0 (leftover)"
+      ],
+      [
+        "OK",
+        "creator",
+        "EFSrr7pe…",
+        "0.060000 SOL",
+        "0.060000 SOL",
+        "740,000",
+        "740,000"
+      ],
+      [
+        "OK",
+        "buyer1",
+        "ED77vdfS…",
+        "0.020000 SOL",
+        "0.020000 SOL",
+        "3,660,000",
+        "3,660,000"
+      ],
+      [
+        "OK",
+        "buyer2",
+        "5Wgdkguw…",
+        "0.020000 SOL",
+        "0.020000 SOL",
+        "3,660,000",
+        "3,660,000"
+      ],
+      [
+        "OK",
+        "cranker",
+        "FhaZVX91…",
+        "0.040000 SOL",
+        "0.040000 SOL",
+        "0",
+        "0"
+      ]
+    ]
+  }
+}
