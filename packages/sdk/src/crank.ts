@@ -13,6 +13,12 @@
  * migrated DAMM v2 pool, only when a position's pending quote fee is worth at least
  * `defaultMinLpFeeQuote` (0.00001 quote token, far above a harvest transaction's cost for the
  * allowlisted stocks), and at most `maxLpHarvests` positions per plan (largest first).
+ *
+ * The other two dust-sensitive actions have minimums for the same reason: `harvest_curve_fees`
+ * needs `minCurveFeeQuote` (the same 0.00001 quote threshold) and a standalone `burn_claimer_base`
+ * needs `minClaimerBaseBurn` (one whole base token), because the claimer's base ATA is a
+ * derivable address that anyone can transfer 1 raw into after every pass. See
+ * `defaultMinClaimerBaseBurn` for what a minimum does and does not buy.
  */
 import { PublicKey, type TransactionInstruction } from "@solana/web3.js";
 import { anchorErrorFromLogs, TransactionFailedError, type TxSender } from "./chain";
@@ -51,7 +57,11 @@ export type CrankInput = Pick<
   Partial<Pick<LaunchState, "quoteMint">>;
 
 export interface PlanCrankOptions {
-  /** Harvest curve fees only when the partner quote fee is at least this (default 1 raw). */
+  /**
+   * Harvest curve fees only when the partner quote fee is at least this (raw). Default
+   * `defaultMinLpFeeQuote(quote decimals)`, the same dust threshold as the LP fee harvest:
+   * 0.00001 quote token, far below any real curve fee and far above a 1-raw dust fee.
+   */
   minCurveFeeQuote?: bigint;
   /**
    * Harvest a position's LP fees only when its pending quote fee is at least this (raw). Default
@@ -68,6 +78,12 @@ export interface PlanCrankOptions {
   includeForeignPositions?: boolean;
   /** At most this many `harvest_lp_fees` actions per plan, largest pending quote first. Default 4. */
   maxLpHarvests?: number;
+  /**
+   * Schedule a standalone `burn_claimer_base` only when the claimer's base ATA holds at least
+   * this much (raw base). Default `defaultMinClaimerBaseBurn(base decimals)` = one whole base
+   * token. Pass `1n` to burn any balance.
+   */
+  minClaimerBaseBurn?: bigint;
   /** Skip migration (leave it to Meteora keepers). Default false. */
   skipMigration?: boolean;
 }
@@ -75,6 +91,21 @@ export interface PlanCrankOptions {
 /** Default LP fee harvest minimum: 0.00001 of the quote token in raw units (at least 1 raw). */
 export function defaultMinLpFeeQuote(quoteDecimals: number): bigint {
   return 10n ** BigInt(Math.max(0, quoteDecimals - 5));
+}
+
+/**
+ * Default minimum for a standalone `burn_claimer_base`: one whole base token in raw units.
+ *
+ * The claimer base ATA is a derivable address, so anyone can transfer into it; with no minimum a
+ * single raw unit schedules (and pays for) one transaction per crank pass while raising the floor
+ * by a rounding error. A minimum does not make griefing impossible — a griefer can always send
+ * exactly the minimum, and the cost ratio stays roughly one transaction for one transaction — but
+ * it keeps dust (rounding, 1-raw transfers) from scheduling transactions at all. Nothing is
+ * stranded either way: `harvest_curve_fees` and `harvest_lp_fees` burn the whole ATA anyway, and a
+ * balance below the minimum still goes with the next real harvest.
+ */
+export function defaultMinClaimerBaseBurn(baseDecimals: number): bigint {
+  return 10n ** BigInt(Math.max(0, baseDecimals));
 }
 
 /** xStocks use 8 decimals; used when the plan input carries no quote mint. */
@@ -90,14 +121,16 @@ export function planCrank(s: CrankInput, opts: PlanCrankOptions = {}): CrankActi
   const actions: CrankAction[] = [];
   const pool = s.dbcPool;
   const L = s.launch;
+  const minBurn = opts.minClaimerBaseBurn ?? defaultMinClaimerBaseBurn(s.dbcConfig.tokenDecimal);
+  const burnDue = s.claimerBaseBalance !== null && s.claimerBaseBalance >= minBurn && s.claimerBaseBalance > 0n;
   if (!pool) {
     // The DBC pool does not exist yet: only donations to the claimer base ATA can be handled.
-    if (s.claimerBaseBalance !== null && s.claimerBaseBalance > 0n) actions.push({ kind: "burn_claimer_base", amount: s.claimerBaseBalance });
+    if (burnDue) actions.push({ kind: "burn_claimer_base", amount: s.claimerBaseBalance! });
     return actions;
   }
   if (!L.poolRegistered) actions.push({ kind: "register_pool", pool: s.keys.pool });
 
-  const minCurve = opts.minCurveFeeQuote ?? 1n;
+  const minCurve = opts.minCurveFeeQuote ?? defaultMinLpFeeQuote(s.quoteMint?.decimals ?? DEFAULT_QUOTE_DECIMALS);
   if (pool.partnerQuoteFee >= minCurve || pool.partnerBaseFee > 0n) {
     actions.push({
       kind: "harvest_curve_fees",
@@ -143,10 +176,11 @@ export function planCrank(s: CrankInput, opts: PlanCrankOptions = {}): CrankActi
     }
   }
 
-  // harvest_curve_fees and harvest_lp_fees burn the whole claimer base ATA balance themselves.
+  // harvest_curve_fees and harvest_lp_fees burn the whole claimer base ATA balance themselves,
+  // dust included; a standalone burn is only worth its own transaction above `minClaimerBaseBurn`.
   const harvestBurns = actions.some((a) => a.kind === "harvest_curve_fees" || a.kind === "harvest_lp_fees");
-  if (!harvestBurns && s.claimerBaseBalance !== null && s.claimerBaseBalance > 0n) {
-    actions.push({ kind: "burn_claimer_base", amount: s.claimerBaseBalance });
+  if (!harvestBurns && burnDue) {
+    actions.push({ kind: "burn_claimer_base", amount: s.claimerBaseBalance! });
   }
   return actions;
 }

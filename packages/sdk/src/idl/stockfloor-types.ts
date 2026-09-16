@@ -1626,6 +1626,11 @@ export type Stockfloor = {
       "code": 6057,
       "name": "floorAccountMismatch",
       "msg": "Base mint account does not match the launch"
+    },
+    {
+      "code": 6058,
+      "name": "migrationQuoteThresholdTooSmall",
+      "msg": "DBC config migration_quote_threshold is too small: the partner migration fee (the whole initial floor) would round to zero"
     }
   ],
   "types": [

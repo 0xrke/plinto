@@ -18,7 +18,8 @@ import { Keypair, PublicKey, SystemProgram, TransactionInstruction } from "@sola
 import { beforeAll, describe, expect, it } from "vitest";
 import { parseEvents } from "../src/anchor.js";
 import { SPYX_MINT, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "../src/constants.js";
-import { bnToBig, fetchVirtualPool } from "../src/dbc.js";
+import BN from "bn.js";
+import { bnToBig, fetchPoolConfig, fetchVirtualPool } from "../src/dbc.js";
 import { anchorErrorFromLogs, Fork, TxFailure } from "../src/fork.js";
 import { Migration } from "../src/scenario.js";
 import { createStockfloorLaunch, graduate, StockfloorLaunch } from "../src/stockfloor-scenario.js";
@@ -76,6 +77,35 @@ describe("create_launch validation", () => {
     expect(fork.getAccount(deriveLaunch(L.config))).toBeNull();
     fork.send([await createLaunchFor(L, 500)], signers);
     expect(fetchLaunch(fork, L.config).exitFeeBps).toBe(500);
+  });
+
+  it("a migration threshold whose partner migration fee rounds to zero is rejected (DBC accepts it)", async () => {
+    const fork = Fork.create({ stockfloor: true, spike: false });
+    // DBC only requires migration_quote_threshold > 0. Its rounding (quote_amount =
+    // ceil(T * (100 - pct) / 100), fee = T - quote_amount) pays the partner nothing for a dust
+    // threshold, which would give a Launch with a provably empty vault. pct = 50 here, so T = 1
+    // is the whole zero-fee range and T = 2 is the first threshold that pays 1 raw.
+    for (const [threshold, expected] of [
+      [1n, "MigrationQuoteThresholdTooSmall"],
+      [2n, null],
+    ] as const) {
+      const L = await createStockfloorLaunch(fork, {
+        skipCreateLaunch: true,
+        mutateParams: (p) => (p.migrationQuoteThreshold = new BN(threshold.toString())),
+      });
+      // The config really is on-chain with that threshold: DBC did not reject it.
+      expect(bnToBig(fetchPoolConfig(fork, L.config).migrationQuoteThreshold as never), `T=${threshold}`).toBe(threshold);
+      const ix = await createLaunchFor(L, 200);
+      const signers = [L.partner, L.creator, L.configKeypair];
+      if (expected) {
+        expect(errName(fork.sendExpectFail([ix], signers)), `T=${threshold}`).toBe(expected);
+        expect(fork.getAccount(deriveLaunch(L.config)), `T=${threshold}`).toBeNull();
+        expect(fork.getAccount(L.vault), `T=${threshold}`).toBeNull();
+      } else {
+        fork.send([ix], signers);
+        expect(fetchLaunch(fork, L.config).config.equals(L.config), `T=${threshold}`).toBe(true);
+      }
+    }
   });
 
   it("the DBC config must name the claimer PDA as fee_claimer and leftover_receiver (not the vault authority, not a wallet)", async () => {

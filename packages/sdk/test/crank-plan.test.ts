@@ -9,6 +9,7 @@ import {
   computeLaunchCurve,
   crankActionKey,
   DAMM_V2_CONFIG_CUSTOMIZABLE,
+  defaultMinClaimerBaseBurn,
   defaultMinLpFeeQuote,
   launchPda,
   dammV2PoolPda,
@@ -96,13 +97,15 @@ const kinds = (s: CrankInput, opts = {}) => planCrank(s, opts).map((a) => a.kind
 describe("planCrank", () => {
   it.each([
     ["no DBC pool yet", scenario({ poolExists: false }), []],
-    ["no DBC pool yet, a donation to the claimer base ATA", scenario({ poolExists: false, claimerBase: 5n }), ["burn_claimer_base"]],
+    ["no DBC pool yet, a donation to the claimer base ATA", scenario({ poolExists: false, claimerBase: 5_000_000n }), ["burn_claimer_base"]],
+    ["no DBC pool yet, a dust donation to the claimer base ATA", scenario({ poolExists: false, claimerBase: 5n }), []],
     ["pool created, not registered", scenario({ registered: false }), ["register_pool"]],
-    ["not registered with fees", scenario({ registered: false, partnerQuoteFee: 10n }), ["register_pool", "harvest_curve_fees"]],
+    ["not registered with fees", scenario({ registered: false, partnerQuoteFee: 10_000n }), ["register_pool", "harvest_curve_fees"]],
     ["presale, nothing accrued", scenario({}), []],
-    ["presale with partner fees", scenario({ partnerQuoteFee: 1n }), ["harvest_curve_fees"]],
+    ["presale with partner fees at the default minimum", scenario({ partnerQuoteFee: 1_000n }), ["harvest_curve_fees"]],
+    ["presale with a dust partner fee below the minimum", scenario({ partnerQuoteFee: 999n }), []],
     ["presale with base fees only (OutputToken configs)", scenario({ partnerBaseFee: 7n }), ["harvest_curve_fees"]],
-    ["curve complete: full graduation", scenario({ complete: true, partnerQuoteFee: 5n }), ["harvest_curve_fees", "harvest_migration_fee", "harvest_surplus", "migrate"]],
+    ["curve complete: full graduation", scenario({ complete: true, partnerQuoteFee: 5_000n }), ["harvest_curve_fees", "harvest_migration_fee", "harvest_surplus", "migrate"]],
     ["complete, fees already harvested elsewhere", scenario({ complete: true }), ["harvest_migration_fee", "harvest_surplus", "migrate"]],
     // harvest_migration_fee / harvest_surplus latch the migration when they run after it; runCrank
     // re-plans after each and only sends sync_migration when neither ran (or they failed).
@@ -128,7 +131,12 @@ describe("planCrank", () => {
       scenario({ complete: true, migrated: true, launchMigratedLatch: true, migrationFeeHarvested: true, surplusHarvested: true, positions: [{ a: 5n, b: 50_000n, foreign: true }] }),
       [],
     ],
-    ["graduated, a donation only", scenario({ complete: true, migrated: true, launchMigratedLatch: true, migrationFeeHarvested: true, surplusHarvested: true, claimerBase: 42n }), ["burn_claimer_base"]],
+    ["graduated, a donation only", scenario({ complete: true, migrated: true, launchMigratedLatch: true, migrationFeeHarvested: true, surplusHarvested: true, claimerBase: 42_000_000n }), ["burn_claimer_base"]],
+    [
+      "graduated, a 1-raw donation only: not worth its own transaction (it rides along with the next harvest)",
+      scenario({ complete: true, migrated: true, launchMigratedLatch: true, migrationFeeHarvested: true, surplusHarvested: true, claimerBase: 1n }),
+      [],
+    ],
     [
       "graduated, donation and LP fees: the harvest burns the donation",
       scenario({ complete: true, migrated: true, launchMigratedLatch: true, migrationFeeHarvested: true, surplusHarvested: true, claimerBase: 42n, positions: [{ a: 0n, b: 3_000n }] }),
@@ -136,7 +144,7 @@ describe("planCrank", () => {
     ],
     [
       "graduated, donation and only dust LP fees: burn_claimer_base",
-      scenario({ complete: true, migrated: true, launchMigratedLatch: true, migrationFeeHarvested: true, surplusHarvested: true, claimerBase: 42n, positions: [{ a: 0n, b: 3n }] }),
+      scenario({ complete: true, migrated: true, launchMigratedLatch: true, migrationFeeHarvested: true, surplusHarvested: true, claimerBase: 42_000_000n, positions: [{ a: 0n, b: 3n }] }),
       ["burn_claimer_base"],
     ],
     ["presale, empty claimer base ATA", scenario({ claimerBase: 0n }), []],
@@ -146,18 +154,43 @@ describe("planCrank", () => {
   });
 
   it("carries the expected amounts and respects thresholds and skipMigration", () => {
-    const s = scenario({ complete: true, partnerQuoteFee: 5n, claimerBase: null });
+    const s = scenario({ complete: true, partnerQuoteFee: 5_000n, claimerBase: null });
     const plan = planCrank(s);
     const t = s.dbcConfig.migrationQuoteThreshold;
-    expect(plan[0]).toEqual({ kind: "harvest_curve_fees", partnerQuoteFee: 5n, partnerBaseFee: 0n, createsClaimerBaseAccount: true });
+    expect(plan[0]).toEqual({ kind: "harvest_curve_fees", partnerQuoteFee: 5_000n, partnerBaseFee: 0n, createsClaimerBaseAccount: true });
     expect(plan[1]).toEqual({ kind: "harvest_migration_fee", expectedQuote: t - (t * 50n + 99n) / 100n });
     expect(plan[2]).toEqual({ kind: "harvest_surplus", expectedQuote: 1n });
     expect(plan[3]!.kind === "migrate" && plan[3]!.dammConfig.equals(DAMM_V2_CONFIG_CUSTOMIZABLE)).toBe(true);
-    expect(kinds(s, { minCurveFeeQuote: 6n })).toEqual(["harvest_migration_fee", "harvest_surplus", "migrate"]);
+    expect(kinds(s, { minCurveFeeQuote: 5_001n })).toEqual(["harvest_migration_fee", "harvest_surplus", "migrate"]);
     expect(kinds(s, { skipMigration: true })).toEqual(["harvest_curve_fees", "harvest_migration_fee", "harvest_surplus"]);
     const lp = scenario({ complete: true, migrated: true, launchMigratedLatch: true, migrationFeeHarvested: true, surplusHarvested: true, positions: [{ a: 0n, b: 9n }] });
     expect(kinds(lp, { minLpFeeQuote: 10n })).toEqual([]);
     expect(kinds(lp, { minLpFeeQuote: 9n })).toEqual(["harvest_lp_fees"]);
+  });
+
+  it("dust minimums: a 1-raw curve fee or a 1-raw donation to the claimer base ATA schedules nothing", () => {
+    // The claimer base ATA is a derivable address and the DBC partner fee grows with any trade, so
+    // without a minimum either one would cost a `crank --loop` operator a transaction per pass.
+    expect(defaultMinClaimerBaseBurn(6)).toBe(1_000_000n);
+    expect(defaultMinClaimerBaseBurn(9)).toBe(1_000_000_000n);
+    expect(defaultMinClaimerBaseBurn(0)).toBe(1n);
+
+    const graduated = { complete: true, migrated: true, launchMigratedLatch: true, migrationFeeHarvested: true, surplusHarvested: true } as const;
+    const dust = scenario({ ...graduated, claimerBase: 1n });
+    expect(kinds(dust)).toEqual([]);
+    // Opt back in to the old behaviour, and check the boundary (tokenDecimal is 6 here).
+    expect(kinds(dust, { minClaimerBaseBurn: 1n })).toEqual(["burn_claimer_base"]);
+    expect(kinds(scenario({ ...graduated, claimerBase: 999_999n }))).toEqual([]);
+    expect(kinds(scenario({ ...graduated, claimerBase: 1_000_000n }))).toEqual(["burn_claimer_base"]);
+    // Dust is never stranded: a real LP fee harvest burns the whole ATA in the same transaction.
+    expect(kinds(scenario({ ...graduated, claimerBase: 1n, positions: [{ a: 0n, b: 5_000n }] }))).toEqual(["harvest_lp_fees"]);
+
+    // Curve fees use the same 0.00001-quote dust threshold as the LP fee harvest.
+    expect(kinds(scenario({ partnerQuoteFee: 1n }))).toEqual([]);
+    expect(kinds(scenario({ partnerQuoteFee: 1n }), { minCurveFeeQuote: 1n })).toEqual(["harvest_curve_fees"]);
+    const sixDecimalQuote = { ...scenario({ partnerQuoteFee: 10n }), quoteMint: { decimals: 6 } as never };
+    expect(kinds(sixDecimalQuote)).toEqual(["harvest_curve_fees"]);
+    expect(kinds({ ...sixDecimalQuote, quoteMint: { decimals: 8 } as never })).toEqual([]);
   });
 
   it("LP harvest limits: default minimum from the quote decimals, base minimum, foreign pools opt-in, per-plan cap largest first", () => {
@@ -192,7 +225,7 @@ describe("planCrank", () => {
   });
 
   it("crankActionKey distinguishes LP positions; buildCrankAction builds signers and limits", () => {
-    const s = scenario({ complete: true, partnerQuoteFee: 5n, migrated: false });
+    const s = scenario({ complete: true, partnerQuoteFee: 5_000n, migrated: false });
     const [curve, mig, surplus, migrate] = planCrank(s);
     const lp = scenario({ complete: true, migrated: true, launchMigratedLatch: true, migrationFeeHarvested: true, surplusHarvested: true, positions: [{ a: 0n, b: 1_000n }, { a: 0n, b: 2_000n }] });
     const [p1, p2] = planCrank(lp);

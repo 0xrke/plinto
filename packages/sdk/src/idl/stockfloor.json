@@ -1620,6 +1620,11 @@
       "code": 6057,
       "name": "FloorAccountMismatch",
       "msg": "Base mint account does not match the launch"
+    },
+    {
+      "code": 6058,
+      "name": "MigrationQuoteThresholdTooSmall",
+      "msg": "DBC config migration_quote_threshold is too small: the partner migration fee (the whole initial floor) would round to zero"
     }
   ],
   "types": [

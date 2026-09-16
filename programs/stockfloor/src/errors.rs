@@ -134,6 +134,13 @@ pub enum StockfloorError {
     // ----- views -----
     #[msg("Base mint account does not match the launch")]
     FloorAccountMismatch,
+
+    // Appended after `FloorAccountMismatch` on purpose: Anchor numbers these sequentially from
+    // 6000, so a new variant goes at the end and never renumbers an existing error.
+    #[msg(
+        "DBC config migration_quote_threshold is too small: the partner migration fee (the whole initial floor) would round to zero"
+    )]
+    MigrationQuoteThresholdTooSmall,
 }
 
 impl From<MathError> for StockfloorError {

@@ -115,6 +115,22 @@ pub fn load_damm_position(info: &AccountInfo) -> Result<Box<DammPosition>> {
     )
 }
 
+/// DBC's partner migration fee for a StockFloor config, i.e. the quote amount
+/// `harvest_migration_fee` will move into the vault and the whole initial floor.
+///
+/// Port of DBC `PoolConfig::get_migration_quote_amount` followed by
+/// `get_migration_fee_distribution` with `creator_migration_fee_percentage == 0`
+/// (which `validate_launch_config` enforces):
+/// `quote_amount = ceil(T * (100 - pct) / 100)`, `fee = T - quote_amount`.
+/// Saturating rather than checked: `pct > 100` is rejected by the caller and only makes the
+/// result 0 here, which is itself a rejection.
+pub fn partner_migration_fee(migration_quote_threshold: u64, migration_fee_percentage: u8) -> u64 {
+    let t = migration_quote_threshold as u128;
+    let rest = 100u128.saturating_sub(migration_fee_percentage as u128);
+    let quote_amount = (t * rest).div_ceil(100).min(t);
+    (t - quote_amount) as u64
+}
+
 /// Validation of a DBC config for a StockFloor launch (brief §4 and §5.3.1). Pure
 /// function over the decoded config so it can be unit tested.
 ///
@@ -122,7 +138,12 @@ pub fn load_damm_position(info: &AccountInfo) -> Result<Box<DammPosition>> {
 /// launch really is StockFloor-shaped, so the `Launch` PDA stays a trustworthy marker:
 /// dynamic supply only, creator trading share <= 30%, a fee-scheduler base fee of at most
 /// 20% with no dynamic fee, quote-only LP fees after migration, immutable metadata and no
-/// pool creation fee. The quote mint allowlist and a minimum raise are UI/SDK policy.
+/// pool creation fee, and a migration threshold large enough that the partner migration fee
+/// (the initial floor) does not round to zero.
+///
+/// What it deliberately does not check: the quote mint allowlist, and how large the raise is
+/// in fiat terms. The latter needs a price oracle, which this program does not have, so the
+/// minimum raise ($1 by default) stays UI/SDK policy. See README "What the program guarantees".
 pub fn validate_launch_config(
     config: &PoolConfig,
     claimer: &Pubkey,
@@ -150,6 +171,19 @@ pub fn validate_launch_config(
         .contains(&config.migration_fee_percentage)
     {
         return Err(StockfloorError::MigrationFeePercentageOutOfRange);
+    }
+    // The partner migration fee is the whole initial floor (`creator_migration_fee_percentage`
+    // is 0 above). DBC itself only requires `migration_quote_threshold > 0`, and its rounding
+    // (`get_migration_quote_amount`: quote_amount = ceil(T * (100 - pct) / 100), fee = T -
+    // quote_amount) makes the fee exactly 0 for a dust threshold — e.g. T <= 3 at pct = 30.
+    // Such a launch would reach the redeemable phase with a provably empty vault while carrying
+    // a `Launch` PDA, so reject it here.
+    if partner_migration_fee(
+        config.migration_quote_threshold,
+        config.migration_fee_percentage,
+    ) == 0
+    {
+        return Err(StockfloorError::MigrationQuoteThresholdTooSmall);
     }
     if config.partner_permanent_locked_liquidity_percentage != 100
         || config.partner_liquidity_percentage != 0
@@ -605,6 +639,42 @@ pub(crate) mod tests {
         c
     }
 
+    /// `partner_migration_fee` is the port of DBC's two-step computation; recompute it here the
+    /// long way (u128, explicit ceil) over the whole accepted percentage range.
+    #[test]
+    fn partner_migration_fee_matches_dbc_rounding() {
+        for pct in crate::constants::MIN_MIGRATION_FEE_PERCENTAGE
+            ..=crate::constants::MAX_MIGRATION_FEE_PERCENTAGE
+        {
+            for t in [
+                0u64,
+                1,
+                3,
+                4,
+                99,
+                100,
+                101,
+                131_346_320,
+                6_586_828,
+                u64::MAX / 2,
+                u64::MAX,
+            ] {
+                let num = t as u128 * (100 - pct as u128);
+                let quote_amount = num / 100 + u128::from(num % 100 != 0);
+                let expected = (t as u128 - quote_amount) as u64;
+                assert_eq!(partner_migration_fee(t, pct), expected, "pct {pct}, T {t}");
+            }
+        }
+        // The documented degenerate cases: DBC accepts these thresholds, StockFloor does not.
+        assert_eq!(partner_migration_fee(3, 30), 0);
+        assert_eq!(partner_migration_fee(4, 30), 1);
+        assert_eq!(partner_migration_fee(1, 99), 0);
+        assert_eq!(partner_migration_fee(2, 99), 1);
+        // The C2 demo threshold ($50 in SPYx) and the C1 threshold ($1,000).
+        assert_eq!(partner_migration_fee(6_586_828, 50), 3_293_414);
+        assert_eq!(partner_migration_fee(131_346_320, 50), 65_673_160);
+    }
+
     #[test]
     fn valid_config_passes() {
         let a = Pubkey::new_unique();
@@ -775,6 +845,33 @@ pub(crate) mod tests {
             validate_launch_config(&c, &a, &q, 501),
             Err(StockfloorError::ExitFeeTooHigh)
         );
+        // A threshold whose partner migration fee rounds to zero (the initial floor would be
+        // empty) is rejected; the smallest threshold above it is accepted.
+        for pct in [
+            crate::constants::MIN_MIGRATION_FEE_PERCENTAGE,
+            50,
+            crate::constants::MAX_MIGRATION_FEE_PERCENTAGE,
+        ] {
+            let mut c = valid_config(a, q);
+            c.migration_fee_percentage = pct;
+            let smallest_ok = (1..=200u64)
+                .find(|t| partner_migration_fee(*t, pct) > 0)
+                .expect("some threshold pays a non-zero migration fee");
+            for t in [0u64, smallest_ok - 1] {
+                c.migration_quote_threshold = t;
+                assert_eq!(
+                    validate_launch_config(&c, &a, &q, 200),
+                    Err(StockfloorError::MigrationQuoteThresholdTooSmall),
+                    "pct {pct}, threshold {t}"
+                );
+            }
+            c.migration_quote_threshold = smallest_ok;
+            assert_eq!(
+                validate_launch_config(&c, &a, &q, 200),
+                Ok(()),
+                "pct {pct}, threshold {smallest_ok}"
+            );
+        }
         // The claimer of a different config is rejected.
         assert_eq!(
             validate_launch_config(&c, &other, &q, 200),
