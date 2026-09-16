@@ -78,7 +78,7 @@ Format: date — decision · alternatives · reason.
 
 - **The deployer is funded with 5.05 SOL, not 2.70.** · Keep the headroom optional · `solana program deploy`
   verifies the deployed ELF only *after* the 2.57 SOL of rent is spent. If that `cmp` fails, the only
-  non-destructive repair is an upgrade, which needs 2.3309 SOL available at once; funded with 2.70 the only way
+  non-destructive repair is an upgrade, which needs 2.3329 SOL available at once; funded with 2.70 the only way
   out would be the irreversible `solana program close`. `scripts/c2/preflight.ts` now requires the headroom by
   default (`--no-upgrade-headroom` opts out).
 - **Two more assertions in the §9 block-0 pre-flight and in `preflight.ts`:** the program keypair really is
@@ -175,3 +175,12 @@ Format: date — decision · alternatives · reason.
 - **Demo amounts come from one price snapshot per run** (`scripts/e2e/plan.ts`, reused by the preflight via
   `--plan-file`) · recompute them inside `preflight.ts` · A single source of truth means the checked amounts
   are exactly the amounts the run sends, and the same snapshot is the baseline for the price-drift abort.
+
+## 2026-09-16 — C2 script review fixes
+
+- **`--allow-mainnet` goes only to the SDK commands that send.** Read-only commands accept the switch but never receive it, and a regression test parses `scripts/c2/run.sh`, rebuilds the exact mainnet argv and spawns every command so a flag the CLI does not declare cannot reach it again. · Declare the switch everywhere · The bug (`status` dying in its own parser after all 495 transactions had landed) was invisible to the dry run, because the flag is only added in mainnet mode.
+- **An existing deploy buffer is compared with the local ELF, not treated as a blocker.** Same bytes → GO, and the deploy resumes into it; different bytes → NO-GO whose only remedy is `solana program close --buffers --keypair keys/deployer.json`. · NO-GO on any existing buffer · `solana program deploy` creates the buffer in its first transaction, so the old rule blocked exactly the recovery path the runbook prescribes.
+- **A run and its report are bound to their mode.** `MODE` is persisted in the run state, a cross-mode resume is refused, `--resume latest` resolves by mtime within the current mode's prefix, and `report.ts` refuses to overwrite a report of a different mode. · Trust the operator to pass the right run id · `--resume latest` sorted alphabetically, and "dry" > "c2": a mainnet resume would have rewritten a committed dry-run report into a fake mainnet one, with Solscan links over local-fork signatures.
+- **Any endpoint reporting `surfnet-version` is a surfnet, whatever its host.** · Consult it only for literal loopback addresses · A local surfnet reached as `http://localtest.me:48899` was classified as mainnet, which would have produced a "mainnet" report full of dead links. A dry run whose preflight cluster is not `surfnet` now aborts instead of continuing into an unguarded `solana program deploy`.
+- **The price guard applies only to steps whose amounts derive from the price** (create-launch and the buys), and becomes a warning once the first buy has landed. · Guard every step · Redemption amounts come from chain state, so a Jupiter blip would have aborted the demo after the money moved but before the redemptions.
+- **The approval marker authorises one run** (its hash is recorded in the run state), and an aborted step now collects the signatures it already sent before writing the report, because a confirmation timeout does not mean the transaction failed.
