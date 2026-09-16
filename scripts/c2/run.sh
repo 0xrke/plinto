@@ -702,6 +702,22 @@ fi
 # ---------------------------------------------------------------- 3. preflight (go / no-go)
 echo
 echo "== preflight"
+# On a resume, a wallet whose quote-spending step already landed no longer needs its SPYx: it is in
+# the pool. Without this the preflight blocks a correct resume on "creator funded: NO-GO".
+SPYX_SPENT=""
+for pair in "create-launch:creator" "buy1:buyer1" "buy2:buyer2"; do
+  step="${pair%%:*}"; role="${pair##*:}"
+  if [[ "$(state_get "STEP_${step}")" == "done" ]]; then
+    SPYX_SPENT="${SPYX_SPENT:+$SPYX_SPENT,}$role"
+  fi
+done
+[[ -n "$SPYX_SPENT" ]] && PREFLIGHT_EXTRA+=(--spyx-spent "$SPYX_SPENT")
+# The creator has no steps after create-launch: its rent and fees are already paid, so requiring the
+# full pre-launch balance again would block the resume.
+if [[ "$(state_get STEP_create-launch)" == "done" ]]; then
+  PREFLIGHT_EXTRA+=(--spent-roles creator)
+fi
+
 set +e
 EXPECT_CLUSTER="$([[ "$MODE" == "mainnet" ]] && echo "mainnet" || echo "surfnet")"
 "$TSX" "$ROOT/scripts/c2/preflight.ts" --rpc "$RPC" --threshold-usd "$THRESHOLD_USD" \

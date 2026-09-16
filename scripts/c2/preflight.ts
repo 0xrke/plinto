@@ -539,13 +539,34 @@ main(async () => {
     },
   });
 
+  // Roles whose quote-spending step already landed (a resumed run): their SPYx is in the pool, not
+  // in their wallet, so requiring it again would block the resume on a state that is correct.
+  const spyxSpent = new Set(
+    (flag(flags, "spyx-spent") ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+  // Roles with no remaining steps at all (their rent and fees are already paid).
+  const roleDone = new Set(
+    (flag(flags, "spent-roles") ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+
   for (const w of WALLET_ROLES) {
     const pubkey = pubkeyOf(w.keyFile);
     const base = baseline.wallets.find((b) => b.role === w.role);
-    const solNeeded = BigInt(base?.spent ?? "0");
-    const solRecommended = BigInt(base?.recommendedLamports ?? "0");
+    const finished = roleDone.has(w.role);
+    const solNeeded = finished ? 0n : BigInt(base?.spent ?? "0");
+    const solRecommended = finished
+      ? 0n
+      : BigInt(base?.recommendedLamports ?? "0");
     const balance = await rpc.balance(pubkey);
-    const spyxNeeded = w.spyxKey ? BigInt(plan[w.spyxKey] ?? "0") : 0n;
+    const alreadySpent = finished || spyxSpent.has(w.role);
+    const spyxNeeded =
+      w.spyxKey && !alreadySpent ? BigInt(plan[w.spyxKey] ?? "0") : 0n;
     const spyxRecommended = divCeil(
       spyxNeeded * SPYX_HEADROOM_NUM,
       SPYX_HEADROOM_DEN,
@@ -569,9 +590,11 @@ main(async () => {
       id: `fund-${w.role}`,
       label: `${w.role} funded`,
       status: solOk && spyxOk ? (thin ? "WARN" : "GO") : "NO-GO",
-      detail: `${pubkey.slice(0, 8)}… ${sol(balance)} (need ${sol(solNeeded)}, rec. ${sol(solRecommended)})${
+      detail: `${pubkey.slice(0, 8)}… ${sol(balance)}${finished ? " (all of its steps already ran)" : ` (need ${sol(solNeeded)}, rec. ${sol(solRecommended)})`}${
         w.spyxKey
-          ? `, ${quote.symbol} ${groupDigits(spyxBalance)} raw (need ${groupDigits(spyxNeeded)}, rec. ${groupDigits(spyxRecommended)})`
+          ? alreadySpent
+            ? `, ${quote.symbol} ${groupDigits(spyxBalance)} raw (its buy already landed, no more needed)`
+            : `, ${quote.symbol} ${groupDigits(spyxBalance)} raw (need ${groupDigits(spyxNeeded)}, rec. ${groupDigits(spyxRecommended)})`
           : ""
       }`,
       data: {
