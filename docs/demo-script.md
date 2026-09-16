@@ -26,8 +26,10 @@ build brief (§12).
 
 ### 0.1 Mainnet take (preferred)
 
-- [ ] **C2 done.** `stockfloor` deployed on mainnet (program link TBD (C2)). The upgrade-authority decision is
-      made by the user (TBD (C2)).
+- [x] **C2 done.** `stockfloor` is deployed on mainnet
+      (https://solscan.io/account/98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA) and the demo launch
+      **StockFloor Demo (SFDEMO)** completed its whole lifecycle. The upgrade authority is still held; whether to
+      revoke it is the user's decision at C3.
 - [ ] **Demo launch: threshold $50 in SPYx, created in the app.** `/create` has a "Graduation threshold
       (advanced)" fieldset with a **$50** quick pick, so scene 2 is recorded entirely in the app — no terminal
       shot. The whole lifecycle at $50 has been driven through the real components on a local fork
@@ -107,7 +109,7 @@ build brief (§12).
 | **Actions** | 1. **Name:** `StockFloor Demo`, **Symbol:** `SFDEMO` (a clearly fictional demo token). 2. **Quote asset:** keep **SPYx** and point at its "calm" tag. 3. **Curve preset:** **Gentle**. 4. Drag **"Share of the raise locked in the floor vault"** from 50% to 70%, then back to 50%. Keep the right-hand preview in frame: "Floor at graduation", "Floor vs graduation price", "Max loss at graduation price". 5. Open **"Graduation threshold (advanced)"** and click the **$50** quick pick; the whole preview follows it. 6. Point at **Fixed terms**: Exit fee 2%, Curve trading fee 1%, Team allocation None. 7. Click **"Launch token"** and approve in the wallet, then cut to the new token page. |
 | **Expected preview values** | From the SDK formula `floor / price = f / (√r + 1 − f)`. Gentle at 50%: floor ≈ 31% of the graduation price, max loss ≈ 69%. Gentle at 70%: ≈ 50% and ≈ 50%. If the app shows something else, stop and report it. |
 | **Voiceover** | "A creator launches a token quoted in SPYx, on a gentle IPO-style curve. They choose how much of the raise becomes the floor: at fifty percent, the preview shows the floor at graduation and the maximum loss for a buyer at the opening price. No team allocation, no free tokens." |
-| **Proof** | Solscan: DBC config creation and `create_launch` transactions, TBD (C2) |
+| **Proof** | Solscan: DBC config `DCXNPXrb…` and the `create_launch` transaction `3aFjp7pZ…` |
 
 ### Scene 3: Presale · 0:35–1:00 · `MAINNET (C2)` or `FORK`, paying in SPYx
 
@@ -117,7 +119,7 @@ build brief (§12).
 | **Actions** | 1. Scroll to **Disclosures** and tick "I confirm that I am not a US person…". Scroll back up. 2. In **"Trade on the curve"**, choose **Buy**, keep "Pay with" on **SPYx**, enter an amount and click the buy button (its label reads `Price $X · Floor at graduation (est.) $Y · Max loss if it graduates: −Z%`). Approve. 3. Cut to the second buyer wallet (pre-staged) that buys again. 4. Show **"Progress to graduation"** filling, plus "Floor at graduation (est.)" and "Vault at graduation". |
 | **Voiceover** | "Buyers pay in SPYx, tokenized S&P 500, straight into the bonding curve. The raise stays in SPYx inside the DBC pool, and the partner share of every trading fee is already flowing into this token's vault." |
 | **If Jupiter is exercised first** | The "Pay with" selector also offers USDC and SOL, routed through Jupiter (mainnet only). That path has never been run against the live API, so test it with a small amount before recording, or keep SPYx. |
-| **Proof** | Solscan: a curve buy transaction and the DBC pool account, TBD (C2) |
+| **Proof** | Solscan: curve buy `R7r9wkTz…` and the DBC pool `ARBkYsKy…` |
 
 ### Scene 4: Graduation · 1:00–1:20 · `MAINNET (C2)` or `FORK`
 
@@ -126,7 +128,7 @@ build brief (§12).
 | **Screen** | Token page, then Solscan |
 | **Actions** | 1. A pre-staged buyer makes the completing buy. The page shows the progress at 100% and the message "The raise is complete. Next, the pool migrates to Meteora DAMM v2 and the vault share is harvested (Meteora keepers or anyone running the crank). Redemption opens as soon as the vault is funded." 2. Click **"Run crank (5 steps)"** in the permissionless crank card and approve each step (or a 2 s terminal shot of `run.sh crank`): harvest curve fees, harvest the migration fee, harvest the surplus, migrate to DAMM v2, record the migration. 3. Refresh: the stepper shows the floor live, and the **"Price and floor"** card appears with the floor meter. 4. Solscan, `harvest_migration_fee` transaction: highlight the SPYx transfer from the DBC quote vault into the StockFloor vault, 50% of the threshold, signed by our claimer PDA through CPI. 5. Solscan, DAMM v2 position NFT account: owner is the claimer PDA, and the position is permanently locked. |
 | **Voiceover** | "The curve hits its threshold and graduates. A permissionless crank migrates the pool to Meteora DAMM v2 with all liquidity locked forever, and our program pulls the migration fee — half the raise by default — into the vault. The floor is live." |
-| **Proof** | Solscan: completing buy, `migration_damm_v2`, `harvest_migration_fee`, DAMM v2 pool, position NFT account. All TBD (C2) |
+| **Proof** | Solscan: completing buy `35CFU2dP…`, `migration_damm_v2` `4j2pyByD…`, `harvest_migration_fee` `3XRDzbBY…` (+3,274,133 raw into the vault), DAMM v2 pool `AKRTNdcx…`, position `7KpnWScS…` |
 
 ### Scene 5: Market · 1:20–1:40 · `MAINNET (C2)` or `FORK`, paying in SPYx
 
@@ -136,7 +138,7 @@ build brief (§12).
 | **Actions** | 1. Zoom on the buy button label **"Price $X · Floor $Y · Max loss if you buy now: −Z%"**. 2. A pre-staged wallet buys through the panel with SPYx; approve. 3. After the refresh, point at the higher price and the larger "Max loss if you buy now". |
 | **Voiceover** | "Now the token trades freely, and the price can run far above the floor. The buy button always tells the truth: the price, the floor, and your maximum loss if you buy right now." |
 | **Fork variant** | Identical, with SPYx selected (Jupiter is mainnet-only). |
-| **Proof** | Solscan: the market buy transaction, TBD (C2) |
+| **Proof** | Solscan: the market buy `SGhunfdx…` |
 
 ### Scene 6: Crash and redeem · 1:40–2:05 · `MAINNET (C2)` or `FORK`
 
@@ -145,7 +147,7 @@ build brief (§12).
 | **Screen** | Token page, then Solscan, then the "Vault" card |
 | **Actions** | 1. The pre-staged "crash" wallet sells a large amount, and the price on the floor meter drops toward the floor. 2. As a holder, open **"Redeem at the floor"**. Enter an amount in "Amount to redeem" and show "Share of the vault", the exit fee "(stays in the vault)", **"You receive"**, "Selling at market instead (est.)" and "Floor for remaining holders". 3. Click **"Redeem for N SPYx"** and approve. 4. Solscan, redeem transaction: the base-token burn and the SPYx transfer from the vault to the holder, signed by the vault-authority PDA. 5. Back on the **Vault** card: "Floor per token" did not drop. |
 | **Voiceover** | "Then the market crashes. A holder doesn't have to sell into it: they burn their tokens and receive their share of the vault in SPYx, minus a two percent exit fee that stays in the vault. The floor for everyone else doesn't go down — the fee nudges it up." |
-| **Proof** | Solscan: the crash sell and the redeem transaction, TBD (C2) |
+| **Proof** | Solscan: the sell `3Mf5raF4…` and the redemption `2XpMExjR…` |
 
 ### Scene 7: Why Solana, why DBC · 2:05–2:20 · `ANY`
 
@@ -183,25 +185,25 @@ build brief (§12).
 
 ## 3. Solscan links to record (C2)
 
-Fill this in during C2 and copy the links into the README status table.
+Filled in from the C2 mainnet run of 2026-09-16 (scripts/c2/reports/c2-20260916T071644Z.md).
 
 | Item | Link | Scene |
 |---|---|---|
-| `stockfloor` program | TBD (C2) | 7, end card |
-| DBC config of the demo launch | TBD (C2) | 2 |
-| `create_launch` transaction | TBD (C2) | 2 |
-| DBC virtual pool | TBD (C2) | 3 |
-| Curve buy transaction | TBD (C2) | 3 |
-| Completing (PartialFill) buy | TBD (C2) | 4 |
-| `migration_damm_v2` transaction | TBD (C2) | 4 |
-| `harvest_migration_fee` transaction | TBD (C2) | 4 |
-| Vault token account | TBD (C2) | 4, 6 |
-| DAMM v2 pool | TBD (C2) | 4, 5 |
-| Position NFT account (owner = claimer PDA) | TBD (C2) | 4 |
-| Market buy (DAMM v2 through the app) | TBD (C2) | 5 |
-| Crash sell | TBD (C2) | 6 |
-| `redeem` transaction | TBD (C2) | 6 |
-| `harvest_lp_fees` transaction (optional B-roll) | TBD (C2) | 7 |
+| `stockfloor` program | https://solscan.io/account/98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA | 7, end card |
+| DBC config of the demo launch | https://solscan.io/account/DCXNPXrbt3SVVTANQbSLPVyYGLyHGGZjch1aYbv4ZNn3 | 2 |
+| `create_launch` transaction | https://solscan.io/tx/3aFjp7pZbmkzF17qsk8sVJNvKVtTeaFnDex9nBTU3tLC8nVHkbvuWrZytkvZqHWSL4tQzsASG5CufDo6c29F2ZyQ | 2 |
+| DBC virtual pool | https://solscan.io/account/ARBkYsKytmVmsdsXeU4LCiqn9uoBaU4ouhm8fG8toyGj | 3 |
+| Curve buy transaction | https://solscan.io/tx/R7r9wkTzCPTZkV7HY83yQzT4XasUvJXUzV7PpFquffdcsTRQLqzthrrNXVvQ1R2LtTkZfMyDfaWJYavf8uN5xvL | 3 |
+| Completing (PartialFill) buy | https://solscan.io/tx/35CFU2dPW2aAfEQmhNE2fPBjkQDrrmpBRYpzQxHkkfrUYQm92giCYx2C9HE3hVJK79s6i5LBDrAhxscqgoFpkpmE | 4 |
+| `migration_damm_v2` transaction | https://solscan.io/tx/4j2pyByDhP45jW5DKCSyxYz2iWdiuN6P1aTg74nDfgbTEmP8yEgeK6TXtiUUEZXm45mjNaoGdFQp3tppuwdmjnwa | 4 |
+| `harvest_migration_fee` transaction | https://solscan.io/tx/3XRDzbBYoaCY7gPh7SzE36oRCavtKWzdbix1iX6P5mMYpxMPG3FjsNxDaQUVTgi5o2xrEj8dzdDnARccZuB8ytLX | 4 |
+| Vault token account | https://solscan.io/account/8Y6vZa3zJJNFjvADg3pEGeDAUg6WcufECWohvzmEDmZr | 4, 6 |
+| DAMM v2 pool | https://solscan.io/account/AKRTNdcxd5oxCzPd3fGsTxrexQr52ePXYbnxzyAbskSn | 4, 5 |
+| Position NFT account (owner = claimer PDA) | position `7KpnWScSNaeeftQC85VKrZsejNZNEEdSKoWoLzpragBD` | 4 |
+| Market buy (DAMM v2) | https://solscan.io/tx/SGhunfdxraghobUYjhxjAJgz11PjS8VRKbfpM7Vzvq7Bx5a3dP8yzizbLRmvCRC1odK5N9VkTVQPcHTJsbp2MJ3 | 5 |
+| Crash sell | https://solscan.io/tx/3Mf5raF4H9xrNtYsERy3gmc1pCEDuYGtoq3rhyUs1GQBRpq9vkXSuK1u3zm87VFcd6TUiHWYNUUdXxFQrPddyNRX | 6 |
+| `redeem` transaction | https://solscan.io/tx/2XpMExjRLM1Kc8KCJmLanAD938t8xm2Vaybr7c9Pbsgcb3LjaYrSpKT4po7Jf4sUPwG7pE55nWCS1QPEwrF73zs3 | 6 |
+| `harvest_lp_fees` transaction (optional B-roll) | https://solscan.io/tx/M6feEe3SstP1BmoBnCDoMcTsDyrQqxn7STfxB8jToNuDtYjWTB8K4RbtFHqGXt1a1zBH7iieazguFsjmMcxsqmv | 7 |
 
 ## 4. If something fails on camera
 

@@ -184,3 +184,22 @@ Format: date — decision · alternatives · reason.
 - **Any endpoint reporting `surfnet-version` is a surfnet, whatever its host.** · Consult it only for literal loopback addresses · A local surfnet reached as `http://localtest.me:48899` was classified as mainnet, which would have produced a "mainnet" report full of dead links. A dry run whose preflight cluster is not `surfnet` now aborts instead of continuing into an unguarded `solana program deploy`.
 - **The price guard applies only to steps whose amounts derive from the price** (create-launch and the buys), and becomes a warning once the first buy has landed. · Guard every step · Redemption amounts come from chain state, so a Jupiter blip would have aborted the demo after the money moved but before the redemptions.
 - **The approval marker authorises one run** (its hash is recorded in the run state), and an aborted step now collects the signatures it already sent before writing the report, because a confirmation timeout does not mean the transaction failed.
+
+## 2026-09-16 — C2, the mainnet run
+
+- **Demo launch parameters as rehearsed:** $50 threshold in SPYx, 50% vault share, 2% exit fee, gentle curve,
+  priority fee 100,000 µlamports/CU. The run matched the rehearsal to the raw unit.
+- **The token's name was not set and cannot be fixed.** `TOKEN_URI` was exported for the run, but `TOKEN_NAME` and
+  `TOKEN_SYMBOL` kept `run.sh`'s defaults, so the mint carries `StockFloor Demo` / `SFDEMO` while the metadata JSON
+  behind it describes "Harbor Roasters". StockFloor configs make metadata immutable and the URI is pinned to a
+  commit, so both sides are frozen. · Launch a second token with matching branding · The on-chain name is honest and
+  self-explanatory for a platform demo, and a second launch costs another ~$26–53 of real SPYx. Recorded in the
+  README instead of hidden. **Lesson: `run.sh` should refuse to launch when `TOKEN_NAME`/`TOKEN_SYMBOL` are defaults
+  while `TOKEN_URI` is set — the mismatch is unfixable after the fact.**
+- **Stale reads from a load-balanced RPC are the norm, not an anomaly.** Four guards aborted correct mainnet runs
+  after reading state that a lagging node had not caught up on (up to minutes behind). Every post-send verification
+  now polls: `fund.ts` balances, the deploy's program-state check, the `launch-phase` guard, and the preflight's
+  handling of steps a resumed run already completed. · Raise the commitment level · Polling is what actually matches
+  the failure mode, and it costs only the retry window when something is genuinely wrong.
+- **The preflight must model a resumed run,** not just a fresh one: a wallet whose spending step already landed no
+  longer needs its balance (`--spyx-spent`, `--spent-roles`).

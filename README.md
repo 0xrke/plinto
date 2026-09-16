@@ -14,16 +14,16 @@ unchanged, it cannot go to zero. (Those two conditions are real: see
 Built for the [Stocklana hackathon](https://hackathons.solana.com/hackathons/stocklana): the Solana
 Foundation main track and the Meteora **Best Use of DBC** bounty.
 
-**Nothing is on mainnet yet.** Deploying costs real money that only the project owner can release, and that
-approval has not come. So this table says what exists today and where the evidence for it is, instead of promising
-what is coming. Every row below is reproducible from this repository.
+**It is on mainnet.** The program is deployed, a real launch went through its whole life — presale, graduation,
+the migration fee harvested into the vault, trading on DAMM v2, redemptions — and every step below links to the
+transaction that did it. What is still missing says so plainly.
 
 | | |
 |---|---|
-| **Status** | The full lifecycle runs on a mainnet fork (real DBC, DAMM v2 and Token-2022 binaries, the real SPYx mint and its DBC token badge) and end to end on a **local Surfpool fork of live mainnet**, driven by the CLI and by the web app. 571 tests pass (`pnpm test`, 2026-09-16), and they also pass from a fresh clone with no `keys/` (97 s). |
-| **Program** | `stockfloor` `98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA` (Anchor 1.0.2). **Not deployed to mainnet.** The identical `solana program deploy` (481 transactions, 2.5740 SOL) ran on a local Surfpool fork of live mainnet on 2026-09-16, and `solana program dump` + `cmp` confirmed the deployed ELF byte for byte: [`scripts/e2e/reports/20260916T000744Z.md`](scripts/e2e/reports/20260916T000744Z.md) |
-| **Demo launch** | **No mainnet launch yet.** The identical $50 launch ran on a **local Surfpool fork of live mainnet** on 2026-09-16: create, two curve buys, the PartialFill buy that completes the curve, the 5-transaction graduation crank, a DAMM v2 buy and sell, an LP-fee harvest, two redemptions. 495 mainnet-equivalent transactions, no failures, every CLI quote exact to the raw unit, final phase `redeemable` with the on-chain `floor` view equal to the decoded state. Report: [`scripts/e2e/reports/20260916T000744Z.md`](scripts/e2e/reports/20260916T000744Z.md) |
-| **Mainnet run (C2)** | Blocked on the owner: approval plus 5.19 SOL and 0.0806 SPYx (≈ $61) to the five repo wallets. The whole sequence is one gated command with a read-only go/no-go preflight: [`docs/c2-runbook.md`](docs/c2-runbook.md) |
+| **Status** | **Live on Solana mainnet since 2026-09-16.** The full lifecycle also runs offline on a mainnet fork (real DBC, DAMM v2 and Token-2022 binaries, the real SPYx mint and its DBC token badge): 577 tests pass (`pnpm test`), including from a fresh clone with no `keys/` (97 s). |
+| **Program** | `stockfloor` [`98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA`](https://solscan.io/account/98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA) (Anchor 1.0.2), **deployed to mainnet** on 2026-09-16 in 481 loader transactions (2.5740 SOL, almost all of it programdata rent). `solana program dump` + `sha256` confirm the on-chain ELF equals the local `target/deploy/stockfloor.so` byte for byte (`9fd9a0a8…`). The upgrade authority is still held — see [Security model](#security-model-and-risks). |
+| **Demo launch** | **StockFloor Demo (SFDEMO)**, a real $50 launch quoted in SPYx: mint [`2tDGrasj…`](https://solscan.io/token/2tDGrasjypSU7aaUiCDNTKErFi9m8WYd1a4t62Req6Nw), launch [`CiHJoXMh…`](https://solscan.io/account/CiHJoXMhBjGQRgKSLRs3zn7rDABKDRM687sTzsL6ZGNM), floor vault [`8Y6vZa3z…`](https://solscan.io/account/8Y6vZa3zJJNFjvADg3pEGeDAUg6WcufECWohvzmEDmZr), DAMM v2 pool [`AKRTNdcx…`](https://solscan.io/account/AKRTNdcxd5oxCzPd3fGsTxrexQr52ePXYbnxzyAbskSn). It graduated, the vault was funded by the partner migration fee, two holders redeemed against it, and it is in phase `redeemable` today. See [On mainnet](#on-mainnet). |
+| **Mainnet run (C2)** | Done, 15 transactions plus the deploy, no failures: [`scripts/c2/reports/c2-20260916T071644Z.md`](scripts/c2/reports/c2-20260916T071644Z.md) has every signature. The sequence is one gated command with a read-only go/no-go preflight: [`docs/c2-runbook.md`](docs/c2-runbook.md) |
 | **Live app** | **Not hosted yet.** `pnpm --filter @stockfloor/app dev` runs it on example data with no cluster, and [Run locally](#run-locally) points it at a local mainnet fork with real transactions. |
 | **Video** | **Not recorded yet.** Shot list: [`docs/demo-script.md`](docs/demo-script.md) |
 | **Audit** | None. This is unaudited hackathon code. |
@@ -52,6 +52,56 @@ $0.000000515 backed by 0.651763 SPYx (≈ $494.80) in the vault, and the buy but
 [<img src="docs/screenshots/token-mobile.png" alt="The same token page at phone width" width="260">](docs/screenshots/token-mobile.png)
 
 <sub>**The same token page at 400 px wide, local mainnet fork, 2026-09-16.**</sub>
+
+## On mainnet
+
+The first StockFloor launch ran on Solana mainnet on 2026-09-16. Threshold $50 in SPYx, exit fee 2%,
+50% of the raise routed to the floor vault. Every transaction is in
+[`scripts/c2/reports/c2-20260916T071644Z.md`](scripts/c2/reports/c2-20260916T071644Z.md).
+
+| | Address |
+|---|---|
+| Program | [`98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA`](https://solscan.io/account/98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA) |
+| Token mint (SFDEMO) | [`2tDGrasjypSU7aaUiCDNTKErFi9m8WYd1a4t62Req6Nw`](https://solscan.io/token/2tDGrasjypSU7aaUiCDNTKErFi9m8WYd1a4t62Req6Nw) |
+| Launch registry | [`CiHJoXMhBjGQRgKSLRs3zn7rDABKDRM687sTzsL6ZGNM`](https://solscan.io/account/CiHJoXMhBjGQRgKSLRs3zn7rDABKDRM687sTzsL6ZGNM) |
+| DBC config | [`DCXNPXrbt3SVVTANQbSLPVyYGLyHGGZjch1aYbv4ZNn3`](https://solscan.io/account/DCXNPXrbt3SVVTANQbSLPVyYGLyHGGZjch1aYbv4ZNn3) |
+| DBC pool (presale curve) | [`ARBkYsKytmVmsdsXeU4LCiqn9uoBaU4ouhm8fG8toyGj`](https://solscan.io/account/ARBkYsKytmVmsdsXeU4LCiqn9uoBaU4ouhm8fG8toyGj) |
+| **Floor vault** (SPYx, Token-2022) | [`8Y6vZa3zJJNFjvADg3pEGeDAUg6WcufECWohvzmEDmZr`](https://solscan.io/account/8Y6vZa3zJJNFjvADg3pEGeDAUg6WcufECWohvzmEDmZr) |
+| DAMM v2 pool (free market) | [`AKRTNdcxd5oxCzPd3fGsTxrexQr52ePXYbnxzyAbskSn`](https://solscan.io/account/AKRTNdcxd5oxCzPd3fGsTxrexQr52ePXYbnxzyAbskSn) |
+
+### The transaction that is the whole idea
+
+[`3XRDzbBY…`](https://solscan.io/tx/3XRDzbBYoaCY7gPh7SzE36oRCavtKWzdbix1iX6P5mMYpxMPG3FjsNxDaQUVTgi5o2xrEj8dzdDnARccZuB8ytLX)
+— `harvest_migration_fee`. Anyone can send it; it is permissionless. Inside, StockFloor's claimer PDA signs a CPI
+into Meteora DBC's `withdraw_migration_fee`, and **3,274,133 raw SPYx — exactly half the $50 threshold — moves from
+the bonding curve into the floor vault**. No human key touches it, and there is no instruction anywhere in the
+program that can take it back out except `redeem`.
+
+The rest of the lifecycle, in order:
+
+| Step | Transaction | What it did |
+|---|---|---|
+| Launch | [`3aFjp7pZ…`](https://solscan.io/tx/3aFjp7pZbmkzF17qsk8sVJNvKVtTeaFnDex9nBTU3tLC8nVHkbvuWrZytkvZqHWSL4tQzsASG5CufDo6c29F2ZyQ) + [`t2aUXRTG…`](https://solscan.io/tx/t2aUXRTGu91XVZTpyN6ibarwgZwgdPNM3tVXjh3CumDbxy5ni7Bte7gkFLZqgthMoZfeyCoH5x5U2cWfsjEcUAm) | DBC config + `create_launch`; pool + `register_pool` + the creator's first buy |
+| Presale buy | [`R7r9wkTz…`](https://solscan.io/tx/R7r9wkTzCPTZkV7HY83yQzT4XasUvJXUzV7PpFquffdcsTRQLqzthrrNXVvQ1R2LtTkZfMyDfaWJYavf8uN5xvL) | 2,976,484 raw SPYx into the curve, taking it to 56.9% |
+| Completing buy | [`35CFU2dP…`](https://solscan.io/tx/35CFU2dPW2aAfEQmhNE2fPBjkQDrrmpBRYpzQxHkkfrUYQm92giCYx2C9HE3hVJK79s6i5LBDrAhxscqgoFpkpmE) | PartialFill: takes only the 2,850,756 raw the curve still needed, completing it |
+| Graduation crank | [`18sVRedo…`](https://solscan.io/tx/18sVRedovLWVuCUAEJ6EmWTzM9CdKHuPn6FKwPJkP2Goc7nnoNewtyh7wGwFrBNAhjGLZxwWn7NMcT4o5qAUPrG), [`3XRDzbBY…`](https://solscan.io/tx/3XRDzbBYoaCY7gPh7SzE36oRCavtKWzdbix1iX6P5mMYpxMPG3FjsNxDaQUVTgi5o2xrEj8dzdDnARccZuB8ytLX), [`2UkL6AH8…`](https://solscan.io/tx/2UkL6AH8y8HUenHRWThFo8RYD8kXXXEsnD2DLiewZwm6MkaYC3VqNemJLjA2EysTvtW3k85xsVwRuyRh7Wa7cFnY), [`4j2pyByD…`](https://solscan.io/tx/4j2pyByDhP45jW5DKCSyxYz2iWdiuN6P1aTg74nDfgbTEmP8yEgeK6TXtiUUEZXm45mjNaoGdFQp3tppuwdmjnwa), [`3mdwzvd5…`](https://solscan.io/tx/3mdwzvd5yWGvnGCQtKazMo87mCREcqupWMMhmLnZestC9XuAoxU9TxPk5wBmgH1VXCKC2NLY6ZQ2iJJvc8ak8Zbe) | curve fees (+37,044 raw), the migration fee (+3,274,133 raw), surplus (0), migration into DAMM v2, and the `sync_migration` latch |
+| Free market | [`SGhunfdx…`](https://solscan.io/tx/SGhunfdxraghobUYjhxjAJgz11PjS8VRKbfpM7Vzvq7Bx5a3dP8yzizbLRmvCRC1odK5N9VkTVQPcHTJsbp2MJ3), [`3Mf5raF4…`](https://solscan.io/tx/3Mf5raF4H9xrNtYsERy3gmc1pCEDuYGtoq3rhyUs1GQBRpq9vkXSuK1u3zm87VFcd6TUiHWYNUUdXxFQrPddyNRX) | a buy and a sell against the permanently-locked DAMM v2 position |
+| LP fees | [`M6feEe3S…`](https://solscan.io/tx/M6feEe3SstP1BmoBnCDoMcTsDyrQqxn7STfxB8jToNuDtYjWTB8K4RbtFHqGXt1a1zBH7iieazguFsjmMcxsqmv) | trading fees from that position harvested into the vault, so the floor rose |
+| Redemptions | [`2XpMExjR…`](https://solscan.io/tx/2XpMExjRLM1Kc8KCJmLanAD938t8xm2Vaybr7c9Pbsgcb3LjaYrSpKT4po7Jf4sUPwG7pE55nWCS1QPEwrF73zs3), [`4554wq1e…`](https://solscan.io/tx/4554wq1eoj8vrjrsPa4D5fNxDhC6aeRDUfWwCogsqbJG5xJ4JuG3BWNJHCxYEvY9ZVtFEe8qoKjpvhFFkgU3BZbC) | two holders burned tokens and were paid SPYx out of the vault; the 2% exit fee stayed behind and raised the floor for everyone else |
+
+Where the money went, in raw SPYx (1e8 raw = 1 SPYx before the ScaledUiAmount multiplier):
+
+| | Raw SPYx | Note |
+|---|---:|---|
+| Paid into the curve | 6,548,267 | the $50 threshold, reached to the raw unit |
+| → floor vault at graduation | 3,311,177 | migration fee 3,274,133 + curve fees 37,044 |
+| → permanently locked DAMM v2 liquidity | the remainder | the position can never be withdrawn, only its fees are claimable |
+| Vault after two redemptions | 2,069,602 | ≈ $15.80, still redeemable by the remaining holders |
+
+**Two honest notes.** A third party traded on the curve between our own steps — this is a public pool on a public
+chain, not a closed sandbox. And the token's on-chain name is `StockFloor Demo` / `SFDEMO` while the metadata JSON
+behind it was written for a fictional roastery: the name came from a default that was not overridden at launch, and
+because the metadata is immutable (`isMutable: 0`, update authority cleared) neither side can be corrected.
 
 ### For the Meteora DBC bounty
 
