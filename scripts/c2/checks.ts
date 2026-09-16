@@ -148,9 +148,19 @@ main(async () => {
       const launch = flag(flags, "launch");
       if (!launch) throw new Error("--launch <address> is required");
       const reader = new ReadOnlyChainReader(rpc);
-      const state = await fetchLaunchState(reader, {
+      // A provider endpoint load-balances across nodes, so an account written moments ago can be
+      // missing from the node that answers this read. Observed on mainnet: this guard reported the
+      // launch absent right after create-launch had confirmed and printed its state. Poll before
+      // believing "absent"; a launch that truly does not exist just costs ~30 s of retries.
+      let state = await fetchLaunchState(reader, {
         launch: new web3.PublicKey(launch),
       });
+      for (let i = 1; i < 15 && !state; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        state = await fetchLaunchState(reader, {
+          launch: new web3.PublicKey(launch),
+        });
+      }
       if (!state) return abort(`launch ${launch} not found on this cluster`);
       const summary = {
         phase: state.phase,
