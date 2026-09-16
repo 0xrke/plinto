@@ -737,8 +737,12 @@ pnpm fixtures                                                   # re-dump mainne
 
 ```bash
 pnpm install
-pnpm --filter @stockfloor/app dev       # http://localhost:3000, NEXT_PUBLIC_DATA_SOURCE=mock by default
+pnpm --filter @stockfloor/app dev         # http://localhost:3000, NEXT_PUBLIC_DATA_SOURCE=mock by default
+pnpm --filter @stockfloor/app build:local # production build of the same thing
 ```
+
+`pnpm --filter @stockfloor/app build` (without `:local`) deliberately fails while the app would be
+hosted on example data or a loopback RPC — see [Deploying the app](app/README.md#deploying-the-app).
 
 Pages:
 - `/`: launch list
