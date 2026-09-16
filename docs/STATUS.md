@@ -17,7 +17,7 @@ M2–M5 done, plus a full review pass (program security, SDK, app, docs, C2 proc
 - **Independent reviews** (program security, SDK/scripts, app+docs): no critical or high findings in the program; every medium/low finding fixed with a regression test or documented, see `docs/DECISIONS.md` 2026-09-16.
 - **Screenshots in the README** (`docs/screenshots/`), captured headlessly from the app running against a local Surfpool mainnet fork with four seeded launches (two presales, two graduated and cranked): token page with the floor meter and the exact max-loss buy label, `/create` with the live preview, the launch list, and a 400 px mobile shot. Seeding and capture are scripted (`app/scripts/seed-fork.sh`, `app/scripts/screenshots.ts`) and the capture refuses to save a loading state, a `—` placeholder, a wrong buy label or a non-fork header, so the images can be regenerated against the real mainnet launch after C2. Driving the UI for them exposed four defects (a run-together sentence, two different max-loss numbers under near-identical labels, an anchor hidden by the sticky header, three `—` placeholders in the redeem card) — all fixed with regression tests; app suite 203.
 - **Headline claim made consistent:** the home-page hero and the link-preview image promised "it cannot go to zero" unconditionally while the README and the token page already carried the two conditions; both now say "while the vault holds its stock token, it cannot fall to zero".
-- **Test run (`pnpm test`, own verification, rebuilt binaries): 571 tests, all steps passed** — Rust unit + property 44, SDK 214, LiteSVM fork integration 113, web app 203. Re-verified from a fresh clone with no `keys/` (clone + `pnpm install --frozen-lockfile` + `pnpm test`, 97 s): the build falls back to `--ignore-keys` and every suite passes.
+- **Test run (`pnpm test`, own verification, rebuilt binaries): 574 tests, all steps passed** — Rust unit + property 44, SDK 214, LiteSVM fork integration 113, web app 203. Re-verified from a fresh clone with no `keys/` (clone + `pnpm install --frozen-lockfile` + `pnpm test`, 97 s): the build falls back to `--ignore-keys` and every suite passes.
 
 ## Blocked on user
 1. **C1 OK** (evidence: `docs/research/c1-evidence.md`).
@@ -31,7 +31,6 @@ M2–M5 done, plus a full review pass (program security, SDK, app, docs, C2 proc
 
 ## Next (local, while waiting)
 - Hosted app deploy checklist, so a judge opens the real mainnet launch rather than the example data (needs the C3 hosting decision).
-- Hosted app deploy checklist, so a judge opens the real mainnet launch rather than the example data.
 
 ## Risks / surprises
 - SPYx issuer controls (pause, freeze, permanent delegate, a future transfer hook) can block or drain; disclosed in the app and README. A transfer hook would freeze the vault until a program upgrade.
