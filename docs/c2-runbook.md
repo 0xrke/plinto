@@ -8,7 +8,7 @@ scripts that run it. The whole sequence was rehearsed on a live Surfpool mainnet
 | | |
 |---|---|
 | What it does | Deploys the `stockfloor` program, launches a $50-threshold demo token quoted in SPYx, graduates it into a DAMM v2 pool with a redeemable floor, trades it, harvests LP fees and redeems twice |
-| Mainnet transactions | **494**: 480 program-deploy transactions + 14 lifecycle transactions |
+| Mainnet transactions | **495**: 481 program-deploy transactions + 14 lifecycle transactions |
 | Cost | **≈ 2.62 SOL** (2.57 of it recoverable program rent) **+ ≈ $53 of SPYx**, of which ≈ $15 comes back to the demo wallets |
 | Duration | ≈ 10 minutes of machine time; plan **30–45 minutes** with the confirmation prompts and the checks |
 | Irreversible | program rent, real SPYx spent, immutable token metadata, permanently locked LP position |
@@ -20,7 +20,7 @@ scripts that run it. The whole sequence was rehearsed on a live Surfpool mainnet
 
 Three things, in one decision:
 
-1. **Spending real funds** — 2.84 SOL and 0.0802 SPYx sent to the dedicated repo wallets (§3), of
+1. **Spending real funds** — 5.19 SOL and 0.0806 SPYx sent to the dedicated repo wallets (§3), of
    which ≈ 2.62 SOL and ≈ $53 of SPYx are actually used by the run.
 2. **A permanent mainnet footprint** — the deployed program, the launch's token and metadata, the
    DBC pool and the migrated DAMM v2 pool with a permanently locked LP position (§7).
@@ -28,7 +28,7 @@ Three things, in one decision:
 
    | Decision | Default in this runbook | Alternatives |
    |---|---|---|
-   | Mainnet RPC | the user's choice, passed as `MAINNET_RPC_URL`; the public endpoint is enough for the 14 lifecycle transactions but is slow and rate-limited for the 480 deploy writes | any private RPC; add `--use-rpc` if QUIC/TPU is blocked on the network |
+   | Mainnet RPC | the user's choice, passed as `MAINNET_RPC_URL`; the public endpoint is enough for the 14 lifecycle transactions but is slow and rate-limited for the 479 deploy writes | any private RPC; add `--use-rpc` if QUIC/TPU is blocked on the network |
    | Token metadata JSON (`TOKEN_URI`) | **must be provided by the user** — hosting it is publishing, a hard stop | any https URL; the length only affects the metadata rent (88 characters → 607 bytes) |
    | Program IDL upload | **not uploaded** (not rehearsed, Anchor refuses localnet) | upload later for 0.03–0.12 SOL |
    | Upgrade authority | **kept** with the deployer, and disclosed in the app | revoking is a separate hard stop, planned for C3 at the earliest |
@@ -62,7 +62,7 @@ Real output against mainnet before funding (2026-09-16, funding rows still red a
 ```
 STATUS  CHECK               DETAIL
 GO      mainnet RPC         healthy, solana-core 4.3.0-rc.0, slot 447,375,375, genesis mainnet
-GO      stockfloor.so       458,160 bytes, sha256 b1a1531ca8557303… = the rehearsed binary
+GO      stockfloor.so       459,064 bytes, sha256 9fd9a0a8fc80cbfe… = the rehearsed binary
 GO      program id free     98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA does not exist yet
 GO      deploy cost         2.568797 SOL = programdata rent 2.565425 SOL (max-len 504,832 + 45 B …)
 GO      SPYx mint           not paused, no transfer hook, multiplier 1.005714560286254, 8 decimals
@@ -101,16 +101,22 @@ exact requirement from the live price.
 
 | Wallet | Address | Key file | Send SOL | Send SPYx (raw / as wallets show it) |
 |---|---|---|---:|---:|
-| deployer | `BBU1tTr4BTrEeVfNG4wWLmrmyhDHdeLZeny5C5FsdstV` | `keys/deployer.json` | **2.70** (5.05 to keep headroom for one upgrade) | — |
-| creator | `EFSrr7pe6fJqRLXWMBYzNCJj2uVBxtn9fxYM91U2vY5f` | `keys/cli-creator.json` | **0.06** | **730,000 / 0.00734 SPYx** |
-| buyer1 | `ED77vdfSwwJzrvQqUo7RtQRYsMA3bGSP213ZEBoBin99` | `keys/cli-buyer1.json` | **0.02** | **3,640,000 / 0.03661 SPYx** |
-| buyer2 | `5WgdkguwV2EcLuPE8sGCjrRqcxXui5kbkaxdHE4viAJJ` | `keys/cli-buyer2.json` | **0.02** | **3,650,000 / 0.03671 SPYx** |
+| deployer | `BBU1tTr4BTrEeVfNG4wWLmrmyhDHdeLZeny5C5FsdstV` | `keys/deployer.json` | **5.05** | — |
+| creator | `EFSrr7pe6fJqRLXWMBYzNCJj2uVBxtn9fxYM91U2vY5f` | `keys/cli-creator.json` | **0.06** | **740,000 / 0.00744 SPYx** |
+| buyer1 | `ED77vdfSwwJzrvQqUo7RtQRYsMA3bGSP213ZEBoBin99` | `keys/cli-buyer1.json` | **0.02** | **3,660,000 / 0.03681 SPYx** |
+| buyer2 | `5WgdkguwV2EcLuPE8sGCjrRqcxXui5kbkaxdHE4viAJJ` | `keys/cli-buyer2.json` | **0.02** | **3,660,000 / 0.03681 SPYx** |
 | cranker | `FhaZVX91912MJTxoPDW3JtmbeDEuZdRjDQ9QfkaWohyC` | `keys/cli-cranker.json` | **0.04** | — |
-| **Total** | | | **2.84 SOL** | **8,020,000 raw = 0.0802 SPYx (≈ $61)** |
+| **Total** | | | **5.19 SOL** | **8,060,000 raw = 0.0806 SPYx (≈ $61)** |
 
 - The sender also pays ≈ 0.0047 SOL to create the three SPYx token accounts.
-- Buying 0.0802 SPYx through Jupiter costs about **$62 of USDC**.
-- Re-check the rent before funding (read-only): `solana rent 504877`. It was 5,080 lamports/byte on
+- Buying 0.0806 SPYx through Jupiter costs about **$62 of USDC**.
+- **Why the deployer gets 5.05 SOL when the deploy costs 2.574.** `solana program deploy` verifies
+  the deployed ELF only after the rent is spent. If that check fails, the only non-destructive
+  repair is an upgrade, which needs 2.3309 SOL available at once (refunded when it lands). Funded
+  with 2.70 the only way out is `solana program close`, which is irreversible and a hard stop.
+  After a clean deploy the extra 2.48 SOL is untouched and can be swept back. The preflight requires
+  the headroom by default; `--no-upgrade-headroom` drops it to a warning.
+- Re-check the rent before funding (read-only): `solana rent 505901`. It was 5,080 lamports/byte on
   2026-09-16; the recommendation carries about 5% headroom.
 - Full derivation: `docs/research/surfpool-e2e.md` §7.
 
@@ -147,7 +153,7 @@ What it does, in order — each row is exactly the command the rehearsal and the
 
 | # | Step | Command behind it | Txs | Signer |
 |---:|---|---|---:|---|
-| 1 | `deploy` | `solana program deploy … --max-len 504832 --with-compute-unit-price 100000` | 480 | deployer |
+| 1 | `deploy` | `solana program deploy … --max-len 505856 --with-compute-unit-price 100000` | 481 | deployer |
 | 2 | `create-launch` | SDK `create-launch --threshold-usd 50 --preset gentle --vault-share 50 --exit-fee-bps 200 --first-buy …` | 2 | creator |
 | 3 | `buy1` | SDK `buy --raw <45% of the threshold>` | 1 | buyer1 |
 | 4 | `buy2` | SDK `buy --raw <50% offer>` (PartialFill completes the curve) | 1 | buyer2 |
@@ -277,8 +283,8 @@ Artifacts the run produces:
   video, the same app against the local fork (`RPC_PORT=28899 bash scripts/surfpool/up.sh`) behaves
   identically.
 - **The evidence trail**: `docs/research/c1-evidence.md` (LiteSVM fork lifecycle),
-  `docs/research/surfpool-e2e.md` (this exact sequence on a live fork, 494 mainnet-equivalent
-  transactions), and `pnpm test` (523 tests) from a fresh clone.
+  `docs/research/surfpool-e2e.md` (this exact sequence on a live fork, 495 mainnet-equivalent
+  transactions), and `pnpm test` (544 tests) from a fresh clone.
 
 ---
 

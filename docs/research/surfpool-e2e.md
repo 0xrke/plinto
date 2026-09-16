@@ -1,8 +1,8 @@
 # C2 rehearsal on a local Surfpool mainnet fork
 
-Date: 2026-09-16 (re-run after the post-M5 review fixes: the crank now also sends `sync_migration`, and the
-program binary grew to 458,160 bytes). Nothing was sent to mainnet. Mainnet was only read, for rent, prices
-and the relay check.
+Date: 2026-09-16 (third run, after the review fix that makes `create_launch` reject a migration threshold whose
+partner migration fee would round to zero; the program binary grew to 459,064 bytes). Nothing was sent to mainnet.
+Mainnet was only read, for rent, prices and the relay check.
 
 The rehearsal ran the full planned C2 sequence with the SDK CLI scripts on a fresh local Surfpool 1.5.0
 fork of mainnet (127.0.0.1:8899):
@@ -20,11 +20,13 @@ bash scripts/e2e/replay-doc-commands.sh [--restart]     # replays the mainnet co
 
 Evidence: `scripts/e2e/reports/<run id>.md` and `.json` contain every signature, CU figure, fee, created account and
 wallet balance. Per-step logs are in `.surfpool/rpc-8899/e2e/<run id>/` (gitignored). The numbers below come from run
-`20260915T225543Z` (`scripts/e2e/reports/20260915T225543Z.md`) with `stockfloor.so` 458,160 bytes, sha256
-`b1a1531ca855730382334c7e66cb9635e7bdde3d0cbc12cb8ae4f354243df0e3`. Prices at the time: SOL $97.18, SPYx $758.07 at
-launch ($758.19 at report time), SPYx multiplier 1.005714560286254. The earlier runs of the M2 binary
-(`20260915T215423Z`, saved; `20260915T220548Z` and `replay-20260915T220310Z`, not saved) produced the same structure
-with 470 deploy writes and no `sync_migration`; their CU figures are included in the ranges in §4.
+`20260916T000744Z` (`scripts/e2e/reports/20260916T000744Z.md`) with `stockfloor.so` 459,064 bytes, sha256
+`9fd9a0a8fc80cbfeb7e253bee114c06b319b3ef0558638ebfbdb600957fc19e3`. Prices at the time: SOL $96.93, SPYx $755.61 at
+launch ($758.12 at report time), SPYx multiplier 1.005714560286254. Earlier runs (`20260915T225543Z` and
+`20260915T215423Z`, both saved; sha256 `b1a1531c…` and the M2 binary) produced the same structure with 479 and 470
+deploy writes; their CU figures are included in the ranges in §4. **Deploy only the binary a saved report names:**
+`scripts/c2/preflight.ts` compares `target/deploy/stockfloor.so` with the newest report's sha256 and says NO-GO on any
+difference.
 
 ## 1. Result
 
@@ -32,13 +34,13 @@ with 470 deploy writes and no `sync_migration`; their CU figures are included in
 
 | Check | Result |
 |---|---|
-| Transactions | 494 mainnet-equivalent: 480 deploy, 14 launch lifecycle. No transaction failed. |
+| Transactions | 495 mainnet-equivalent: 481 deploy, 14 launch lifecycle. No transaction failed. |
 | Quotes vs chain | All 6 CLI trades and redemptions `exact: true`; SDK quote = on-chain amount |
 | Crank | `harvest_curve_fees`, `harvest_migration_fee`, `harvest_surplus`, `migrate` (DBC `migration_damm_v2`), `sync_migration`, `harvest_lp_fees`: all executed |
 | Final state | `redeemable`; the on-chain `floor` view equals the decoded state; the floor per token rose after each redemption |
 | Fees | For every transaction, the lamports charged equal `5,000 × signatures + ceil(CU limit × CU price / 1e6)` |
 | Rent | The surfnet Rent sysvar was set to mainnet's (5,080 lamports/byte); still equal at the end |
-| Nothing relayed | 0 of 986 local signatures exist on mainnet; 0 of 40 accounts created locally exist on mainnet |
+| Nothing relayed | 0 of 988 local signatures exist on mainnet; 0 of 40 accounts created locally exist on mainnet |
 | Threshold | The $50 demo launch graduated. $25 and $100 launches also passed DBC `create_config` and our `create_launch`. |
 
 ## 2. Fidelity: where a local fork differs from mainnet, and what the rehearsal does
@@ -97,7 +99,7 @@ CU limits are the SDK `CU_LIMITS`; the Solana CLI sets its own limits from simul
 
 | # | Step (command) | Wallet | Txs | CU used | CU limit | Fees (lamports) | New-account lamports |
 |---:|---|---|---:|---:|---:|---:|---:|
-| 1 | deploy (`solana program deploy --max-len 504832`) | deployer | 480 | 1,282,050 | 1,282,050 | 2,538,205 | 2,566,258,520 (buffer 2,565,425,400 refunded, see §6) |
+| 1 | deploy (`solana program deploy --max-len 505856`) | deployer | 481 | 1,284,720 | 1,284,720 | 2,543,472 | 2,571,460,440 (buffer 2,570,627,320 refunded, see §6) |
 | 2 | `create-launch` (tx1 config + launch, tx2 pool + register + first buy) | creator | 2 | 238,272–254,811 | 435,000 | 63,500 | 32,087,840 |
 | 3 | `buy` 45% of T on the curve | buyer1 | 1 | 49,047–53,551 | 95,000 | 14,500 | 1,488,440 |
 | 4 | `buy` completing (PartialFill) | buyer2 | 1 | 51,883–56,394 | 95,000 | 14,500 | 1,488,440 |
@@ -165,27 +167,27 @@ No account is closed afterwards; `redeem --all` leaves an empty base ATA of 1,48
 
 ## 6. Program deploy
 
-Measured with `--max-len 504832` (ELF 458,160 bytes + 10%, KiB-rounded):
-- **Transactions:** 1 × `InitializeBuffer` (creates the buffer), 478 × `Write`, 1 × `DeployWithMaxDataLen` (creates the
+Measured with `--max-len 505856` (ELF 459,064 bytes + 10%, KiB-rounded):
+- **Transactions:** 1 × `InitializeBuffer` (creates the buffer), 479 × `Write`, 1 × `DeployWithMaxDataLen` (creates the
   program account and programdata).
-- **Buffer:** the CLI funds it with the **programdata** rent, 2,565,425,400 lamports. The final transaction refunds it
+- **Buffer:** the CLI funds it with the **programdata** rent, 2,570,627,320 lamports. The final transaction refunds it
   and charges the programdata rent, so the peak balance needed equals the net cost.
-- **Net cost:** programdata 2,565,425,400 + program account 833,120 + fees 2,538,205 = **2,568,796,725 lamports (2.5688 SOL)**.
+- **Net cost:** programdata 2,570,627,320 + program account 833,120 + fees 2,543,472 = **2,574,003,912 lamports (2.5740 SOL)**.
 
-| `--max-len` option | Bytes | Programdata rent (SOL) | Deploy total (SOL) | USD at $97.18 |
+| `--max-len` option | Bytes | Programdata rent (SOL) | Deploy total (SOL) | USD at $96.93 |
 |---|---:|---:|---:|---:|
-| exact ELF (CLI default) | 458,160 | 2.3283 | 2.3317 | $226.60 |
-| **ELF + 10% (recommended, rehearsed)** | 504,832 | 2.5654 | **2.5688** | $249.64 |
-| ELF + 25% | 573,440 | 2.9140 | 2.9173 | $283.51 |
-| 2 × ELF | 916,320 | 4.6558 | 4.6592 | $452.79 |
+| exact ELF (CLI default) | 459,064 | 2.3329 | 2.3363 | $226.45 |
+| **ELF + 10% (recommended, rehearsed)** | 505,856 | 2.5706 | **2.5740** | $249.50 |
+| ELF + 25% | 574,464 | 2.9192 | 2.9225 | $283.28 |
+| 2 × ELF | 918,128 | 4.6650 | 4.6683 | $452.50 |
 
 Decision · alternatives · reason: **ELF + 10%** · exact size, +25%, 2× · Solana CLI 4.1 auto-extends programdata on upgrade
 (`--no-auto-extend` is opt-out), so a large margin only prepays rent. 10% (+0.23 SOL) absorbs a typical fix without an
 extend transaction.
 
 **Upgrade** (rehearsed with the same ELF, not part of C2):
-- 480 transactions; the buffer is funded with 2,328,331,640 lamports and refunded by `Upgrade`.
-- Net cost is the fees, 2,533,175 lamports.
+- 481 transactions; the buffer is funded with 2,332,923,960 lamports and refunded by `Upgrade`.
+- Net cost is the fees, 2,538,442 lamports.
 - The deployer needs **2.3309 SOL available at once** to upgrade. An ELF above max-len also pays the extension rent.
 - **Buffer keypair:** `keys/stockfloor-deploy-buffer.json` (created if missing). After a failed deploy, rerunning the same
   command resumes into the same buffer. `solana program close --buffers` recovers a stranded buffer.
@@ -203,53 +205,58 @@ Measured SOL per wallet over the C2 steps and the recommendation:
 
 | Wallet | Address | Key file | Measured SOL | **Send SOL** | Planned SPYx raw | **Send SPYx** (raw / as wallets show it) | USD |
 |---|---|---|---:|---:|---:|---:|---:|
-| deployer | `BBU1tTr4BTrEeVfNG4wWLmrmyhDHdeLZeny5C5FsdstV` | keys/deployer.json | 2.568797 | **2.70** | — | — | $262 |
-| creator | `EFSrr7pe6fJqRLXWMBYzNCJj2uVBxtn9fxYM91U2vY5f` | keys/cli-creator.json | 0.032151 | **0.06** | 662,447 | **730,000 / 0.00734 SPYx** | $11 |
-| buyer1 | `ED77vdfSwwJzrvQqUo7RtQRYsMA3bGSP213ZEBoBin99` | keys/cli-buyer1.json | 0.001528 | **0.02** | 3,308,925 | **3,640,000 / 0.03661 SPYx** | $30 |
-| buyer2 | `5WgdkguwV2EcLuPE8sGCjrRqcxXui5kbkaxdHE4viAJJ` | keys/cli-buyer2.json | 0.001528 | **0.02** | 3,312,237 | **3,650,000 / 0.03671 SPYx** | $30 |
+| deployer | `BBU1tTr4BTrEeVfNG4wWLmrmyhDHdeLZeny5C5FsdstV` | keys/deployer.json | 2.574004 | **5.05** | — | — | $490 |
+| creator | `EFSrr7pe6fJqRLXWMBYzNCJj2uVBxtn9fxYM91U2vY5f` | keys/cli-creator.json | 0.032151 | **0.06** | 664,602 | **740,000 / 0.00744 SPYx** | $11 |
+| buyer1 | `ED77vdfSwwJzrvQqUo7RtQRYsMA3bGSP213ZEBoBin99` | keys/cli-buyer1.json | 0.001528 | **0.02** | 3,319,687 | **3,660,000 / 0.03681 SPYx** | $30 |
+| buyer2 | `5WgdkguwV2EcLuPE8sGCjrRqcxXui5kbkaxdHE4viAJJ` | keys/cli-buyer2.json | 0.001528 | **0.02** | 3,323,010 | **3,660,000 / 0.03681 SPYx** | $30 |
 | cranker | `FhaZVX91912MJTxoPDW3JtmbeDEuZdRjDQ9QfkaWohyC` | keys/cli-cranker.json | 0.018133 | **0.04** | — | — | $4 |
-| **Total** | | | **2.622137** | **2.84 SOL** | 7,283,609 | **8,020,000 raw = 0.0802 SPYx** | **$276 SOL + $61 SPYx** |
+| **Total** | | | **2.627344** | **5.19 SOL** | 7,307,299 | **8,060,000 raw = 0.0806 SPYx** | **$503 SOL + $61 SPYx** |
 
-The planned SPYx for buyer2 is the PartialFill **offer** (50% of T). The completing buy used 2,981,015 raw.
+The planned SPYx for buyer2 is the PartialFill **offer** (50% of T). The completing buy used 2,990,711 raw.
 
 Notes for the user's transfers:
 - **Send SPYx directly**, not USDC: the CLI sequence pays in SPYx. Buying 0.0802 SPYx through Jupiter costs about
   **$62 of USDC**.
 - **The sender pays** 1,559,560 lamports to create each demo wallet's SPYx ATA (three wallets: 0.0047 SOL), plus its
   own fees. This is not in the table.
-- **Optional upgrade headroom:** send the deployer **5.05 SOL** instead of 2.70. After the deploy, 2.48 SOL remains, enough
-  for one upgrade (2.3309 SOL needed at once). The upgrade refunds its buffer, so only about 0.0025 SOL of fees is spent.
+- **Why 5.05 SOL and not 2.70 (the amount actually spent).** `solana program deploy` verifies the deployed ELF only
+  *after* the 2.57 SOL of rent is spent (§9 block 1). If that `cmp` fails — a corrupted or partially resumed buffer, a
+  rebuild between attempts, a wrong `--max-len` — the only non-destructive repair is an upgrade, which needs
+  2.3309 SOL available **at once** (the new buffer), refunded when the upgrade lands, so only about 0.0025 SOL of fees
+  is really spent. Funded with 2.70 only, the sole way out would be `solana program close`, which is irreversible and a
+  hard stop. After a clean deploy the extra 2.48 SOL is untouched and can be swept back.
+  `scripts/c2/preflight.ts` requires the headroom by default (`--no-upgrade-headroom` drops it to a warning).
 - **What is really spent:**
   - **SOL:** ≈ 2.62 SOL. The 2.57 SOL of program rent stays locked while the program exists;
     `solana program close` would return it, but that is irreversible and not planned.
   - **SPYx:** ≈ $37.6 of the $53 paid in. $15.5 stays redeemable in the vault; $21.8 is permanently locked DAMM v2
     liquidity.
-- **Re-check before funding** (read-only): `solana rent 504877` (the programdata account is max-len + 45 bytes) and the
+- **Re-check before funding** (read-only): `solana rent 505901` (the programdata account is max-len + 45 bytes) and the
   SPYx price. Rent was 5,080 lamports/byte on 2026-09-16.
 
 ## 8. Mainnet transactions C2 will send (for the user's approval)
 
 Every row is a mainnet transaction. Nothing here has been sent; the rehearsal ran the same list on the local fork.
 
-| # | Step | Instructions | Signer(s) / fee payer | CU limit | Fee (lamports) | SOL moved into new accounts | SPYx raw moved |
-|---:|---|---|---|---:|---:|---:|---|
-| 1 | deploy | System `CreateAccount` + Loader `InitializeBuffer` | deployer, buffer keypair | 2,820 | 10,282 | 2,565,425,400 (buffer, refunded in #480) | |
-| 2–479 | deploy | 478 × Loader `Write` | deployer | 2,670 | 5,267 each (2,517,626) | 0 | |
-| 480 | deploy | System `CreateAccount` + Loader `DeployWithMaxDataLen` (upgrade authority = deployer) | deployer, program keypair | 2,970 | 10,297 | 833,120 program + 2,565,425,400 programdata − buffer refund | |
-| 481 | create-launch | DBC `create_config` + stockfloor `create_launch` | creator, config keypair | 170,000 | 27,000 | 9,966,960 | |
-| 482 | create-launch | DBC `initialize_virtual_pool_with_spl_token` + stockfloor `register_pool` + ATA + DBC `swap2` (first buy) | creator, base mint keypair | 265,000 | 36,500 | 22,120,880 | creator → DBC 662,447 |
-| 483 | buy | ATA + DBC `swap2` (ExactIn) | buyer1 | 95,000 | 14,500 | 1,488,440 | buyer1 → DBC 2,981,013 |
-| 484 | buy | ATA + DBC `swap2` (PartialFill, completes the curve) | buyer2 | 95,000 | 14,500 | 1,488,440 | buyer2 → DBC 2,981,015 |
-| 485 | crank | stockfloor `harvest_curve_fees` | cranker | 100,000 | 15,000 | 1,488,440 | DBC → vault 37,100 |
-| 486 | crank | stockfloor `harvest_migration_fee` | cranker | 60,000 | 11,000 | 0 | DBC → vault 3,279,114 |
-| 487 | crank | stockfloor `harvest_surplus` | cranker | 60,000 | 11,000 | 0 | 0 |
-| 488 | crank | DBC `migration_damm_v2` (DAMM v2 Customizable config) | cranker, 2 position NFT mint keypairs | 200,000 | 35,000 | 16,550,640 | DBC → DAMM v2 3,272,556 |
-| 489 | crank | stockfloor `sync_migration` (latches `Launch.migrated`) | cranker | 20,000 | 7,000 | 0 | 0 |
-| 490 | buy | ATA + DAMM v2 `swap2` | buyer1 | 75,000 | 12,500 | 0 | buyer1 → DAMM 327,912 |
-| 491 | sell | ATA + DAMM v2 `swap2` | buyer2 | 75,000 | 12,500 | 0 | DAMM → buyer2 730,198 |
-| 492 | crank | stockfloor `harvest_lp_fees` | cranker | 100,000 | 15,000 | 0 | DAMM → vault 8,524 |
-| 493 | redeem | ATA + stockfloor `redeem` (50% of balance) | buyer1 | 75,000 | 12,500 | 0 | vault → buyer1 564,925 |
-| 494 | redeem | ATA + stockfloor `redeem` (all) | buyer2 | 75,000 | 12,500 | 0 | vault → buyer2 720,384 |
+| # | Step | Instructions | Fee payer | Sigs | CU limit | Fee (lamports) | Net rent (lamports) | SPYx raw moved |
+|---:|---|---|---|---:|---:|---:|---:|---|
+| 1 | deploy-program | System:CreateAccount + BPF Upgradeable Loader:InitializeBuffer | deployer | 2 | 2,820 | 10,282 | 2,570,627,320 |  |
+| 2-480 | deploy-program | 479 x BPF Upgradeable Loader:Write | deployer | 1 | 2,670 | 2,522,893 | 0 |  |
+| 481 | deploy-program | System:CreateAccount + BPF Upgradeable Loader:DeployWithMaxDataLen | deployer | 2 | 2,970 | 10,297 | 833,120 |  |
+| 482 | create-launch | DBC:CreateConfig + stockfloor:CreateLaunch | creator | 2 | 170,000 | 27,000 | 9,966,960 |  |
+| 483 | create-launch | DBC:InitializeVirtualPoolWithSplToken + stockfloor:RegisterPool + ATA:CreateIdempotent + DBC:Swap2 | creator | 2 | 265,000 | 36,500 | 22,120,880 | creator -664,602, DBC quote vault +664,602 |
+| 484 | buyer1-buy | ATA:CreateIdempotent + DBC:Swap2 | buyer1 | 1 | 95,000 | 14,500 | 1,488,440 | buyer1 -2,990,709, DBC quote vault +2,990,709 |
+| 485 | buyer2-completing-buy | ATA:CreateIdempotent + DBC:Swap2 | buyer2 | 1 | 95,000 | 14,500 | 1,488,440 | DBC quote vault +2,990,711, buyer2 -2,990,711 |
+| 486 | crank-graduate | stockfloor:HarvestCurveFees | cranker | 1 | 100,000 | 15,000 | 1,488,440 | vault +37,221, DBC quote vault -37,221 |
+| 487 | crank-graduate | stockfloor:HarvestMigrationFee | cranker | 1 | 60,000 | 11,000 | 0 | vault +3,289,779, DBC quote vault -3,289,779 |
+| 488 | crank-graduate | stockfloor:HarvestSurplus | cranker | 1 | 60,000 | 11,000 | 0 |  |
+| 489 | crank-graduate | DBC:MigrationDammV2 | cranker | 3 | 200,000 | 35,000 | 16,550,640 | DBC quote vault -3,283,201, DAMM v2 token B vault +3,283,201 |
+| 490 | crank-graduate | stockfloor:SyncMigration | cranker | 1 | 20,000 | 7,000 | 0 |  |
+| 491 | buyer1-damm-buy | ATA:CreateIdempotent + DAMM v2:Swap2 | buyer1 | 1 | 75,000 | 12,500 | 0 | buyer1 -328,978, DAMM v2 token B vault +328,978 |
+| 492 | buyer2-damm-sell | ATA:CreateIdempotent + DAMM v2:Swap2 | buyer2 | 1 | 75,000 | 12,500 | 0 | DAMM v2 token B vault -732,574, buyer2 +732,574 |
+| 493 | crank-lp-fees | stockfloor:HarvestLpFees | cranker | 1 | 100,000 | 15,000 | 0 | DAMM v2 token B vault -8,551, vault +8,551 |
+| 494 | buyer1-redeem | ATA:CreateIdempotent + stockfloor:Redeem | buyer1 | 1 | 75,000 | 12,500 | 0 | buyer1 +566,763, vault -566,763 |
+| 495 | buyer2-redeem-all | ATA:CreateIdempotent + stockfloor:Redeem | buyer2 | 1 | 75,000 | 12,500 | 0 | vault -722,726, buyer2 +722,726 |
 
 Raw SPYx amounts scale with the SPYx price at launch time. Every transaction also carries `SetComputeUnitLimit` and
 `SetComputeUnitPrice(100000)`.
@@ -287,25 +294,39 @@ export C2_DIR="${C2_DIR:-target/c2}"
 export THRESHOLD_USD=50 PRIORITY_FEE=100000
 TSX=packages/sdk/node_modules/.bin/tsx
 mkdir -p "$C2_DIR"
+# The URL goes into the CLI config once and is never echoed again (see "Do not film this block").
 printf 'json_rpc_url: "%s"\nwebsocket_url: ""\nkeypair_path: "%s"\naddress_labels: {}\ncommitment: confirmed\n' \
   "$MAINNET_RPC_URL" "$PWD/keys/deployer.json" >"$C2_DIR/solana-cli.yml"
+chmod 600 "$C2_DIR/solana-cli.yml"
 shasum -a 256 target/deploy/stockfloor.so
+# The program keypair must be the declared program id: build-programs.sh falls back to
+# --ignore-keys when keys/ is missing, so nothing else enforces this at deploy time. Deploying at
+# the wrong address strands the rent in a program whose every instruction fails with
+# DeclaredProgramIdMismatch.
+test "$(solana-keygen pubkey keys/stockfloor-program.json)" = 98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA \
+  && echo "program keypair ok"
+# No stale deploy buffer: `--buffer` would resume writing into it and mix two ELFs.
+solana program show --buffers --config "$C2_DIR/solana-cli.yml" || true
+test ! -f keys/stockfloor-deploy-buffer.json ||
+  solana account "$(solana-keygen pubkey keys/stockfloor-deploy-buffer.json)" --config "$C2_DIR/solana-cli.yml" ||
+  echo "buffer address is free"
 for k in deployer cli-creator cli-buyer1 cli-buyer2 cli-cranker; do
   pk="$(solana-keygen pubkey "keys/$k.json")"
   echo "$k $pk $(solana balance --config "$C2_DIR/solana-cli.yml" "$pk")"
   spl-token balance --config "$C2_DIR/solana-cli.yml" --owner "$pk" XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W || true
 done
-solana rent 504877 --config "$C2_DIR/solana-cli.yml"
+solana rent 505901 --config "$C2_DIR/solana-cli.yml"
 solana account 98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA --config "$C2_DIR/solana-cli.yml" || echo "program id is free"
 ```
 
 ```bash
-# ---- 1. Deploy stockfloor (480 transactions, about 2.569 SOL from the deployer) -- DO NOT RUN WITHOUT OK
-solana program deploy --config "$C2_DIR/solana-cli.yml" --url "$MAINNET_RPC_URL" \
+# ---- 1. Deploy stockfloor (481 transactions, about 2.574 SOL from the deployer) -- DO NOT RUN WITHOUT OK
+# No --url here: the RPC endpoint comes from --config, so the key never reaches the command line.
+solana program deploy --config "$C2_DIR/solana-cli.yml" \
   --keypair keys/deployer.json --fee-payer keys/deployer.json --upgrade-authority keys/deployer.json \
-  --program-id keys/stockfloor-program.json --buffer keys/stockfloor-deploy-buffer.json --max-len 504832 \
+  --program-id keys/stockfloor-program.json --buffer keys/stockfloor-deploy-buffer.json --max-len 505856 \
   --with-compute-unit-price 100000 --commitment confirmed target/deploy/stockfloor.so
-# verify (read-only): upgrade authority = deployer, data length 504832, deployed ELF = local file
+# verify (read-only): upgrade authority = deployer, data length 505856, deployed ELF = local file
 solana program show 98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA --config "$C2_DIR/solana-cli.yml"
 solana program dump 98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA "$C2_DIR/onchain.so" --config "$C2_DIR/solana-cli.yml"
 cmp <(head -c "$(wc -c <target/deploy/stockfloor.so)" "$C2_DIR/onchain.so") target/deploy/stockfloor.so && echo "deployed ELF matches"
@@ -383,22 +404,25 @@ Operational notes for C2:
 
 ## 10. Local replay of §9
 
-**Passed:** run `replay-20260915T230348Z`, `bash scripts/e2e/replay-doc-commands.sh`, 2026-09-16 (re-run after the
-review fixes; an earlier replay of the M2 binary, `replay-20260915T220310Z`, passed the same way).
+**Passed:** run `replay-20260916T001340Z`, `bash scripts/e2e/replay-doc-commands.sh`, 2026-09-16 (re-run after the
+`MigrationQuoteThresholdTooSmall` fix and after the §9 edits below; the earlier replays
+`replay-20260915T230348Z` and `replay-20260915T220310Z` passed the same way on the two previous binaries).
 
 Every command block above ran verbatim, with two changes: `MAINNET_RPC_URL=http://127.0.0.1:8899`, and `--use-rpc`
 appended to `solana program deploy`. The demo wallets were funded by cheatcodes with the plan +10%.
-- **Pre-flight:** printed the stockfloor.so sha256, SOL and SPYx balances, and `solana rent 504877` = 2.5654254 SOL. It
-  printed "program id is free". `spl-token balance` fails for the cranker, which has no SPYx ATA; `|| true` covers
-  that.
-- **Deploy:** `solana program show` reported authority `BBU1tTr4…` and data length 504,832. `solana program dump` +
-  `cmp` printed "deployed ELF matches".
-- **SDK CLI:** ran in guard mode `mainnet-override` (both switches set, loopback URL). Threshold 6,562,459 raw at
-  $757.58; the completing buy was PartialFill; the graduation crank ran `harvest_curve_fees`,
+- **Pre-flight:** printed the stockfloor.so sha256, SOL and SPYx balances, and `solana rent 505901` = 2.57062732 SOL.
+  The two assertions added after the security review passed: "program keypair ok" (the keypair really is
+  `98NLryxeg…`) and "buffer address is free" (no stale deploy buffer on the cluster). It printed "program id is free".
+  `spl-token balance` fails for the cranker, which has no SPYx ATA; `|| true` covers that.
+- **Deploy:** ran with the endpoint only in `--config` (no `--url`, so no RPC key on the command line).
+  `solana program show` reported authority `BBU1tTr4…` and data length 505,856. `solana program dump` + `cmp`
+  printed "deployed ELF matches".
+- **SDK CLI:** ran in guard mode `mainnet-override` (both switches set, loopback URL). Threshold 6,544,830 raw at
+  $759.62; the completing buy was PartialFill; the graduation crank ran `harvest_curve_fees`,
   `harvest_migration_fee`, `harvest_surplus`, `migrate` and `sync_migration`.
-- **Outcome:** all 6 quotes `exact: true`; final phase `redeemable`, vault 2,040,745 raw, supply 606,444,152,116,264,
+- **Outcome:** all 6 quotes `exact: true`; final phase `redeemable`, vault 2,035,263 raw, supply 606,444,183,779,176,
   floor view = state, nothing due on the crank.
-- **Relay check:** 0 of 502 local signatures exist on mainnet.
+- **Relay check:** 0 of 503 local signatures exist on mainnet.
 
 ## Decisions
 
@@ -430,7 +454,7 @@ appended to `solana program deploy`. The demo wallets were funded by cheatcodes 
   publishing, a hard stop. The rehearsal used a placeholder GitHub raw URL of realistic length (88 characters),
   which gave a 607-byte metadata account. Other URI lengths were not measured.
 - **IDL upload** is not rehearsed (Anchor skips localnet). Decide at C2 whether to upload it (estimate 0.03–0.12 SOL).
-- **Rent can change** (mainnet moved from 6,960 to 5,080 lamports/byte). Re-run `solana rent 504877` before funding. The
+- **Rent can change** (mainnet moved from 6,960 to 5,080 lamports/byte). Re-run `solana rent 505901` before funding. The
   recommendation has about 5% headroom on the deployer.
 - **Mainnet send path.** The deploy was rehearsed with `--use-rpc`; the mainnet default is the TPU client. If QUIC is
   blocked on the user's network, use `--use-rpc` with a private RPC.

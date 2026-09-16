@@ -19,7 +19,7 @@
  * | `--rehearsal <file>` | newest scripts/e2e/reports/*.json | Rehearsal baseline (binary hash, funding, deploy cost) |
  * | `--plan-file <file>` | — | Reuse an existing `plan.ts pre-launch` output instead of running it |
  * | `--plan-out <file>` | — | Write the plan exports (so the run uses the same price snapshot) |
- * | `--upgrade-headroom` | off | Require the deployer balance that also covers one program upgrade |
+ * | `--no-upgrade-headroom` | off | Drop the requirement that the deployer can still pay for one program upgrade |
  * | `--skip-program-hashes` | off | Skip the DBC / DAMM v2 binary comparison (4.5 MB of reads) |
  * | `--accept-program-drift` | off | Downgrade a DBC / DAMM v2 binary mismatch from NO-GO to a warning |
  * | `--json` / `--out <file>` | — | Machine-readable result for `scripts/c2/run.sh` |
@@ -151,7 +151,7 @@ function runPlan(
 main(async () => {
   const { flags } = parseFlags(process.argv.slice(2), [
     "json",
-    "upgrade-headroom",
+    "no-upgrade-headroom",
     "skip-program-hashes",
     "accept-program-drift",
   ]);
@@ -240,6 +240,56 @@ main(async () => {
         ? Math.ceil((elfBytes * 1.1) / 1024) * 1024
         : Number(baseline.params.MAX_LEN)),
   );
+
+  // -------------------------------------------- 2b. deploy keypairs (program id, stale buffer)
+  // `anchor build` checks the program keypair implicitly, but scripts/build-programs.sh falls back
+  // to --ignore-keys when keys/ is absent, so the invariant is not enforced anywhere at deploy
+  // time. Deploying at the wrong address strands the rent in a program whose every instruction
+  // fails with DeclaredProgramIdMismatch.
+  let programKeyPubkey = "";
+  let programKeyError = "";
+  try {
+    programKeyPubkey = pubkeyOf("keys/stockfloor-program.json");
+  } catch (e) {
+    programKeyError = e instanceof Error ? e.message : String(e);
+  }
+  add({
+    id: "program-keypair",
+    label: "program keypair",
+    status: rowStatus(programKeyPubkey === STOCKFLOOR_PROGRAM),
+    detail: programKeyPubkey
+      ? programKeyPubkey === STOCKFLOOR_PROGRAM
+        ? `keys/stockfloor-program.json = ${STOCKFLOOR_PROGRAM} (declare_id!)`
+        : `keys/stockfloor-program.json is ${programKeyPubkey}, NOT the declared ${STOCKFLOOR_PROGRAM}`
+      : `keys/stockfloor-program.json: ${programKeyError}`,
+    data: { pubkey: programKeyPubkey, expected: STOCKFLOOR_PROGRAM },
+  });
+
+  // A buffer keypair left over from an interrupted deploy: `solana program deploy --buffer` would
+  // resume writing into it, mixing two ELFs. The account must not exist on this cluster.
+  const bufferPath = "keys/stockfloor-deploy-buffer.json";
+  if (!existsSync(join(REPO_ROOT, bufferPath))) {
+    add({
+      id: "deploy-buffer",
+      label: "no stale deploy buffer",
+      status: "GO",
+      detail: `${bufferPath} does not exist: the deploy creates a fresh buffer`,
+      data: { exists: false },
+    });
+  } else {
+    const bufferPubkey = pubkeyOf(bufferPath);
+    const bufferAccount = await rpc.accountInfo(bufferPubkey);
+    const bufferOwner = bufferAccount?.owner ?? "";
+    add({
+      id: "deploy-buffer",
+      label: "no stale deploy buffer",
+      status: bufferAccount ? "NO-GO" : "WARN",
+      detail: bufferAccount
+        ? `${bufferPubkey.slice(0, 8)}… already exists on this cluster (owner ${bufferOwner}): a resumed deploy would mix two ELFs — check \`solana program show --buffers\` and close it, or delete ${bufferPath} to start a fresh buffer`
+        : `${bufferPath} exists but ${bufferPubkey.slice(0, 8)}… is not on this cluster (left over from a local run): the deploy will write a fresh buffer at that address`,
+      data: { exists: true, pubkey: bufferPubkey, onChain: !!bufferAccount },
+    });
+  }
 
   // ---------------------------------------------------------------- 3. program id still free
   const programAccount = await rpc.accountInfo(STOCKFLOOR_PROGRAM);
@@ -392,8 +442,11 @@ main(async () => {
   // ---------------------------------------------------------------- 8. funding
   const deployer = pubkeyOf("keys/deployer.json");
   const deployerBalance = await rpc.balance(deployer);
-  const upgradeHeadroom = switchOn(flags, "upgrade-headroom");
-  // One upgrade needs the programdata rent again at once (buffer), refunded by `Upgrade`.
+  // The headroom is required by default: `solana program deploy` verifies the deployed ELF only
+  // after the 2.57 SOL is spent, and the one non-destructive repair for a bad deploy is an
+  // upgrade, which needs the programdata rent again at once (as a buffer, refunded by `Upgrade`).
+  // Without it the only way out is the irreversible `solana program close`.
+  const upgradeHeadroom = !switchOn(flags, "no-upgrade-headroom");
   const upgradeNeed = upgradeHeadroom
     ? rentExempt(rent, Number(baseline.params.ELF_BYTES) + 45)
     : 0n;
@@ -408,7 +461,7 @@ main(async () => {
         : deployerBalance >= deployCost
           ? "WARN"
           : "NO-GO",
-    detail: `${deployer.slice(0, 8)}… has ${sol(deployerBalance)}; needs ${sol(deployCost)}${upgradeHeadroom ? ` + ${sol(upgradeNeed)} upgrade headroom` : ""}, recommended ${sol(deployerRecommended)}`,
+    detail: `${deployer.slice(0, 8)}… has ${sol(deployerBalance)}; needs ${sol(deployCost)}${upgradeHeadroom ? ` + ${sol(upgradeNeed)} to repair a bad deploy by upgrade` : " (--no-upgrade-headroom: a bad deploy could only be undone by the irreversible `solana program close`)"}, recommended ${sol(deployerRecommended)}`,
     data: {
       pubkey: deployer,
       lamports: deployerBalance.toString(),
