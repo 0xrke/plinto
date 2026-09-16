@@ -3,7 +3,7 @@ import { formatMaxLoss, formatMultiple, formatUsd } from "@/lib/format";
 export interface FloorMeterProps {
   priceUsd: number;
   floorUsd: number;
-  /** Max loss if you buy now, Z = 1 − floor/price, computed by the caller with the SDK. */
+  /** Max loss at the price shown, Z = 1 − floor/price, computed by the caller with the SDK. */
   maxLoss: number;
   /** Compact variant for list cards: thinner bar, no labels. */
   compact?: boolean;
@@ -23,7 +23,7 @@ export function FloorMeter({ priceUsd, floorUsd, maxLoss, compact = false }: Flo
   const belowFloor = safePrice > 0 && safePrice < safeFloor;
   const multiple = safeFloor > 0 ? safePrice / safeFloor : Number.POSITIVE_INFINITY;
 
-  const summary = `Price ${formatUsd(priceUsd)}, floor ${formatUsd(floorUsd)}, max loss if you buy now ${formatMaxLoss(maxLoss)}`;
+  const summary = `Price ${formatUsd(priceUsd)}, floor ${formatUsd(floorUsd)}, max loss at the current price ${formatMaxLoss(maxLoss)}`;
 
   if (compact) {
     return (

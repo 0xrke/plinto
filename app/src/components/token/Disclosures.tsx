@@ -25,7 +25,7 @@ export function Disclosures({ launch }: { launch: LaunchSummary }) {
   const upgrade = useProgramUpgradeStatus();
 
   return (
-    <section id="disclosures" aria-labelledby={`${id}-heading`} className="card scroll-mt-20 p-5 sm:p-6">
+    <section id="disclosures" aria-labelledby={`${id}-heading`} className="card below-header p-5 sm:p-6">
       <h2 id={`${id}-heading`} className="text-lg font-semibold text-ink">
         Disclosures
       </h2>

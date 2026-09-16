@@ -11,7 +11,7 @@ describe("<FloorMeter />", () => {
     render(<FloorMeter priceUsd={0.0000012} floorUsd={0.0000001} maxLoss={1 - 1 / 12} />);
     expect(
       screen.getByRole("img", {
-        name: `Price $0.0000012, floor $0.0000001, max loss if you buy now ${MINUS}91.7%`,
+        name: `Price $0.0000012, floor $0.0000001, max loss at the current price ${MINUS}91.7%`,
       }),
     ).toBeTruthy();
   });

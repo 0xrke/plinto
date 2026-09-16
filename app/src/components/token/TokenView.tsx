@@ -166,7 +166,8 @@ function GraduatedBody({ launch }: { launch: LaunchSummary }) {
               <dd className="mt-0.5 text-2xl font-semibold tracking-tight text-floor-strong">{formatUsd(floorUsd)}</dd>
             </div>
             <div>
-              <dt className="text-xs font-medium text-ink-3">Max loss if you buy now</dt>
+              {/* The spot-price measure. The buy panel's own row is for the amount typed there. */}
+              <dt className="text-xs font-medium text-ink-3">Max loss at the current price</dt>
               <dd className="mt-0.5 text-2xl font-semibold tracking-tight text-risk">{formatMaxLoss(maxLoss)}</dd>
             </div>
           </dl>

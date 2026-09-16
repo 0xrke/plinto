@@ -93,6 +93,18 @@ describe("<TokenView /> after migration", () => {
     expect(screen.queryByText(/has not been harvested into the vault yet/)).toBeNull();
   });
 
+  it("distinguishes the spot max loss from this buy's, and keeps the mandated sentence on the button alone", async () => {
+    renderToken(summary("redeemable"));
+    await screen.findByRole("heading", { name: "Price and floor" });
+    // Two different numbers used to sit on one screen under the same words.
+    expect(screen.getByText("Max loss at the current price")).toBeTruthy();
+    expect(screen.getByText("Max loss for this buy")).toBeTruthy();
+    // "Max loss if you buy now" is reserved for the buy button's required sentence.
+    const mandated = screen.getAllByText(/Max loss if you buy now/);
+    expect(mandated).toHaveLength(1);
+    expect(mandated[0]!.closest("button")).not.toBeNull();
+  });
+
   it("shows no unbuilt chart, and keeps what it said in the vault card", async () => {
     renderToken(summary("redeemable"));
     const vault = await screen.findByRole("region", { name: "Vault" });

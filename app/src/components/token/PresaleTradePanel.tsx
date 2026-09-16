@@ -284,7 +284,7 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
             ) : null}
             {side === "buy" ? (
               <div className="flex justify-between gap-3">
-                <dt className="text-ink-2">Max loss if it graduates (est.)</dt>
+                <dt className="text-ink-2">Max loss for this buy if it graduates (est.)</dt>
                 <dd className="tnum font-semibold text-risk">{estMaxLoss !== null ? formatMaxLoss(estMaxLoss) : "—"}</dd>
               </div>
             ) : null}

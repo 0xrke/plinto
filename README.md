@@ -41,7 +41,7 @@ commands in [`app/README.md`](app/README.md#screenshots).
 [![StockFloor token page on a local mainnet fork: price and floor meter, vault, and the buy panel](docs/screenshots/token-graduated.png)](docs/screenshots/token-graduated.png)
 
 <sub>**A graduated launch, local mainnet fork, 2026-09-16 (not mainnet).** Price $0.00000187 over a floor of
-$0.000000515 backed by 0.651635 SPYx (≈ $494.70) in the vault, and the buy button spelling out the downside:
+$0.000000515 backed by 0.651763 SPYx (≈ $494.80) in the vault, and the buy button spelling out the downside:
 `Price $0.00000195 · Floor $0.000000515 · Max loss if you buy now: −73.5%` (that price is the average for the
 0.02 SPYx buy in the field, pool fee and price impact included).</sub>
 

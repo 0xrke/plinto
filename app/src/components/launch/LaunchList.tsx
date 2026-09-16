@@ -28,7 +28,7 @@ export function LaunchList() {
   const launches = (data ?? []).filter((l) => matches(l, filter));
 
   return (
-    <section id="launches" aria-labelledby="launches-heading" className="scroll-mt-20">
+    <section id="launches" aria-labelledby="launches-heading" className="below-header">
       <DemoDataBanner />
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>

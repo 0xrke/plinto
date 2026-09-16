@@ -159,7 +159,7 @@ describe("<PresaleTradePanel />", () => {
     const label = presaleBuyButtonLabel(avg, projectedFloorUsd(launch));
     expect(label).toMatch(/^Price \$[\d.,]+ · Floor at graduation \(est\.\) \$[\d.,]+ · Max loss if it graduates: −[\d.]+%$/);
     expect(screen.getByRole("button", { name: label })).toBeTruthy();
-    expect(screen.getByText("Max loss if it graduates (est.)")).toBeTruthy();
+    expect(screen.getByText("Max loss for this buy if it graduates (est.)")).toBeTruthy();
     expect(screen.getByText(/There is no floor until graduation/)).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("You pay"), { target: { value: "6" } });

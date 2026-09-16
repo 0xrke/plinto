@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { IS_LOCAL_RPC, RPC_URL, networkLabel } from "@/lib/config";
@@ -16,9 +17,28 @@ const NAV = [
 export function SiteHeader() {
   const pathname = usePathname();
   const { dataSource } = useData();
+  const ref = useRef<HTMLElement>(null);
+
+  /**
+   * The header is sticky, so anything an in-page link jumps to has to clear it. Its height is not a
+   * constant: the demo-data and local-fork strips add a row, and that row wraps to two lines on a
+   * phone. Publish the measured height so `scroll-margin-top` can follow it (globals.css defines the
+   * fallback and the `.below-header` utility that uses it).
+   */
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const publish = () =>
+      document.documentElement.style.setProperty("--app-header-height", `${el.getBoundingClientRect().height}px`);
+    publish();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(publish);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-canvas/90 backdrop-blur">
+    <header ref={ref} className="sticky top-0 z-30 border-b border-line bg-canvas/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-3 sm:gap-6 sm:px-6">
         <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight text-ink">
           <LogoMark className="h-7 w-7" />

@@ -138,20 +138,31 @@ async function assertLocalFork(page: Page, label: string): Promise<void> {
   if (!badge.includes("Local fork")) fail(`${label}: the header says "${badge.trim()}", not "Local fork" — refusing to caption a non-fork capture as one`);
 }
 
-/** Scroll so that `selector` sits just below the sticky header, or to the top when it is absent. */
-async function scrollTo(page: Page, selector: string | null): Promise<void> {
-  await page.evaluate((sel) => {
-    if (!sel) {
-      window.scrollTo(0, 0);
-      return;
-    }
-    const target = document.querySelector(sel);
-    const header = document.querySelector("header");
-    if (!target) return;
-    const offset = (header ? header.getBoundingClientRect().height : 0) + 20;
-    window.scrollTo(0, target.getBoundingClientRect().top + window.scrollY - offset);
-  }, selector);
+async function scrollToTop(page: Page): Promise<void> {
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(250);
+}
+
+/**
+ * Jump to an in-page anchor the way a link does, and check that what it names is actually visible:
+ * the header is sticky, so the anchor's own `scroll-margin-top` has to clear it (`.below-header` in
+ * globals.css, sized from the height SiteHeader publishes). No offset is applied here on purpose —
+ * if the app's offset is wrong, this fails instead of hiding it.
+ */
+async function scrollToAnchor(page: Page, anchor: string, heading: string, label: string): Promise<void> {
+  await page.evaluate((sel) => document.querySelector(sel)?.scrollIntoView(), anchor);
+  await page.waitForTimeout(250);
+  const clearance = await page.evaluate(
+    ([headingSel]) => {
+      const head = document.querySelector("header");
+      const target = document.querySelector(headingSel as string);
+      if (!head || !target) return null;
+      return target.getBoundingClientRect().top - head.getBoundingClientRect().bottom;
+    },
+    [heading],
+  );
+  if (clearance === null) fail(`${label}: ${anchor} or ${heading} is missing`);
+  if (clearance < 0) fail(`${label}: ${heading} sits ${Math.round(-clearance)} px under the sticky header after jumping to ${anchor}`);
 }
 
 async function shot(page: Page, name: string): Promise<void> {
@@ -182,7 +193,7 @@ async function tokenPage(page: Page, launch: LaunchJson, label: string): Promise
   await settled(page);
   await assertNoPlaceholders(page, label);
   // Typing scrolls the panels into view; the shot is of the top of the page.
-  await scrollTo(page, null);
+  await scrollToTop(page);
   console.log(`  buy button: ${buyText}`);
 }
 
@@ -215,7 +226,7 @@ async function main(): Promise<void> {
     await settled(page);
     await assertNoPlaceholders(page, "/create");
     await assertLocalFork(page, "/create");
-    await scrollTo(page, null);
+    await scrollToTop(page);
     await shot(page, "create-preview.png");
     await page.context().close();
 
@@ -227,7 +238,7 @@ async function main(): Promise<void> {
     await cards.first().waitFor();
     if ((await cards.count()) < launches.length)
       fail(`the list shows ${await cards.count()} of ${launches.length} launches`);
-    await scrollTo(page, "#launches");
+    await scrollToAnchor(page, "#launches", "#launches-heading", "launches list");
     await assertNoPlaceholders(page, "launches list");
     await assertLocalFork(page, "launches list");
     await shot(page, "launches.png");

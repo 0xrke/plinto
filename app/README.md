@@ -336,6 +336,8 @@ RPC_PORT=28899 bash ../scripts/surfpool/stop.sh
 `STOCKFLOOR_SCREENSHOT_DIR` move the source and the target). It types a buy and a redemption so both panels
 show exact on-chain quotes, and it **fails instead of saving** when a skeleton or an error state is still on
 the page, when any value is still a "—" placeholder, when the buy button is not the exact
-`Price $X · Floor $Y · Max loss if you buy now: −Z%` sentence, or when the header does not say "Local fork".
-That last check is what keeps the README's captions true; pointing the script at a hosted mainnet build means
-dropping it and rewriting those captions.
+`Price $X · Floor $Y · Max loss if you buy now: −Z%` sentence, when a jump to `#launches` leaves the heading
+under the sticky header (it uses the anchor's own `scroll-margin-top`, so a wrong offset in the app fails the
+run rather than being papered over), or when the header does not say "Local fork". That last check is what
+keeps the README's captions true; pointing the script at a hosted mainnet build means dropping it and
+rewriting those captions.

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WalletContext, type WalletContextState } from "@solana/wallet-adapter-react";
@@ -10,8 +10,8 @@ import { MockDataSource } from "@/lib/data/mock";
 import { NOT_WIRED, StubLaunchActions } from "@/lib/data/actions";
 import { DataProvider } from "@/lib/data/context";
 import type { LaunchSummary } from "@/lib/data/types";
-import { formatTokenAmount } from "@/lib/format";
-import { floorQuotePerToken } from "@/lib/metrics";
+import { formatSignificantDown, formatTokenAmount, formatUsd } from "@/lib/format";
+import { floorQuotePerToken, launchFloorUsd } from "@/lib/metrics";
 import { Disclosures } from "./Disclosures";
 import { RedeemPanel } from "./RedeemPanel";
 import { VaultStats } from "./VaultStats";
@@ -108,6 +108,47 @@ describe("<RedeemPanel />", () => {
     fireEvent.change(screen.getByLabelText("Amount to redeem"), { target: { value: "25000000.000001" } });
     expect(screen.getByText("Amount exceeds your balance.")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Redeem" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("reads as sentences: no symbol is glued to the next word", async () => {
+    const launch = await harbor();
+    render(
+      <Providers>
+        <RedeemPanel launch={launch} />
+      </Providers>,
+    );
+    const panel = await screen.findByRole("region", { name: "Redeem at the floor" });
+    // JSX deletes the whitespace between an expression container and a following line break, so
+    // `{quote.symbol}\n transfers` renders as "SPYxtransfers". Assert the rendered text, not the JSX.
+    expect(panel.textContent!.replace(/\s+/g, " ")).toContain(
+      "The SPYx issuer can pause SPYx transfers, and a program upgrade could change the rules",
+    );
+    // Nothing anywhere in the panel may run the quote symbol into a word.
+    expect(panel.textContent).not.toMatch(/SPYx[A-Za-z]/);
+  });
+
+  it("with no amount typed, states the floor per token instead of placeholders", async () => {
+    const launch = await harbor();
+    render(
+      <Providers>
+        <RedeemPanel launch={launch} />
+      </Providers>,
+    );
+    const panel = await screen.findByRole("region", { name: "Redeem at the floor" });
+    expect((screen.getByLabelText("Amount to redeem") as HTMLInputElement).value).toBe("");
+
+    const floorQuote = floorQuotePerToken(launch.vaultRaw, launch.supplyRaw, launch.baseDecimals, launch.quote);
+    const floorRow = within(panel).getByText("Floor per token").closest("div")!;
+    expect(floorRow.textContent).toContain(`${formatSignificantDown(floorQuote, 4)} SPYx`);
+    expect(floorRow.textContent).toContain(`≈ ${formatUsd(launchFloorUsd(launch))}`);
+
+    const receiveRow = within(panel).getByText("You receive per token").closest("div")!;
+    const afterFeeUsd = launchFloorUsd(launch) * (1 - launch.exitFeeBps / 10_000);
+    expect(receiveRow.textContent).toContain(`≈ ${formatUsd(afterFeeUsd)}`);
+    expect(within(panel).getByText("Enter an amount for the exact payout.")).toBeTruthy();
+
+    // The three "—" placeholders this replaced were the first thing a visitor saw.
+    expect(panel.textContent).not.toContain("—");
   });
 
   it("stays closed before graduation", async () => {

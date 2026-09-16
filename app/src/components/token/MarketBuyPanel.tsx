@@ -275,8 +275,13 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
                 <dt className="text-ink-2">Worth at the floor</dt>
                 <dd className="tnum text-floor-strong">{tokensOut > 0 ? `≈ ${formatUsd(atFloorUsd)}` : "—"}</dd>
               </div>
+              {/*
+                The button below must keep the mandated "… Max loss if you buy now: −Z%" sentence, and
+                the "Price and floor" card states the same measure at the spot price. This row is the
+                one that moves with the amount typed, so it says so.
+              */}
               <div className="flex justify-between gap-3">
-                <dt className="text-ink-2">Max loss if you buy now</dt>
+                <dt className="text-ink-2">Max loss for this buy</dt>
                 <dd className="tnum font-semibold text-risk">{formatMaxLoss(maxLoss)}</dd>
               </div>
             </>

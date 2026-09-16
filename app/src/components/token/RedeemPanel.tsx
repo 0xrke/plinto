@@ -4,9 +4,9 @@ import { useId, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import type { LaunchSummary } from "@/lib/data/types";
 import { useData, useRefreshChainData, useTokenBalance, useTxFlow } from "@/lib/data/context";
-import { formatPercent, formatTokenAmount, formatUsd, parseTokenInput, rawToDecimal } from "@/lib/format";
+import { formatPercent, formatSignificantDown, formatTokenAmount, formatUsd, parseTokenInput, rawToDecimal } from "@/lib/format";
 import { estimateSellUsd, validateRedeemAmount } from "@/lib/estimates";
-import { previewRedeem } from "@/lib/metrics";
+import { floorQuotePerToken, launchFloorUsd, previewRedeem } from "@/lib/metrics";
 import { quoteMarketSellUsd } from "@/lib/tradeQuote";
 import { AmountField } from "@/components/ui/AmountField";
 import { TxProgress } from "@/components/ui/TxProgress";
@@ -45,6 +45,13 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
       ? estimateSellUsd(rawToDecimal(amountRaw, launch.baseDecimals).toNumber(), launch.priceUsd, MARKET_FEE_BPS)
       : 0);
 
+  // With no amount typed (and with no wallet, which is most first visits) there is nothing to
+  // preview, so the same three rows state the rate instead: what one token is backed by and what it
+  // would pay after the exit fee. Both are read from the vault, and neither needs a wallet.
+  const floorQuote = floorQuotePerToken(launch.vaultRaw, launch.supplyRaw, launch.baseDecimals, launch.quote);
+  const floorUsd = launchFloorUsd(launch);
+  const perTokenAfterFeeUsd = floorUsd * (1 - launch.exitFeeBps / 10_000);
+
   const canSubmit = open && !launch.quotePaused && gate.ready && preview !== null && !zeroPayout && !status.pending;
 
   async function onRedeem() {
@@ -69,7 +76,7 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
       </h2>
       <p className="mt-1 text-sm text-ink-2">
         Burn ${launch.symbol} and receive your pro-rata share of the vault in {quote.symbol}. Available to every
-        holder at any time: the program has no pause switch. The {quote.symbol} issuer can pause {quote.symbol}
+        holder at any time: the program has no pause switch. The {quote.symbol} issuer can pause {quote.symbol}{" "}
         transfers, and a program upgrade could change the rules (see disclosures).
       </p>
 
@@ -104,30 +111,26 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
           />
 
           <dl className="space-y-2 rounded-lg bg-sunken/70 p-3 text-sm" aria-live="polite">
-            <div className="flex justify-between gap-3">
-              <dt className="text-ink-2">Share of the vault</dt>
-              <dd className="tnum text-right text-ink">{preview ? quoteAmount(preview.gross) : "—"}</dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-ink-2">
-                Exit fee {formatPercent(launch.exitFeeBps / 10_000)}{" "}
-                <span className="text-ink-3">(stays in the vault)</span>
-              </dt>
-              <dd className="tnum text-right text-ink">
-                {preview ? `−${quoteAmount(preview.fee)}` : "—"}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-3 border-t border-line pt-2">
-              <dt className="font-semibold text-ink">You receive</dt>
-              <dd className="text-right">
-                <span className="tnum block font-semibold text-floor-strong">
-                  {preview ? quoteAmount(preview.net) : "—"}
-                </span>
-                {preview ? <span className="block text-xs text-ink-3">≈ {formatUsd(preview.netUsd)}</span> : null}
-              </dd>
-            </div>
             {preview ? (
               <>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-ink-2">Share of the vault</dt>
+                  <dd className="tnum text-right text-ink">{quoteAmount(preview.gross)}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-ink-2">
+                    Exit fee {formatPercent(launch.exitFeeBps / 10_000)}{" "}
+                    <span className="text-ink-3">(stays in the vault)</span>
+                  </dt>
+                  <dd className="tnum text-right text-ink">−{quoteAmount(preview.fee)}</dd>
+                </div>
+                <div className="flex justify-between gap-3 border-t border-line pt-2">
+                  <dt className="font-semibold text-ink">You receive</dt>
+                  <dd className="text-right">
+                    <span className="tnum block font-semibold text-floor-strong">{quoteAmount(preview.net)}</span>
+                    <span className="block text-xs text-ink-3">≈ {formatUsd(preview.netUsd)}</span>
+                  </dd>
+                </div>
                 <div className="flex justify-between gap-3 text-xs">
                   <dt className="text-ink-3">{marketExact !== null ? "Selling at market instead (exact DAMM v2 quote)" : "Selling at market instead (est.)"}</dt>
                   <dd className="tnum text-ink-3">≈ {formatUsd(marketUsd)}</dd>
@@ -144,7 +147,32 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
                   </dd>
                 </div>
               </>
-            ) : null}
+            ) : (
+              <>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-ink-2">Floor per token</dt>
+                  <dd className="text-right">
+                    <span className="tnum block text-ink">
+                      {formatSignificantDown(floorQuote, 4)} {quote.symbol}
+                    </span>
+                    <span className="block text-xs text-ink-3">≈ {formatUsd(floorUsd)}</span>
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-ink-2">Exit fee</dt>
+                  <dd className="text-right text-ink">
+                    <span className="tnum">{formatPercent(launch.exitFeeBps / 10_000)}</span>{" "}
+                    <span className="text-ink-3">(stays in the vault)</span>
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3 border-t border-line pt-2">
+                  <dt className="font-semibold text-ink">You receive per token</dt>
+                  <dd className="tnum text-right font-semibold text-floor-strong">≈ {formatUsd(perTokenAfterFeeUsd)}</dd>
+                </div>
+                {/* Full width, not in the value column: right-aligned it wraps twice on a phone. */}
+                <div className="text-xs text-ink-3">Enter an amount for the exact payout.</div>
+              </>
+            )}
           </dl>
 
           {zeroPayout ? (

@@ -40,6 +40,15 @@
 }
 
 @layer base {
+  :root {
+    /*
+     * Height of the sticky site header. SiteHeader measures itself and overwrites this, because the
+     * header grows by a row when the demo-data or local-fork strip is shown and by another line when
+     * that strip wraps on a phone. The value here is the bare header, so an in-page jump clears it
+     * even before hydration.
+     */
+    --app-header-height: 3.25rem;
+  }
   html {
     color-scheme: light;
     -webkit-text-size-adjust: 100%;
@@ -61,6 +70,10 @@
 }
 
 @layer components {
+  /* An in-page anchor target that must land below the sticky header, whatever its height is. */
+  .below-header {
+    scroll-margin-top: calc(var(--app-header-height) + 1rem);
+  }
   .card {
     background: var(--color-surface);
     border: 1px solid var(--color-line);
