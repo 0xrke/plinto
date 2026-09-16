@@ -23,8 +23,8 @@
 # | `--allow-mainnet` | off | Second mainnet switch (with `STOCKFLOOR_ALLOW_MAINNET=1`) |
 # | `--yes` | off | Skip the per-step confirmation prompts (unattended) |
 # | `--confirm` | off | Ask for confirmation in the dry run too (rehearse the prompts) |
-# | `--resume <id\|latest>` | — | Continue a previous run: skip the steps it completed |
-# | `--from <step>` | — | Mark every step before `<step>` as skipped (manual recovery) |
+# | `--resume <id\|latest>` | — | Continue a previous run: skip the steps it completed. `latest` is the newest run **of the current mode** (by modification time); a run recorded in the other mode is refused |
+# | `--from <step>` | — | Mark every step before `<step>` as skipped (manual recovery); an unknown step id is refused |
 # | `--threshold-usd <n>` | 50 | Migration threshold of the demo launch |
 # | `--priority-fee <n>` | 100000 | Micro-lamports per compute unit on every transaction |
 # | `--max-price-drift-pct <n>` | 5 | Abort if the quote price moved more than this since the plan |
@@ -97,7 +97,7 @@ while [[ $# -gt 0 ]]; do
     --restart) RESTART=1 ;;
     --keep) KEEP=1 ;;
     -h | --help)
-      sed -n '2,52p' "$0"
+      sed -n '2,43p' "$0"
       exit 0
       ;;
     *) die "unknown argument: $1" ;;
@@ -122,31 +122,66 @@ if [[ "$MODE" == "mainnet" ]]; then
   esac
   [[ -n "$TOKEN_URI" ]] || die "TOKEN_URI must point at the token metadata JSON the user hosts"
   [[ -f "$ROOT/keys/c2-approved" ]] || die "keys/c2-approved is missing: the user has not approved the C2 run (docs/c2-runbook.md)"
+  APPROVAL_SHA="$(shasum -a 256 "$ROOT/keys/c2-approved" | cut -d' ' -f1)"
   export STOCKFLOOR_ALLOW_MAINNET=1
   [[ -n "$USE_RPC" ]] || USE_RPC=0
 else
   RPC="http://127.0.0.1:${RPC_PORT}"
   TOKEN_URI="${TOKEN_URI:-https://raw.githubusercontent.com/stockfloor/stockfloor/main/app/public/demo/sfdemo.json}"
-  # A dry run must never be able to send to mainnet: without the override the SDK guard accepts only
-  # a loopback Surfpool surfnet.
+  APPROVAL_SHA=""
+  # A dry run must never be able to send to mainnet. Three independent things enforce that, and all
+  # three are load-bearing:
+  #   1. the SDK send guard: without the override it accepts only a loopback Surfpool surfnet;
+  #   2. the preflight cluster row: the dry run aborts unless the endpoint reports `surfnet-version`
+  #      (see "--expect-cluster surfnet" below);
+  #   3. `scripts/e2e/setup.ts mainnet-rent`, which is *not* optional: it writes the Rent sysvar with
+  #      the Surfpool-only `surfnet_setAccount` cheatcode, so it fails on any endpoint that is not a
+  #      surfnet — including a real mainnet RPC reached through a loopback tunnel.
   unset STOCKFLOOR_ALLOW_MAINNET
   [[ -n "$USE_RPC" ]] || USE_RPC=1
 fi
 
 # ---------------------------------------------------------------- run directory and state
+# Run ids are "<prefix>-<UTC timestamp>"; the prefix is the mode, so a run directory can never be
+# shared by a dry run and a mainnet run.
+RUN_PREFIX="$([[ "$MODE" == "mainnet" ]] && echo "c2" || echo "dry")"
 mkdir -p "$ROOT/target/c2"
+
+# The mode a run directory was created in: state.env (current runs), meta.env (runs from before
+# MODE was recorded in the state), or the run-id prefix as a last resort.
+run_dir_mode() {
+  local dir="$1" mode=""
+  mode="$({ sed -n 's/^MODE=//p' "$dir/state.env" 2>/dev/null || true; } | tail -1)"
+  [[ -n "$mode" ]] || mode="$({ sed -n 's/^MODE=//p' "$dir/meta.env" 2>/dev/null || true; } | tail -1)"
+  if [[ -z "$mode" ]]; then
+    case "$(basename "$dir")" in
+      c2-*) mode=mainnet ;;
+      dry-*) mode=dry ;;
+    esac
+  fi
+  printf '%s' "$mode"
+}
+
 if [[ -n "$RESUME" ]]; then
   if [[ "$RESUME" == "latest" ]]; then
-    RUN_ID="$(ls -1 "$ROOT/target/c2" 2>/dev/null | while read -r d; do [[ -f "$ROOT/target/c2/$d/state.env" ]] && echo "$d"; done | tail -1)"
-    [[ -n "$RUN_ID" ]] || die "no previous run with state under target/c2/"
+    # By modification time, and only within this mode's prefix. Sorting the directory names would
+    # order "dry-…" after "c2-…" whatever their age, so a mainnet resume would pick up a dry run,
+    # skip every step it already completed and rewrite its committed report as a mainnet report.
+    LATEST_STATE="$(ls -t "$ROOT"/target/c2/"$RUN_PREFIX"-*/state.env 2>/dev/null | head -1)"
+    [[ -n "$LATEST_STATE" ]] ||
+      die "no previous $MODE run with state under target/c2/ (a run of the other mode cannot be resumed here)"
+    RUN_ID="$(basename "$(dirname "$LATEST_STATE")")"
   else
     RUN_ID="$RESUME"
   fi
   RUN_DIR="$ROOT/target/c2/$RUN_ID"
   [[ -f "$RUN_DIR/state.env" ]] || die "no run state at $RUN_DIR/state.env"
-  echo "resuming run $RUN_ID"
+  RESUME_MODE="$(run_dir_mode "$RUN_DIR")"
+  [[ -z "$RESUME_MODE" || "$RESUME_MODE" == "$MODE" ]] ||
+    die "run $RUN_ID was a ${RESUME_MODE} run; refusing to continue it in ${MODE} mode (its steps, addresses and report belong to the other cluster — start a new run instead)"
+  echo "resuming run $RUN_ID ($MODE)"
 else
-  RUN_ID="$([[ "$MODE" == "mainnet" ]] && echo "c2" || echo "dry")-$(date -u +%Y%m%dT%H%M%SZ)"
+  RUN_ID="${RUN_PREFIX}-$(date -u +%Y%m%dT%H%M%SZ)"
   RUN_DIR="$ROOT/target/c2/$RUN_ID"
   mkdir -p "$RUN_DIR"
   : >"$RUN_DIR/state.env"
@@ -167,8 +202,31 @@ state_set() {
 state_get() {
   { sed -n "s/^$1=//p" "$STATE" 2>/dev/null || true; } | tail -1
 }
+state_set MODE "$MODE"
 
-sed_escape() { printf '%s' "$1" | sed -e 's/[\/&|]/\\&/g'; }
+# The approval marker authorises ONE run. It is bound to the run id here, so the same
+# `keys/c2-approved` cannot silently start a second full mainnet run; resuming the run it authorised
+# stays possible. The script never creates or modifies the marker — only the user does.
+if [[ "$MODE" == "mainnet" ]]; then
+  for d in "$ROOT"/target/c2/c2-*/; do
+    [[ -d "$d" && -f "${d}state.env" ]] || continue
+    other="$(basename "${d%/}")"
+    [[ "$other" != "$RUN_ID" ]] || continue
+    grep -qxF "APPROVAL_SHA=$APPROVAL_SHA" "${d}state.env" 2>/dev/null || continue
+    other_outcome="$({ sed -n 's/^OUTCOME=//p' "${d}state.env" 2>/dev/null || true; } | tail -1)"
+    die "keys/c2-approved already authorised run $other (${other_outcome:-still in progress}).
+  - to continue that run:  bash scripts/c2/run.sh --resume $other --mainnet --allow-mainnet
+  - for a genuinely new run the user re-creates the marker:
+      printf 'C2 approved %s\\n' \"\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > keys/c2-approved"
+  done
+  state_set APPROVAL_SHA "$APPROVAL_SHA"
+fi
+
+# Escape a string for use as the pattern of `s|…|…|` in BRE (sed): the delimiter, the replacement's
+# `&`, and every BRE metacharacter, `[` and `]` included.
+sed_escape() {
+  node -e 'process.stdout.write(String(process.argv[1]).replace(/[\\^$.*|/&\[\]]/g, "\\$&"))' "$1"
+}
 REDACT_SED="s|$(sed_escape "$RPC")|<rpc>|g"
 redact() { printf '%s' "$*" | sed -e "$REDACT_SED"; }
 RPC_DISPLAY="$(node -e 'const u=new URL(process.argv[1]); process.stdout.write(u.pathname.replace(/\/+$/,"")!==""||u.search!==""?`${u.origin}/…`:u.origin)' "$RPC")"
@@ -204,6 +262,12 @@ Recovery
   - state and logs: ${RUN_DIR#"$ROOT"/}/ (transaction log: scripts/c2/reports/${RUN_ID}.md)
   - resume this run after fixing the cause:
       bash scripts/c2/run.sh --resume $RUN_ID$([[ "$MODE" == "mainnet" ]] && echo " --mainnet --allow-mainnet")
+  - a step that failed while waiting for a confirmation may still have landed. Check its signatures
+    (below, in the report, and in ${RUN_DIR#"$ROOT"/}/logs/) with
+      solana confirm -v <signature> --url "\$MAINNET_RPC_URL"
+    or the launch state with \`bash packages/sdk/scripts/run.sh status --rpc "\$MAINNET_RPC_URL" --launch <launch>\`.
+    If it landed, answer \`skip\` at that step's prompt when you resume — buys, sells and redemptions
+    are not idempotent.
   - per-stage abort and rollback notes: docs/c2-runbook.md
 EOF
 }
@@ -211,9 +275,23 @@ EOF
 abort_run() {
   echo >&2
   echo "ABORT: $*" >&2
+  # Record whatever the failing step already sent BEFORE writing the report: a send whose
+  # confirmation timed out leaves its signature in the step log, and it may well have landed.
+  local sigs=""
+  if [[ -n "${CURRENT_STEP:-}" && -n "${STEP_LOG:-}" && -f "${STEP_LOG:-}" ]]; then
+    collect_txs "$CURRENT_STEP" || true
+    sigs="$({ awk -F'\t' -v s="$CURRENT_STEP" '$1 == s { print $2 }' "$TXS_TSV" 2>/dev/null || true; })"
+  fi
   state_set OUTCOME "aborted in step ${CURRENT_STEP:-<none>}: $*"
   state_set FINISHED_AT "$(date -u +%FT%TZ)"
   report_now || true
+  if [[ -n "$sigs" ]]; then
+    {
+      echo
+      echo "Transactions already sent in step ${CURRENT_STEP} (they may have landed even though the step failed):"
+      echo "$sigs" | sed -e 's/^/  /'
+    } >&2
+  fi
   print_recovery
   exit 1
 }
@@ -230,6 +308,13 @@ trap cleanup EXIT
 
 # ---------------------------------------------------------------- step plumbing
 STEP_ORDER="deploy create-launch buy1 buy2 crank-graduate damm-buy damm-sell crank-lp redeem1 redeem2 status-final"
+# A mistyped --from used to mark every step "skipped" and finish a run that sent nothing.
+if [[ -n "$FROM" ]]; then
+  case " $STEP_ORDER " in
+    *" $FROM "*) ;;
+    *) die "--from $FROM is not a step id. Steps: $STEP_ORDER" ;;
+  esac
+fi
 CURRENT_STEP=""
 STEP_LOG=""
 STEP_START=0
@@ -237,7 +322,7 @@ REACHED_FROM=0
 
 step_title() {
   case "$1" in
-    deploy) echo "Deploy the stockfloor program (480 BPF loader transactions, ~2.57 SOL of rent from the deployer)" ;;
+    deploy) echo "Deploy the stockfloor program ($(( (ELF_BYTES + 959) / 960 + 2 )) BPF loader transactions, ~2.57 SOL of rent from the deployer)" ;;
     create-launch) echo "Create the launch: DBC config + Launch PDA + vault, then pool + register_pool + creator first buy (2 transactions, creator)" ;;
     buy1) echo "Presale buy: buyer1 takes 45% of the threshold on the DBC curve (1 transaction)" ;;
     buy2) echo "Completing presale buy: buyer2 offers 50% of the threshold (PartialFill completes the curve, 1 transaction)" ;;
@@ -251,9 +336,80 @@ step_title() {
   esac
 }
 
+# Who signs and pays for a step, as "<role> <key file>".
+step_payer() {
+  case "$1" in
+    deploy) echo "deployer keys/deployer.json" ;;
+    create-launch) echo "creator keys/cli-creator.json" ;;
+    buy1 | damm-buy | redeem1) echo "buyer1 keys/cli-buyer1.json" ;;
+    buy2 | damm-sell | redeem2) echo "buyer2 keys/cli-buyer2.json" ;;
+    crank-graduate | crank-lp) echo "cranker keys/cli-cranker.json" ;;
+  esac
+}
+
+# 1234567 -> 1,234,567 (left alone when it is not a number).
+group() { node -e 'process.stdout.write(String(process.argv[1]).replace(/\B(?=(\d{3})+(?!\d))/g, ","))' "$1"; }
+
+# The deploy cost the preflight measured from the live rent, in SOL.
+deploy_cost_sol() {
+  node -e '
+    try {
+      const r = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+      const row = (r.rows || []).find((x) => x.id === "rent");
+      process.stdout.write(row ? (Number(row.data.deployCost) / 1e9).toFixed(4) : "2.57");
+    } catch { process.stdout.write("2.57"); }
+  ' "$RUN_DIR/preflight.json"
+}
+
+# Raw quote amount as "<raw> raw SPYx (≈ $x.xx)" using the price the amounts were planned at.
+# QUOTE_DECIMALS defaults to SPYx's 8; every quote asset on the allowlist is an 8-decimal xStock.
+fmt_quote() {
+  node -e '
+    const raw = BigInt(process.argv[1] || "0");
+    const price = Number(process.argv[2] || "0");
+    const mult = Number(process.argv[3] || "1");
+    const decimals = Number(process.argv[4] || "8");
+    const usd = (Number(raw) / 10 ** decimals) * mult * price;
+    const grouped = raw.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    process.stdout.write(`${grouped} raw ${process.argv[5]}` + (price > 0 ? ` (≈ $${usd.toFixed(2)})` : ""));
+  ' "$1" "${PRICE_USD:-0}" "${QUOTE_MULTIPLIER:-1}" "${QUOTE_DECIMALS:-8}" "$QUOTE"
+}
+
+# What the step is about to spend. Printed with the prompt: a confirmation that names only the step
+# id tells the operator nothing about the amount or the wallet it leaves.
+step_amount() {
+  case "$1" in
+    deploy) echo "≈ $(deploy_cost_sol) SOL from the deployer over $(( (ELF_BYTES + 959) / 960 + 2 )) transactions; almost all of it is programdata rent, which only the irreversible \`solana program close\` gives back" ;;
+    create-launch) echo "$(fmt_quote "${FIRST_BUY_RAW:-0}") as the creator's first buy, plus ≈ 0.032 SOL of account rent" ;;
+    buy1) echo "$(fmt_quote "${BUYER1_BUY_RAW:-0}")" ;;
+    buy2) echo "$(fmt_quote "${BUYER2_OFFER_RAW:-0}") offered; PartialFill takes only what the curve still needs" ;;
+    damm-buy) echo "$(fmt_quote "${BUYER1_DAMM_RAW:-0}")" ;;
+    damm-sell) echo "$(group "${BUYER2_SELL_RAW:-?}") raw base tokens sold on DAMM v2" ;;
+    redeem1) echo "$(group "${BUYER1_REDEEM_RAW:-?}") raw base tokens burned for $QUOTE from the vault" ;;
+    redeem2) echo "buyer2's whole base balance burned for $QUOTE from the vault" ;;
+    crank-graduate) echo "no funds from the signer beyond fees (≈ 0.018 SOL, including the migration flash rent)" ;;
+    crank-lp) echo "no funds from the signer beyond fees (≈ 0.0002 SOL)" ;;
+    status-final) echo "nothing: a read-only status query" ;;
+  esac
+}
+
+step_context() {
+  local id="$1" amount payer role file
+  amount="$(step_amount "$id")"
+  [[ -z "$amount" ]] || echo "   spends      : $amount"
+  payer="$(step_payer "$id")"
+  if [[ -n "$payer" ]]; then
+    role="${payer%% *}"
+    file="${payer#* }"
+    echo "   fee payer   : $role $(solana-keygen pubkey "$ROOT/$file" 2>/dev/null || echo "?") ($file)"
+  fi
+}
+
 confirm() {
-  # 0 = go, 2 = skip this step; anything else aborts the run.
-  local prompt="$1" answer=""
+  # 0 = go, 2 = skip this step; `abort` (or an unreadable terminal) aborts the run. Anything else is
+  # re-prompted: at a prompt that is about to spend real money, a typo must not mean "go" and must
+  # not throw away a run either.
+  local prompt="$1" answer="" tries=0
   if [[ "$ASSUME_YES" == "1" ]]; then
     echo "   (--yes) proceeding"
     return 0
@@ -263,22 +419,57 @@ confirm() {
   if ! exec 3<>/dev/tty 2>/dev/null; then
     abort_run "no terminal is available for the confirmation prompt (re-run with --yes)"
   fi
-  printf '   %s [yes / skip / abort]: ' "$prompt" >&3
-  read -r answer <&3 || answer=""
-  exec 3>&-
-  case "$answer" in
-    yes | y | Y | YES) return 0 ;;
-    skip | s) return 2 ;;
-    *) abort_run "stopped by the operator at step $CURRENT_STEP" ;;
-  esac
+  while true; do
+    printf '   %s [yes / skip / abort]: ' "$prompt" >&3
+    if ! read -r answer <&3; then
+      exec 3>&-
+      abort_run "the confirmation prompt reached end of input at step $CURRENT_STEP (re-run with --yes for an unattended run)"
+    fi
+    case "$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" in
+      y | yes) exec 3>&- ; return 0 ;;
+      s | skip) exec 3>&- ; return 2 ;;
+      a | abort | n | no | quit | q)
+        exec 3>&-
+        abort_run "stopped by the operator at step $CURRENT_STEP"
+        ;;
+      *)
+        tries=$((tries + 1))
+        if [[ $tries -ge 5 ]]; then
+          exec 3>&-
+          abort_run "no valid answer after $tries attempts at step $CURRENT_STEP"
+        fi
+        printf '   answer "yes" to run this step, "skip" to leave it out, "abort" to stop the run.\n' >&3
+        ;;
+    esac
+  done
 }
 
+# True once a step that moves funds has completed.
+money_moved() {
+  local s
+  for s in create-launch buy1 buy2; do
+    if [[ "$(state_get "STEP_${s}")" == "done" ]]; then return 0; fi
+  done
+  return 1
+}
+
+# quote_guard <chain|price>
+#   chain: only what is on chain — is the quote mint paused, did a transfer hook appear. Every step
+#          that moves the quote asset runs this.
+#   price: additionally compares the live Jupiter price with the price the amounts were planned at.
+#          Only the steps whose raw amounts are derived from that price run it (create-launch, buy1,
+#          buy2, damm-buy). The sell and the two redemptions spend on-chain balances, so a Jupiter
+#          rate-limit blip must not abort the run between the buys and the redemptions.
 quote_guard() {
+  local kind="${1:-chain}"
   local args=(quote-guard --rpc "$RPC" --quote "$QUOTE" --max-drift-pct "$MAX_DRIFT_PCT")
-  if [[ "$SKIP_PRICE_GUARD" == "1" || -z "${PRICE_USD:-}" ]]; then
+  if [[ "$kind" != "price" || "$SKIP_PRICE_GUARD" == "1" || -z "${PRICE_USD:-}" ]]; then
     args+=(--skip-price)
   else
     args+=(--baseline-price "$PRICE_USD")
+    # After the first buy the threshold is fixed on chain in raw units: an unreachable Jupiter is
+    # then a warning, not a reason to stop a run that has already spent money.
+    if money_moved; then args+=(--price-optional); fi
   fi
   set +e
   "$TSX" "$ROOT/scripts/c2/checks.ts" "${args[@]}"
@@ -286,7 +477,7 @@ quote_guard() {
   set -e
   case $code in
     0) ;;
-    3) abort_run "the $QUOTE guard stopped the run before step $CURRENT_STEP" ;;
+    3) abort_run "the $QUOTE guard stopped the run before step $CURRENT_STEP. --skip-price-guard keeps only the on-chain pause and transfer-hook checks; --max-price-drift-pct <n> widens the price window; a new run re-plans the amounts at the current price." ;;
     *) abort_run "the $QUOTE guard could not run before step $CURRENT_STEP (exit $code)" ;;
   esac
 }
@@ -307,7 +498,8 @@ phase_guard() {
 
 guards_for() {
   case "$1" in
-    create-launch | buy1 | buy2 | damm-buy | damm-sell | redeem1 | redeem2) quote_guard ;;
+    create-launch | buy1 | buy2 | damm-buy) quote_guard price ;;
+    deploy | crank-graduate | damm-sell | crank-lp | redeem1 | redeem2) quote_guard chain ;;
   esac
   case "$1" in
     buy1 | buy2) phase_guard "presale" ;;
@@ -340,6 +532,7 @@ step_begin() {
   fi
   echo
   echo "== [$id] $(step_title "$id")"
+  step_context "$id"
   guards_for "$id"
   set +e
   confirm "run step $id?"
@@ -366,11 +559,50 @@ run_cmd() {
   return $code
 }
 
+# plan_cmd <out file> <abort message> <plan.ts arguments...>
+# The read-only planner writes `export K=V` lines that the later steps source. Running it through
+# here means a failure ends the run the way any other failure does — with a written report, a
+# recorded outcome and the recovery block — instead of a bare non-zero exit.
+plan_cmd() {
+  local out="$1" message="$2"
+  shift 2
+  echo "\$ $(redact "scripts/e2e/plan.ts $*")"
+  set +e
+  "$TSX" "$ROOT/scripts/e2e/plan.ts" "$@" >"$out.tmp" 2>"$out.err"
+  local code=$?
+  set -e
+  if [[ $code -ne 0 ]]; then
+    { sed -e "$REDACT_SED" "$out.err" || true; } >&2
+    rm -f "$out.tmp" "$out.err"
+    abort_run "$message (scripts/e2e/plan.ts exited $code)"
+  fi
+  rm -f "$out.err"
+  mv "$out.tmp" "$out"
+  cat "$out"
+}
+
 collect_txs() {
   local id="$1"
-  # Full base58 transaction signatures printed by the SDK CLI and the Solana CLI (85-88 characters;
-  # addresses are at most 44, so there is no overlap).
-  { grep -oE '[1-9A-HJ-NP-Za-km-z]{85,88}' "$STEP_LOG" 2>/dev/null || true; } | awk '!seen[$0]++' |
+  # Transaction signatures, in the shapes the tools actually print them:
+  #   success  `Signature: <sig>`                 (solana program deploy)
+  #            `"signature": "<sig>"`             (SDK CLI JSON output)
+  #            `sent create_config+…: <sig>`      (create-launch, per transaction)
+  #            `… migrate executed <sig> (… CU)`  (crank)
+  #   failure  `… Check signature <sig> using …`  (web3.js confirmation timeout: it may have landed)
+  #            `Signature <sig> has expired: …`   (blockhash expired)
+  #            `<label> <sig> failed: …`          (confirmed with an on-chain error)
+  # The last three are why abort_run calls this: a send whose confirmation timed out has to reach the
+  # report, or the operator resumes blind.
+  #
+  # Anchoring on those labels is also what makes it safe to scan the log at all: a bare "85-88 base58
+  # characters" search has exactly the alphabet and length of a base58-encoded 64-byte secret key, so
+  # anything of that shape that ever reached a step log would be copied into the committed report.
+  {
+    { grep -oE '([Ss]ignature"?:?|sent [A-Za-z0-9_+-]+:|executed) *"?[1-9A-HJ-NP-Za-km-z]{85,88}' "$STEP_LOG" 2>/dev/null || true; } |
+      sed -E 's/.*[^1-9A-HJ-NP-Za-km-z]//'
+    { grep -oE '[1-9A-HJ-NP-Za-km-z]{85,88} (failed|has expired)' "$STEP_LOG" 2>/dev/null || true; } |
+      sed -E 's/[^1-9A-HJ-NP-Za-km-z].*$//'
+  } | awk '!seen[$0]++' |
     while read -r sig; do
       grep -qF "$sig" "$TXS_TSV" 2>/dev/null || printf '%s\t%s\n' "$id" "$sig" >>"$TXS_TSV"
     done
@@ -389,9 +621,17 @@ add_address() {
   { cut -f1 "$ADDR_TSV" 2>/dev/null || true; } | grep -qxF "$1" || printf '%s\t%s\n' "$1" "$2" >>"$ADDR_TSV"
 }
 
+# The SDK CLI commands that send transactions. Only these take --allow-mainnet: it is the send
+# guard's switch, and a command that does not declare it as a switch (status) would parse the next
+# flag as its value and die with "missing value for --allow-mainnet".
+# packages/sdk/test/c2-cli-flags.test.ts checks this list against both run.sh and the scripts.
+SDK_SENDING_COMMANDS="create-launch buy sell redeem crank"
+
 sdk_cmd() {
   SDK_CMD=(bash "$ROOT/packages/sdk/scripts/run.sh" "$1" --rpc "$RPC")
-  [[ "$MODE" == "mainnet" ]] && SDK_CMD+=(--allow-mainnet)
+  if [[ "$MODE" == "mainnet" && " $SDK_SENDING_COMMANDS " == *" $1 "* ]]; then
+    SDK_CMD+=(--allow-mainnet)
+  fi
   shift
   SDK_CMD+=("$@")
 }
@@ -432,14 +672,17 @@ if [[ "$MODE" != "mainnet" ]]; then
     SURFNET_STARTED=1
     "$TSX" "$ROOT/scripts/e2e/setup.ts" check-fresh
   fi
+  # Load-bearing, not just fidelity: `mainnet-rent` writes the Rent sysvar with the Surfpool-only
+  # `surfnet_setAccount` cheatcode, so it fails on anything that is not a surfnet. Together with the
+  # preflight cluster check below it is what keeps a "dry run" from ever talking to real mainnet.
   "$TSX" "$ROOT/scripts/e2e/setup.ts" mainnet-rent
   "$TSX" "$ROOT/scripts/e2e/setup.ts" token-programs
 fi
 
 # ---------------------------------------------------------------- 1. amounts from the live price
 if [[ ! -s "$RUN_DIR/plan.env" ]]; then
-  "$TSX" "$ROOT/scripts/e2e/plan.ts" pre-launch --threshold-usd "$THRESHOLD_USD" --quote "$QUOTE" --rpc "$RPC" |
-    tee "$RUN_DIR/plan.env"
+  plan_cmd "$RUN_DIR/plan.env" "the demo amounts could not be planned from the live $QUOTE price" \
+    pre-launch --threshold-usd "$THRESHOLD_USD" --quote "$QUOTE" --rpc "$RPC"
 fi
 # shellcheck disable=SC1091
 source "$RUN_DIR/plan.env"
@@ -460,15 +703,18 @@ fi
 echo
 echo "== preflight"
 set +e
+EXPECT_CLUSTER="$([[ "$MODE" == "mainnet" ]] && echo "mainnet" || echo "surfnet")"
 "$TSX" "$ROOT/scripts/c2/preflight.ts" --rpc "$RPC" --threshold-usd "$THRESHOLD_USD" \
   --priority-fee "$PRIORITY_FEE" --quote "$QUOTE" --so "$SO" --max-len "$MAX_LEN" \
+  --expect-cluster "$EXPECT_CLUSTER" \
   --plan-file "$RUN_DIR/plan.env" --out "$RUN_DIR/preflight.json" "${PREFLIGHT_EXTRA[@]+"${PREFLIGHT_EXTRA[@]}"}" |
   sed -e "$REDACT_SED" | tee "$RUN_DIR/logs/preflight.log"
 PREFLIGHT_CODE=${PIPESTATUS[0]}
 set -e
 PREFLIGHT_VERDICT="$(json_field "$RUN_DIR/preflight.json" verdict || true)"
 PREFLIGHT_WARNINGS="$(json_field "$RUN_DIR/preflight.json" counts.warnings || true)"
-state_set PREFLIGHT "$PREFLIGHT_VERDICT ($PREFLIGHT_WARNINGS warning(s))"
+PREFLIGHT_CLUSTER="$(json_field "$RUN_DIR/preflight.json" cluster || true)"
+state_set PREFLIGHT "$PREFLIGHT_VERDICT ($PREFLIGHT_WARNINGS warning(s), cluster ${PREFLIGHT_CLUSTER:-unknown})"
 report_now
 if [[ "$MODE" == "mainnet" ]]; then
   [[ "$PREFLIGHT_CODE" -eq 0 && "$PREFLIGHT_VERDICT" == "GO" ]] ||
@@ -479,8 +725,15 @@ if [[ "$MODE" == "mainnet" ]]; then
     [[ $? -eq 0 ]] || abort_run "stopped after the preflight warnings"
     set -e
   fi
-elif [[ "$PREFLIGHT_CODE" -ne 0 ]]; then
-  echo "(dry run: preflight verdict $PREFLIGHT_VERDICT — continuing, the local fork is not mainnet)"
+else
+  # A dry run may only ever run against a Surfpool surfnet. The preflight classifies the endpoint
+  # from `getVersion` (surfnet-version), not from its host name, so a surfnet behind any hostname
+  # counts and a real cluster behind a loopback name does not.
+  [[ "$PREFLIGHT_CLUSTER" == "surfnet" ]] ||
+    abort_run "the dry run's endpoint is not a Surfpool surfnet (preflight cluster: ${PREFLIGHT_CLUSTER:-unknown}). A dry run must never send anywhere else; start one with scripts/surfpool/start.sh."
+  if [[ "$PREFLIGHT_CODE" -ne 0 ]]; then
+    echo "(dry run: preflight verdict $PREFLIGHT_VERDICT — continuing on the surfnet; the funding and cost rows are about mainnet)"
+  fi
 fi
 
 LAUNCH="$(state_get LAUNCH)"
@@ -500,7 +753,9 @@ if step_begin deploy; then
     printf 'json_rpc_url: "%s"\nwebsocket_url: ""\nkeypair_path: "%s"\naddress_labels: {}\ncommitment: confirmed\n' \
       "$RPC" "$ROOT/keys/deployer.json" >"$RUN_DIR/solana-cli.yml"
     chmod 600 "$RUN_DIR/solana-cli.yml"
-    DEPLOY_CMD=(solana program deploy --config "$RUN_DIR/solana-cli.yml" --url "$RPC"
+    # No --url: the endpoint comes from the 0600 config file above, so an RPC URL with an API key in
+    # it does not sit on the command line of a ten-minute process for every local `ps` to read.
+    DEPLOY_CMD=(solana program deploy --config "$RUN_DIR/solana-cli.yml"
       --keypair keys/deployer.json --fee-payer keys/deployer.json --upgrade-authority keys/deployer.json
       --program-id keys/stockfloor-program.json --buffer keys/stockfloor-deploy-buffer.json
       --max-len "$MAX_LEN" --with-compute-unit-price "$PRIORITY_FEE" --commitment confirmed)
@@ -511,14 +766,16 @@ if step_begin deploy; then
       echo "   created the deploy buffer keypair keys/stockfloor-deploy-buffer.json"
     fi
     run_cmd "${DEPLOY_CMD[@]}" ||
-      abort_run "the deploy failed. Re-running the same command resumes into the same buffer (keys/stockfloor-deploy-buffer.json); 'solana program show --buffers' and 'solana program close --buffers' recover stranded buffer rent."
+      abort_run "the deploy failed. Resuming this run re-runs the same command, which continues writing into the same buffer (keys/stockfloor-deploy-buffer.json) instead of paying for the writes again; the preflight compares what is already in that buffer with the local binary. 'solana program show --buffers --keypair keys/deployer.json' lists a stranded buffer and 'solana program close --buffers --keypair keys/deployer.json' returns its rent."
     set +e
     AFTER="$("$TSX" "$ROOT/scripts/c2/checks.ts" program-state --rpc "$RPC" --so "$SO" 2>&1)"
     set -e
     [[ "$AFTER" == "match" ]] || abort_run "after the deploy the on-chain ELF does not match the local binary: $AFTER"
     echo "   verified: the deployed ELF matches $SO"
     add_address "stockfloor program" "$PROGRAM_ID"
-    echo "DEPLOY_TX_COUNT=$(( (ELF_BYTES + 959) / 960 + 2 ))" >>"$RUN_DIR/meta.env"
+    # In the state, not meta.env: meta.env is rewritten on every pass, so a resumed run would
+    # otherwise drop the deploy transaction count from its report.
+    state_set DEPLOY_TX_COUNT "$(( (ELF_BYTES + 959) / 960 + 2 ))"
     step_end deploy "deployed ELF verified"
   fi
 fi
@@ -558,7 +815,7 @@ fi
 if step_begin buy1; then
   sdk_cmd buy --keypair keys/cli-buyer1.json --launch "$LAUNCH" --raw "$BUYER1_BUY_RAW" \
     --slippage-bps 100 --priority-fee "$PRIORITY_FEE"
-  run_cmd "${SDK_CMD[@]}" || abort_run "buyer1's presale buy failed (nothing else was sent)"
+  run_cmd "${SDK_CMD[@]}" || abort_run "buyer1's presale buy failed. A single transaction: it either landed or it did not — check the signature below before resuming, and answer 'skip' for buy1 if it did."
   step_end buy1 "paid $BUYER1_BUY_RAW raw $QUOTE"
 fi
 
@@ -568,7 +825,7 @@ if step_begin buy2; then
     abort_run "the planned completing buy no longer covers the remaining curve: re-plan the amounts"
   sdk_cmd buy --keypair keys/cli-buyer2.json --launch "$LAUNCH" --raw "$BUYER2_OFFER_RAW" \
     --slippage-bps 100 --priority-fee "$PRIORITY_FEE"
-  run_cmd "${SDK_CMD[@]}" || abort_run "buyer2's completing buy failed"
+  run_cmd "${SDK_CMD[@]}" || abort_run "buyer2's completing buy failed. A single transaction: it either landed or it did not — check the signature below before resuming, and answer 'skip' for buy2 if it did."
   step_end buy2 "offered $BUYER2_OFFER_RAW raw $QUOTE (PartialFill)"
 fi
 
@@ -584,10 +841,11 @@ fi
 
 # ---------------------------------------------------------------- 8. DAMM v2 market
 if [[ ! -s "$RUN_DIR/plan-post.env" ]] && [[ "$(state_get STEP_damm-buy)" != "done" || "$(state_get STEP_damm-sell)" != "done" ]]; then
-  "$TSX" "$ROOT/scripts/e2e/plan.ts" post-migration --launch "$LAUNCH" \
+  plan_cmd "$RUN_DIR/plan-post.env" "the post-migration amounts could not be read from chain state" \
+    post-migration --launch "$LAUNCH" \
     --buyer1 "$(solana-keygen pubkey keys/cli-buyer1.json)" \
     --buyer2 "$(solana-keygen pubkey keys/cli-buyer2.json)" \
-    --rpc "$RPC" | tee "$RUN_DIR/plan-post.env"
+    --rpc "$RPC"
 fi
 if [[ -s "$RUN_DIR/plan-post.env" ]]; then
   # shellcheck disable=SC1091
@@ -597,14 +855,14 @@ fi
 if step_begin damm-buy; then
   sdk_cmd buy --keypair keys/cli-buyer1.json --launch "$LAUNCH" --raw "$BUYER1_DAMM_RAW" \
     --slippage-bps 100 --priority-fee "$PRIORITY_FEE"
-  run_cmd "${SDK_CMD[@]}" || abort_run "the DAMM v2 buy failed"
+  run_cmd "${SDK_CMD[@]}" || abort_run "the DAMM v2 buy failed. A single transaction: check the signature below before resuming, and answer 'skip' for damm-buy if it landed."
   step_end damm-buy "paid $BUYER1_DAMM_RAW raw $QUOTE"
 fi
 
 if step_begin damm-sell; then
   sdk_cmd sell --keypair keys/cli-buyer2.json --launch "$LAUNCH" --raw "$BUYER2_SELL_RAW" \
     --slippage-bps 100 --priority-fee "$PRIORITY_FEE"
-  run_cmd "${SDK_CMD[@]}" || abort_run "the DAMM v2 sell failed"
+  run_cmd "${SDK_CMD[@]}" || abort_run "the DAMM v2 sell failed. A single transaction: check the signature below before resuming, and answer 'skip' for damm-sell if it landed."
   step_end damm-sell "sold $BUYER2_SELL_RAW raw base"
 fi
 
@@ -616,10 +874,11 @@ fi
 
 # ---------------------------------------------------------------- 9. redemptions
 if [[ "$(state_get STEP_redeem1)" != "done" ]]; then
-  "$TSX" "$ROOT/scripts/e2e/plan.ts" post-migration --launch "$LAUNCH" \
+  plan_cmd "$RUN_DIR/plan-redeem.env" "the redemption amounts could not be read from chain state" \
+    post-migration --launch "$LAUNCH" \
     --buyer1 "$(solana-keygen pubkey keys/cli-buyer1.json)" \
     --buyer2 "$(solana-keygen pubkey keys/cli-buyer2.json)" \
-    --rpc "$RPC" | tee "$RUN_DIR/plan-redeem.env"
+    --rpc "$RPC"
   # shellcheck disable=SC1091
   source "$RUN_DIR/plan-redeem.env"
 fi
@@ -627,13 +886,13 @@ fi
 if step_begin redeem1; then
   sdk_cmd redeem --keypair keys/cli-buyer1.json --launch "$LAUNCH" --raw "$BUYER1_REDEEM_RAW" \
     --priority-fee "$PRIORITY_FEE"
-  run_cmd "${SDK_CMD[@]}" || abort_run "buyer1's redemption failed"
+  run_cmd "${SDK_CMD[@]}" || abort_run "buyer1's redemption failed. Redemptions are not idempotent: check the signature below before resuming, and answer 'skip' for redeem1 if it landed."
   step_end redeem1 "burned $BUYER1_REDEEM_RAW raw base"
 fi
 
 if step_begin redeem2; then
   sdk_cmd redeem --keypair keys/cli-buyer2.json --launch "$LAUNCH" --all --priority-fee "$PRIORITY_FEE"
-  run_cmd "${SDK_CMD[@]}" || abort_run "buyer2's redemption failed"
+  run_cmd "${SDK_CMD[@]}" || abort_run "buyer2's redemption failed. Redemptions are not idempotent: check the signature below before resuming, and answer 'skip' for redeem2 if it landed."
   step_end redeem2 "burned the whole balance"
 fi
 

@@ -75,7 +75,28 @@ main(async () => {
   }));
 
   const runId = meta.RUN_ID ?? "unknown";
-  const mainnet = meta.MODE === "mainnet";
+  const mode = meta.MODE === "mainnet" ? "mainnet" : "dry";
+  const mainnet = mode === "mainnet";
+
+  // A report is tied to the cluster it was produced on. Rewriting a dry run's committed report as a
+  // "mainnet run" (or the other way round) would turn an evidence file into a false one: the Solscan
+  // links would point at signatures that only ever existed on a local fork. The mode is part of the
+  // run id, so this can only be reached by pointing a run of one mode at the other's run directory.
+  const jsonPath = join(reportsDir, `${runId}.json`);
+  if (existsSync(jsonPath)) {
+    let previous = "";
+    try {
+      previous =
+        (JSON.parse(readFileSync(jsonPath, "utf8")) as { mode?: string })
+          .mode ?? "";
+    } catch {
+      previous = "";
+    }
+    if (previous && previous !== mode)
+      throw new Error(
+        `${jsonPath.replace(`${REPO_ROOT}/`, "")} is the report of a ${previous} run; refusing to overwrite it with a ${mode} run. Use a run directory of the matching mode (scripts/c2/run.sh keeps the two apart by run id).`,
+      );
+  }
   const title = mainnet
     ? `StockFloor C2 mainnet run ${runId}`
     : `StockFloor C2 dry run ${runId} (local Surfpool mainnet fork)`;
@@ -150,9 +171,14 @@ main(async () => {
       );
     });
     md.push("");
-    if (meta.DEPLOY_TX_COUNT)
+    // The run state survives a resume; meta.env is rewritten on every pass (older runs recorded the
+    // count there).
+    const deployTxCount = Number(
+      state.DEPLOY_TX_COUNT ?? meta.DEPLOY_TX_COUNT ?? 0,
+    );
+    if (deployTxCount > 0)
       md.push(
-        `The deploy also sent ${groupDigits(meta.DEPLOY_TX_COUNT)} BPF loader transactions (buffer write chunks); only the buffer and deploy signatures the CLI prints are listed above.`,
+        `The deploy is ${groupDigits(deployTxCount)} BPF loader transactions in total (1 InitializeBuffer + ${groupDigits(deployTxCount - 2)} Write + 1 DeployWithMaxDataLen); the Solana CLI prints only the final signature, which is the one listed above.`,
         "",
       );
   }
@@ -181,13 +207,12 @@ main(async () => {
 
   const mdPath = join(reportsDir, `${runId}.md`);
   writeFileSync(mdPath, md.join("\n"));
-  const jsonPath = join(reportsDir, `${runId}.json`);
   writeFileSync(
     jsonPath,
     JSON.stringify(
       {
         runId,
-        mode: meta.MODE ?? "dry",
+        mode,
         meta,
         state,
         steps,

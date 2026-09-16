@@ -2,7 +2,7 @@
  * Abort conditions checked between the steps of `scripts/c2/run.sh`. READ-ONLY (same guarantees as
  * `preflight.ts`: a JSON-RPC read allowlist, no simulate, no send).
  *
- *   tsx scripts/c2/checks.ts quote-guard    --rpc URL [--quote SPYx] [--baseline-price P] [--max-drift-pct 5] [--skip-price]
+ *   tsx scripts/c2/checks.ts quote-guard    --rpc URL [--quote SPYx] [--baseline-price P] [--max-drift-pct 5] [--skip-price] [--price-optional]
  *   tsx scripts/c2/checks.ts program-state  --rpc URL [--so target/deploy/stockfloor.so]
  *   tsx scripts/c2/checks.ts launch-phase   --rpc URL --launch ADDR [--expect presale,graduating] [--min-vault-raw N]
  *
@@ -44,6 +44,7 @@ function abort(message: string): number {
 main(async () => {
   const { positional, flags } = parseFlags(process.argv.slice(2), [
     "skip-price",
+    "price-optional",
     "json",
   ]);
   const rpcUrl = flag(flags, "rpc") ?? process.env.MAINNET_RPC_URL;
@@ -79,17 +80,30 @@ main(async () => {
         );
         return 0;
       }
+      // --price-optional: the caller has already moved money (the launch exists and its threshold is
+      // fixed on chain in raw units), so a Jupiter outage is worth a warning but must not abort a run
+      // between the buys and the redemptions. The chain-only checks above still ran.
+      const priceOptional = switchOn(flags, "price-optional");
       let priceUsd: number | null = null;
+      let priceError = "";
       try {
         priceUsd =
           (await getJupiterPrices([quote.mint]))[quote.mint]?.usdPrice ?? null;
+        if (priceUsd === null) priceError = "Jupiter returned no price";
       } catch (e) {
-        return abort(
-          `Jupiter Price V3 is unreachable (${e instanceof Error ? e.message : String(e)}), so the price move since the plan cannot be checked. Re-run with --skip-price-guard to continue anyway.`,
-        );
+        priceError = `Jupiter Price V3 is unreachable (${e instanceof Error ? e.message : String(e)})`;
       }
-      if (priceUsd === null)
-        return abort(`Jupiter returned no price for ${quote.symbol}`);
+      if (priceUsd === null) {
+        const message = `${priceError || "no price"} for ${quote.symbol}, so the price move since the plan cannot be checked.`;
+        if (!priceOptional)
+          return abort(
+            `${message} Re-run with --skip-price-guard to continue with only the on-chain pause and transfer-hook checks.`,
+          );
+        console.log(
+          `quote-guard: WARNING — ${message} The amounts of this step come from chain state, not from the price, and ${quote.symbol} is not paused and has no transfer hook, so the run continues.`,
+        );
+        return 0;
+      }
       const base = Number(baseline);
       const driftPct = ((priceUsd - base) / base) * 100;
       if (Math.abs(driftPct) > maxDrift)

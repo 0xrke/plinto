@@ -4,13 +4,18 @@
  * crank actions that are due. Sends nothing; no keypair needed.
  *
  *   tsx scripts/status.ts [--launch <addr> | --mint <base> | --config <cfg>] [--price-usd 757.02 | --live-price]
- *     [--rpc http://127.0.0.1:8899] [--json]
+ *     [--rpc http://127.0.0.1:8899] [--json] [--allow-mainnet]
+ *
+ * `--allow-mainnet` is accepted and ignored: this command sends nothing, so it never consults the
+ * send guard. It is declared as a switch because callers (scripts/c2/run.sh, the runbook command
+ * blocks) pass the same flag set to every command of a mainnet run, and an undeclared `--allow-mainnet`
+ * would swallow the next flag as its value (see parseArgs in lib/cli.ts).
  */
 import { fetchLaunchState, getFloor, getJupiterPrices, launchMetrics, listLaunches, planCrank, type LaunchState } from "../src";
 import { bool, json, launchRef, log, parseArgs, readerFor, runCli, stateSummary, str } from "./lib/cli";
 
 runCli(async () => {
-  const args = parseArgs(process.argv.slice(2), ["json", "live-price"]);
+  const args = parseArgs(process.argv.slice(2), ["json", "live-price", "allow-mainnet"]);
   const reader = readerFor(args);
   const ref = launchRef(args);
   const states: LaunchState[] = [];

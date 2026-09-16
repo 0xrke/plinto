@@ -223,7 +223,12 @@ export async function classifyCluster(rpc: ReadOnlyRpc): Promise<ClusterInfo> {
     return info;
   }
   const loopback = isLoopback(rpc.url);
-  if (info.surfnetVersion && loopback) info.kind = "surfnet";
+  // An endpoint that reports `surfnet-version` is a Surfpool surfnet whatever its host name: a local
+  // surfnet is reachable as http://localtest.me:8899, through a container name or over a LAN address,
+  // and classifying those as "mainnet" because the host is not one of four literal spellings would
+  // print "genesis mainnet" for a fork. (Sending is a different question: the SDK guard in
+  // packages/sdk/src/guard.ts additionally requires a loopback host.)
+  if (info.surfnetVersion) info.kind = "surfnet";
   else if (info.genesis === MAINNET_GENESIS && !loopback) info.kind = "mainnet";
   else if (loopback) info.kind = "local";
   return info;
@@ -414,6 +419,73 @@ export async function programElfSha256(
   return out;
 }
 
+/**
+ * Upgradeable loader buffer accounts: a 4-byte enum tag (`Buffer` = 1) plus `Option<Pubkey>`
+ * authority = 37 bytes of metadata, then the ELF written so far, zero-padded to the buffer's size.
+ */
+export const BUFFER_HEADER = 37;
+export const BUFFER_TAG = 1;
+
+export interface DeployBufferState {
+  /** The account's loader enum tag; 1 is `Buffer`. */
+  tag: number;
+  /** Who may write to and close the buffer (null when it was frozen). */
+  authority: string | null;
+  /** Leading bytes that already equal the local ELF. */
+  written: number;
+  /** Payload capacity (`--max-len`). */
+  capacity: number;
+  /** First offset holding a non-zero byte that the local ELF does not have there. */
+  firstMismatch: number | null;
+  /** No written byte contradicts the local ELF, so `--buffer` can safely resume into it. */
+  resumable: boolean;
+}
+
+/**
+ * Compare a deploy buffer with the local ELF.
+ *
+ * `solana program deploy --buffer <keypair>` writes the ELF into this account in ~960-byte chunks and
+ * only then deploys, so after any interrupted deploy the account exists and holds a prefix of the
+ * binary. Re-running the same command resumes into it; that is the documented recovery, not a fault.
+ * What must not happen is resuming into a buffer holding a *different* ELF, which is exactly what
+ * `firstMismatch` detects (bytes past the written region are zero and prove nothing either way).
+ */
+export function inspectDeployBuffer(
+  data: Uint8Array,
+  localElf: Uint8Array,
+): DeployBufferState {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const tag = data.byteLength >= 4 ? view.getUint32(0, true) : -1;
+  const authority =
+    tag === BUFFER_TAG && data.byteLength >= BUFFER_HEADER && data[4] === 1
+      ? new web3.PublicKey(data.subarray(5, BUFFER_HEADER)).toBase58()
+      : null;
+  const payload = data.subarray(BUFFER_HEADER);
+  let written = 0;
+  while (
+    written < payload.length &&
+    written < localElf.length &&
+    payload[written] === localElf[written]
+  )
+    written++;
+  let firstMismatch: number | null = null;
+  for (let i = 0; i < payload.length; i++) {
+    const expected = i < localElf.length ? localElf[i]! : 0;
+    if (payload[i] !== expected && payload[i] !== 0) {
+      firstMismatch = i;
+      break;
+    }
+  }
+  return {
+    tag,
+    authority,
+    written,
+    capacity: payload.length,
+    firstMismatch,
+    resumable: tag === BUFFER_TAG && firstMismatch === null,
+  };
+}
+
 /** Does the on-chain program carry exactly this local ELF (plus deploy padding)? */
 export function elfMatches(
   deployed: ProgramElf | null,
@@ -449,7 +521,16 @@ export interface RehearsalBaseline {
   prices: Record<string, number | string>;
 }
 
-/** The newest saved C2 rehearsal report (scripts/e2e/reports/<run id>.json). */
+/** Rehearsal run ids: a UTC timestamp, so their names sort chronologically. */
+const REHEARSAL_REPORT = /^\d{8}T\d{6}Z\.json$/;
+
+/**
+ * The newest saved C2 rehearsal report (`scripts/e2e/reports/<run id>.json`).
+ *
+ * Only files whose name is a run-id timestamp count: those sort chronologically, while any other
+ * name dropped into the directory (a `dry-…` copy, a hand-written `baseline.json`) could otherwise
+ * sort last and silently become the accepted binary hash. Pass `--rehearsal <file>` to name one.
+ */
 export function loadRehearsalBaseline(explicit?: string): RehearsalBaseline {
   const dir = join(REPO_ROOT, "scripts", "e2e", "reports");
   let file: string;
@@ -457,10 +538,12 @@ export function loadRehearsalBaseline(explicit?: string): RehearsalBaseline {
     file = explicit.startsWith("/") ? explicit : join(REPO_ROOT, explicit);
   } else {
     const candidates = readdirSync(dir)
-      .filter((f) => f.endsWith(".json") && !f.startsWith("replay"))
+      .filter((f) => REHEARSAL_REPORT.test(f))
       .sort();
     if (candidates.length === 0)
-      throw new Error(`no rehearsal report in ${dir}`);
+      throw new Error(
+        `no rehearsal report named <run id>.json in ${dir} (run bash scripts/e2e/rehearsal.sh with SAVE_REPORT=1, or pass --rehearsal <file>)`,
+      );
     file = join(dir, candidates[candidates.length - 1]!);
   }
   const report = JSON.parse(readFileSync(file, "utf8")) as RehearsalBaseline;

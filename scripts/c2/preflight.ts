@@ -16,7 +16,9 @@
  * | `--quote <symbol>` | SPYx | Quote asset of the demo launch |
  * | `--so <path>` | target/deploy/stockfloor.so | Binary to be deployed |
  * | `--max-len <bytes>` | ELF + 10%, KiB-rounded | `solana program deploy --max-len` (drives the rent) |
- * | `--rehearsal <file>` | newest scripts/e2e/reports/*.json | Rehearsal baseline (binary hash, funding, deploy cost) |
+ * | `--rehearsal <file>` | newest scripts/e2e/reports/<run id>.json | Rehearsal baseline (binary hash, funding, deploy cost) |
+ * | `--expect-sha <hex>` | the rehearsal baseline's hash | Accept a different `stockfloor.so` (escape hatch; the row is then a WARN, never a GO) |
+ * | `--expect-cluster <mainnet\|surfnet>` | mainnet | Which cluster the endpoint must be. `surfnet` is the dry run: a surfnet is then required and mainnet is a blocker |
  * | `--plan-file <file>` | — | Reuse an existing `plan.ts pre-launch` output instead of running it |
  * | `--plan-out <file>` | — | Write the plan exports (so the run uses the same price snapshot) |
  * | `--no-upgrade-headroom` | off | Drop the requirement that the deployer can still pay for one program upgrade |
@@ -41,6 +43,7 @@ import {
   TOKEN_2022_PROGRAM_ID,
 } from "../../packages/sdk/src/index.ts";
 import {
+  BPF_UPGRADEABLE_LOADER,
   DAMM_V2_PROGRAM,
   DBC_PROGRAM,
   MAINNET_GENESIS,
@@ -53,6 +56,7 @@ import {
   elfMatches,
   flag,
   groupDigits,
+  inspectDeployBuffer,
   loadRehearsalBaseline,
   main,
   parseFlags,
@@ -181,23 +185,28 @@ main(async () => {
     ok ? (warn ? "WARN" : "GO") : "NO-GO";
 
   // ---------------------------------------------------------------- 1. cluster
+  // What this endpoint must be. The preflight is the gate of a mainnet run, so "mainnet" is the
+  // default; scripts/c2/run.sh passes "surfnet" for its dry run. A surfnet is recognised by
+  // `getVersion().surfnet-version`, never by the host name.
+  const expectCluster = flag(flags, "expect-cluster") ?? "mainnet";
+  if (expectCluster !== "mainnet" && expectCluster !== "surfnet")
+    throw new Error("--expect-cluster takes 'mainnet' or 'surfnet'");
   const cluster = await classifyCluster(rpc);
+  const clusterOk = cluster.kind === expectCluster;
   add({
     id: "rpc",
-    label: "mainnet RPC",
-    status:
-      cluster.kind === "mainnet"
-        ? "GO"
-        : cluster.kind === "surfnet"
-          ? "WARN"
-          : "NO-GO",
-    detail:
-      cluster.kind === "mainnet"
+    label: expectCluster === "mainnet" ? "mainnet RPC" : "surfnet RPC",
+    status: clusterOk ? "GO" : "NO-GO",
+    detail: clusterOk
+      ? cluster.kind === "mainnet"
         ? `${rpcDisplay(rpcUrl)} healthy, solana-core ${cluster.solanaCore}, slot ${groupDigits(cluster.slot ?? 0)}, genesis mainnet`
-        : cluster.kind === "surfnet"
-          ? `${rpcDisplay(rpcUrl)} is a LOCAL Surfpool surfnet ${cluster.surfnetVersion} (dry run, not mainnet)`
+        : `${rpcDisplay(rpcUrl)} is a Surfpool surfnet ${cluster.surfnetVersion} forking mainnet (dry run; nothing it executes leaves the machine)`
+      : cluster.kind === "surfnet"
+        ? `${rpcDisplay(rpcUrl)} reports surfnet-version ${cluster.surfnetVersion}: this is a LOCAL Surfpool fork, not mainnet — a mainnet run against it would prove nothing`
+        : cluster.kind === "mainnet"
+          ? `${rpcDisplay(rpcUrl)} is real mainnet (genesis ${MAINNET_GENESIS.slice(0, 8)}…, slot ${groupDigits(cluster.slot ?? 0)}), but a surfnet was expected — a dry run must never touch it`
           : `${rpcDisplay(rpcUrl)}: ${cluster.error ?? `genesis ${cluster.genesis} is not mainnet (${MAINNET_GENESIS})`}`,
-    data: { ...cluster, url: rpcDisplay(rpcUrl) },
+    data: { ...cluster, url: rpcDisplay(rpcUrl), expected: expectCluster },
   });
   if (cluster.kind === "unknown") {
     // Nothing else can be checked without a working endpoint.
@@ -205,11 +214,15 @@ main(async () => {
       rpc: rpcDisplay(rpcUrl),
       thresholdUsd,
       priorityFee,
+      cluster: cluster.kind,
     });
   }
 
   // ---------------------------------------------------------------- 2. the binary to deploy
-  const expectedSha = flag(flags, "expect-sha") ?? baseline.params.ELF_SHA256;
+  // `--expect-sha` overrides the rehearsed hash. It is an escape hatch (a binary rehearsed elsewhere),
+  // never a silent GO: the row stays a warning so the override is visible in the table and the JSON.
+  const shaOverride = flag(flags, "expect-sha");
+  const expectedSha = shaOverride ?? baseline.params.ELF_SHA256;
   let elfBytes = 0;
   let elfSha = "";
   if (!existsSync(so)) {
@@ -226,11 +239,18 @@ main(async () => {
     add({
       id: "binary",
       label: "stockfloor.so",
-      status: rowStatus(same),
+      status: rowStatus(same, shaOverride !== undefined),
       detail: same
-        ? `${groupDigits(elfBytes)} bytes, sha256 ${elfSha.slice(0, 16)}… = the rehearsed binary (${baseline.runId})`
-        : `sha256 ${elfSha.slice(0, 16)}… != rehearsed ${String(expectedSha).slice(0, 16)}… (${baseline.file}): rebuild or re-run the rehearsal`,
-      data: { bytes: elfBytes, sha256: elfSha, expected: expectedSha },
+        ? shaOverride !== undefined
+          ? `${groupDigits(elfBytes)} bytes, sha256 ${elfSha.slice(0, 16)}… = the hash given on the command line (--expect-sha), NOT the rehearsed ${String(baseline.params.ELF_SHA256).slice(0, 16)}… of ${baseline.runId}`
+          : `${groupDigits(elfBytes)} bytes, sha256 ${elfSha.slice(0, 16)}… = the rehearsed binary (${baseline.runId})`
+        : `sha256 ${elfSha.slice(0, 16)}… != ${shaOverride !== undefined ? "the --expect-sha" : "rehearsed"} ${String(expectedSha).slice(0, 16)}… (${shaOverride !== undefined ? "command line" : baseline.file}): rebuild or re-run the rehearsal`,
+      data: {
+        bytes: elfBytes,
+        sha256: elfSha,
+        expected: expectedSha,
+        expectedFromCommandLine: shaOverride !== undefined,
+      },
     });
   }
 
@@ -265,30 +285,79 @@ main(async () => {
     data: { pubkey: programKeyPubkey, expected: STOCKFLOOR_PROGRAM },
   });
 
-  // A buffer keypair left over from an interrupted deploy: `solana program deploy --buffer` would
-  // resume writing into it, mixing two ELFs. The account must not exist on this cluster.
+  // The deploy buffer. `solana program deploy --buffer` creates this account in its first transaction
+  // and writes the ELF into it in chunks, so after any deploy that failed past transaction 1 it
+  // exists — and re-running the same command to resume into it is the documented recovery
+  // (docs/c2-runbook.md §6.1). What must block the run is a buffer holding a *different* binary.
+  // Deleting the keypair file is never the remedy: it only makes the address harder to find, while
+  // the ~2.57 SOL of buffer rent stays on chain until the deployer (its authority) closes it.
   const bufferPath = "keys/stockfloor-deploy-buffer.json";
+  const closeHint = `\`solana program close --buffers --keypair keys/deployer.json\` returns its rent to the deployer`;
   if (!existsSync(join(REPO_ROOT, bufferPath))) {
     add({
       id: "deploy-buffer",
-      label: "no stale deploy buffer",
+      label: "deploy buffer",
       status: "GO",
-      detail: `${bufferPath} does not exist: the deploy creates a fresh buffer`,
+      detail: `${bufferPath} does not exist: the deploy creates a fresh buffer keypair and buffer`,
       data: { exists: false },
     });
   } else {
     const bufferPubkey = pubkeyOf(bufferPath);
     const bufferAccount = await rpc.accountInfo(bufferPubkey);
-    const bufferOwner = bufferAccount?.owner ?? "";
-    add({
-      id: "deploy-buffer",
-      label: "no stale deploy buffer",
-      status: bufferAccount ? "NO-GO" : "WARN",
-      detail: bufferAccount
-        ? `${bufferPubkey.slice(0, 8)}… already exists on this cluster (owner ${bufferOwner}): a resumed deploy would mix two ELFs — check \`solana program show --buffers\` and close it, or delete ${bufferPath} to start a fresh buffer`
-        : `${bufferPath} exists but ${bufferPubkey.slice(0, 8)}… is not on this cluster (left over from a local run): the deploy will write a fresh buffer at that address`,
-      data: { exists: true, pubkey: bufferPubkey, onChain: !!bufferAccount },
-    });
+    if (!bufferAccount) {
+      add({
+        id: "deploy-buffer",
+        label: "deploy buffer",
+        status: "GO",
+        detail: `${bufferPath} exists but ${bufferPubkey.slice(0, 8)}… holds no account on this cluster: the deploy writes a fresh buffer at that address`,
+        data: { exists: true, pubkey: bufferPubkey, onChain: false },
+      });
+    } else if (bufferAccount.owner !== BPF_UPGRADEABLE_LOADER) {
+      add({
+        id: "deploy-buffer",
+        label: "deploy buffer",
+        status: "NO-GO",
+        detail: `${bufferPubkey.slice(0, 8)}… exists on this cluster but is owned by ${bufferAccount.owner}, not the upgradeable loader: the deploy cannot use it — stop and investigate`,
+        data: {
+          exists: true,
+          pubkey: bufferPubkey,
+          owner: bufferAccount.owner,
+        },
+      });
+    } else {
+      const local = existsSync(so) ? readFileSync(so) : Buffer.alloc(0);
+      const buffer = inspectDeployBuffer(bufferAccount.data, local);
+      const deployerKey = (() => {
+        try {
+          return pubkeyOf("keys/deployer.json");
+        } catch {
+          return "";
+        }
+      })();
+      const authorityOk =
+        buffer.authority !== null &&
+        (deployerKey === "" || buffer.authority === deployerKey);
+      const ok = buffer.resumable && authorityOk;
+      add({
+        id: "deploy-buffer",
+        label: "deploy buffer",
+        status: ok ? "GO" : "NO-GO",
+        detail: ok
+          ? `${bufferPubkey.slice(0, 8)}… is a partially written buffer for exactly this binary: ${groupDigits(buffer.written)} of ${groupDigits(elfBytes)} bytes written (capacity ${groupDigits(buffer.capacity)}), authority ${buffer.authority!.slice(0, 8)}… — the deploy resumes into it and pays only for the remaining writes`
+          : buffer.tag !== 1
+            ? `${bufferPubkey.slice(0, 8)}… is a loader account of type ${buffer.tag}, not a buffer: stop and investigate (${closeHint} once it is one)`
+            : !authorityOk
+              ? `${bufferPubkey.slice(0, 8)}… is a buffer whose authority is ${buffer.authority ?? "none (frozen)"}, not the deployer ${deployerKey.slice(0, 8)}…: the deploy cannot write into it — ${closeHint}`
+              : `${bufferPubkey.slice(0, 8)}… holds a DIFFERENT binary (first difference at byte ${groupDigits(buffer.firstMismatch ?? 0)} of ${groupDigits(buffer.capacity)}): resuming into it would deploy a mixture of two ELFs — ${closeHint}, then re-run`,
+        data: {
+          exists: true,
+          pubkey: bufferPubkey,
+          onChain: true,
+          ...buffer,
+          deployer: deployerKey,
+        },
+      });
+    }
   }
 
   // ---------------------------------------------------------------- 3. program id still free
