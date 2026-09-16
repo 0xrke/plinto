@@ -28,19 +28,20 @@ build brief (§12).
 
 - [ ] **C2 done.** `stockfloor` deployed on mainnet (program link TBD (C2)). The upgrade-authority decision is
       made by the user (TBD (C2)).
-- [ ] **Demo launch: threshold $50 in SPYx, created with the CLI.** The C2 plan funds about $53 of SPYx in
-      total (`research/surfpool-e2e.md` §3 and §7), and the create form fixes the threshold at $1,000, which
-      those funds cannot graduate. So the **mainnet** launch is created with
-      `packages/sdk/scripts/run.sh create-launch --threshold-usd 50 …` (§9 of that document), and scene 2
-      records the form and its live preview plus a short terminal shot of the CLI.
-  - If the app gains a threshold control (or a build-time default) before C2, record scene 2 entirely in the
-    app instead and drop the terminal shot.
-  - On the **fork** take the form works as is: the faucet funds enough SPYx for a $1,000 launch.
+- [ ] **Demo launch: threshold $50 in SPYx, created in the app.** `/create` has a "Graduation threshold
+      (advanced)" fieldset with a **$50** quick pick, so scene 2 is recorded entirely in the app — no terminal
+      shot. The whole lifecycle at $50 has been driven through the real components on a local fork
+      (`app/e2e/render.e2e.tsx`, "UI-driven at the $50 threshold": create → completing buy → graduation crank
+      → redeem).
+  - The CLI path still works and is the fallback if the browser misbehaves on the take:
+    `packages/sdk/scripts/run.sh create-launch --threshold-usd 50 …` (`research/surfpool-e2e.md` §9).
+  - The C2 plan funds about $53 of SPYx in total (`research/surfpool-e2e.md` §3 and §7), which graduates a
+    $50 launch and would not graduate a $1,000 one.
   - Meteora keepers reportedly auto-migrate stock-quoted pools only from about $750. At $50 our crank
     migrates (`migration_damm_v2` is permissionless), which is what the demo shows.
 - [ ] **Dedicated demo wallets only.**
   - The five C2 keypairs under `keys/` (deployer, creator, buyer1, buyer2, cranker), funded per
-    `research/surfpool-e2e.md` §7: 2.84 SOL and 8,020,000 raw SPYx in total. A third buyer or a separate
+    `research/surfpool-e2e.md` §7: 5.19 SOL and 8,060,000 raw SPYx in total. A third buyer or a separate
     "crash" seller needs its own SOL and SPYx.
   - **Funded with SPYx, not USDC:** the CLI and the demo pay in SPYx.
   - Never show a seed phrase, a private key or a personal wallet on screen.
@@ -103,7 +104,7 @@ build brief (§12).
 | | |
 |---|---|
 | **Screen** | Click **"Launch a token"** (or **Create** in the header) to open `/create` |
-| **Actions** | 1. **Name:** `StockFloor Demo`, **Symbol:** `SFDEMO` (a clearly fictional demo token). 2. **Quote asset:** keep **SPYx** and point at its "calm" tag. 3. **Curve preset:** **Gentle**. 4. Drag **"Share of the raise locked in the floor vault"** from 50% to 70%, then back to 50%. Keep the right-hand preview in frame: "Floor at graduation", "Floor vs graduation price", "Max loss at graduation price". 5. Point at **Fixed terms**: Exit fee 2%, Graduation threshold, Curve trading fee 1%, Team allocation None. 6. **Fork take:** click **"Launch token"** and approve in the wallet. **Mainnet take:** cut to a 5 s terminal shot of `create-launch --threshold-usd 50 …` (the form's threshold is fixed at $1,000), then back to the new token page. |
+| **Actions** | 1. **Name:** `StockFloor Demo`, **Symbol:** `SFDEMO` (a clearly fictional demo token). 2. **Quote asset:** keep **SPYx** and point at its "calm" tag. 3. **Curve preset:** **Gentle**. 4. Drag **"Share of the raise locked in the floor vault"** from 50% to 70%, then back to 50%. Keep the right-hand preview in frame: "Floor at graduation", "Floor vs graduation price", "Max loss at graduation price". 5. Open **"Graduation threshold (advanced)"** and click the **$50** quick pick; the whole preview follows it. 6. Point at **Fixed terms**: Exit fee 2%, Curve trading fee 1%, Team allocation None. 7. Click **"Launch token"** and approve in the wallet, then cut to the new token page. |
 | **Expected preview values** | From the SDK formula `floor / price = f / (√r + 1 − f)`. Gentle at 50%: floor ≈ 31% of the graduation price, max loss ≈ 69%. Gentle at 70%: ≈ 50% and ≈ 50%. If the app shows something else, stop and report it. |
 | **Voiceover** | "A creator launches a token quoted in SPYx, on a gentle IPO-style curve. They choose how much of the raise becomes the floor: at fifty percent, the preview shows the floor at graduation and the maximum loss for a buyer at the opening price. No team allocation, no free tokens." |
 | **Proof** | Solscan: DBC config creation and `create_launch` transactions, TBD (C2) |

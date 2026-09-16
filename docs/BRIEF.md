@@ -317,6 +317,7 @@ Closest analogs:
 
 Stock-quoted DBC landscape:
 - 1,118 DBC configs quote a stock token; 1,058 of them use a 0% migration fee. None routes the raise to a redemption vault.
+  - **Re-measured on chain 2026-09-16** with a committed, re-runnable scan (`scripts/research/stock-quoted-dbc-configs.ts` → `docs/research/stock-quoted-dbc-configs.json`, slot 447,385,123): **931** configs quote an xStock and **871 (93.6%)** use a 0% migration fee. The scan defines a stock token as a Token-2022 mint whose permanent delegate is the SPYx issuer authority `5aMNNLQJwAEeoemTEMkv5NVjqKwvvefRYCQ5Z67HFvEq`, and the population as mints with a DBC token badge; the brief's original figures used a mint list that was not recorded, so the numbers differ. It also measures the stronger fact: **0 of the 931** pay a migration fee to a program rather than a wallet. README quotes the scan, not these figures.
 - Ember (embercurve.fun) is the largest operator: about 2,720 markets, 81 graduated. It pays dividends and buys back. No floor.
 - StockLaunch and Lattice: fee rewards, no floor.
 

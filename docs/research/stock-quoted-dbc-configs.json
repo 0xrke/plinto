@@ -1,0 +1,439 @@
+{
+  "scannedAt": "2026-09-16T00:37:51.084Z",
+  "rpc": "https://api.mainnet-beta.solana.com",
+  "slot": 447385123,
+  "method": {
+    "stockMint": "Token-2022 mint whose PermanentDelegate is the SPYx issuer authority 5aMNNLQJwAEeoemTEMkv5NVjqKwvvefRYCQ5Z67HFvEq",
+    "population": "DBC TokenBadge accounts (dataSize 168), mint at offset 8",
+    "configs": "getProgramAccounts(dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN, dataSize 1048, memcmp@8 = quote mint)",
+    "fields": "fee_claimer@40, migration_fee_percentage@247, migration_quote_threshold@264"
+  },
+  "issuerPermanentDelegate": "5aMNNLQJwAEeoemTEMkv5NVjqKwvvefRYCQ5Z67HFvEq",
+  "tokenBadges": 1244,
+  "stockQuoteMints": 740,
+  "totals": {
+    "configs": 931,
+    "zeroMigrationFee": 871,
+    "pdaFeeClaimer": 153,
+    "pdaFeeClaimerWithFee": 0
+  },
+  "perMint": [
+    {
+      "symbol": "AAPLx",
+      "mint": "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp",
+      "configs": 86,
+      "zeroMigrationFee": 83,
+      "pdaFeeClaimer": 38,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "ABNBx",
+      "mint": "XscSc1zjbVizEnhCzzehJ9fzztm3WRKdn9pjmriKDuN",
+      "configs": 1,
+      "zeroMigrationFee": 1,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "AMDx",
+      "mint": "XsXcJ6GZ9kVnjqGsjBnktRcuwMBmvKWh8S93RefZ1rF",
+      "configs": 8,
+      "zeroMigrationFee": 7,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "AMZNx",
+      "mint": "Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg",
+      "configs": 52,
+      "zeroMigrationFee": 51,
+      "pdaFeeClaimer": 35,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "AVGOx",
+      "mint": "XsgSaSvNSqLTtFuyWPBhK9196Xb9Bbdyjj4fH3cPJGo",
+      "configs": 2,
+      "zeroMigrationFee": 2,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "BACx",
+      "mint": "XswsQk4duEQmCbGzfqUUWYmi7pV7xpJ9eEmLHXCaEQP",
+      "configs": 2,
+      "zeroMigrationFee": 1,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "BRK.Bx",
+      "mint": "Xs6B6zawENwAbWVi7w92rjazLuAr5Az59qgWKcNb45x",
+      "configs": 3,
+      "zeroMigrationFee": 3,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "CEGx",
+      "mint": "Xssu2cDLdZXZYrq17frTVrb3meumRCAzEf7pXyxoWVN",
+      "configs": 1,
+      "zeroMigrationFee": 1,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "COINx",
+      "mint": "Xs7ZdzSHLU9ftNJsii5fCeJhoRWSC32SQGzGQtePxNu",
+      "configs": 11,
+      "zeroMigrationFee": 11,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "CRCLx",
+      "mint": "XsueG8BtpquVJX9LVLLEGuViXUungE6WmK5YZ3p3bd1",
+      "configs": 24,
+      "zeroMigrationFee": 21,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "CRMx",
+      "mint": "XsczbcQ3zfcgAEt9qHQES8pxKAVG5rujPSHQEXi4kaN",
+      "configs": 1,
+      "zeroMigrationFee": 1,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "CVXx",
+      "mint": "XsNNMt7WTNA2sV3jrb1NNfNgapxRF5i4i6GcnTRRHts",
+      "configs": 4,
+      "zeroMigrationFee": 4,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "DEx",
+      "mint": "Xsh3Lt6pLpH65udstiFuZThJ6gyQTL6ryVXtNwEy5zd",
+      "configs": 2,
+      "zeroMigrationFee": 2,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "DFDVx",
+      "mint": "Xs2yquAgsHByNzx68WJC55WHjHBvG9JsMB7CWjTLyPy",
+      "configs": 3,
+      "zeroMigrationFee": 2,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "DKNGx",
+      "mint": "XscCMVe1Qu2rk1YoCDJGwMLZkfVnd69xcPER4DJ8tpB",
+      "configs": 1,
+      "zeroMigrationFee": 0,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "GLDx",
+      "mint": "Xsv9hRk1z5ystj9MhnA7Lq4vjSsLwzL2nxrwmwtD3re",
+      "configs": 24,
+      "zeroMigrationFee": 22,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "GMEx",
+      "mint": "Xsf9mBktVB9BSU5kf4nHxPq5hCBJ2j2ui3ecFGxPRGc",
+      "configs": 10,
+      "zeroMigrationFee": 9,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "GOOGLx",
+      "mint": "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN",
+      "configs": 30,
+      "zeroMigrationFee": 30,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "HOODx",
+      "mint": "XsvNBAYkrDRNhA7wPHQfX3ZUXZyZLdnCQDfHZ56bzpg",
+      "configs": 28,
+      "zeroMigrationFee": 28,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "IBMx",
+      "mint": "XspwhyYPdWVM8XBHZnpS9hgyag9MKjLRyE3tVfmCbSr",
+      "configs": 1,
+      "zeroMigrationFee": 1,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "INTCx",
+      "mint": "XshPgPdXFRWB8tP1j82rebb2Q9rPgGX37RuqzohmArM",
+      "configs": 3,
+      "zeroMigrationFee": 3,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "JNJx",
+      "mint": "XsGVi5eo1Dh2zUpic4qACcjuWGjNv8GCt3dm5XcX6Dn",
+      "configs": 1,
+      "zeroMigrationFee": 1,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "JPMx",
+      "mint": "XsMAqkcKsUewDrzVkait4e5u4y8REgtyS7jWgCpLV2C",
+      "configs": 2,
+      "zeroMigrationFee": 1,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "KOx",
+      "mint": "XsaBXg8dU5cPM6ehmVctMkVqoiRG2ZjMo1cyBJ3AykQ",
+      "configs": 16,
+      "zeroMigrationFee": 15,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "LLYx",
+      "mint": "Xsnuv4omNoHozR6EEW5mXkw8Nrny5rB3jVfLqi6gKMH",
+      "configs": 2,
+      "zeroMigrationFee": 1,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "MAx",
+      "mint": "XsApJFV9MAktqnAc6jqzsHVujxkGm9xcSUffaBoYLKC",
+      "configs": 6,
+      "zeroMigrationFee": 6,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "MCDx",
+      "mint": "XsqE9cRRpzxcGKDXj1BJ7Xmg4GRhZoyY1KpmGSxAWT2",
+      "configs": 64,
+      "zeroMigrationFee": 62,
+      "pdaFeeClaimer": 38,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "METAx",
+      "mint": "Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu",
+      "configs": 18,
+      "zeroMigrationFee": 17,
+      "pdaFeeClaimer": 3,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "MRVLx",
+      "mint": "XsuxRGDzbLjnJ72v74b7p9VY6N66uYgTCyfwwRjVCJA",
+      "configs": 3,
+      "zeroMigrationFee": 3,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "MSFTx",
+      "mint": "XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX",
+      "configs": 23,
+      "zeroMigrationFee": 22,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "MSTRx",
+      "mint": "XsP7xzNPvEHS1m6qfanPUGjNmdnmsLKEoNAnHjdxxyZ",
+      "configs": 31,
+      "zeroMigrationFee": 30,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "NFLXx",
+      "mint": "XsEH7wWfJJu2ZT3UCFeVfALnVA6CP5ur7Ee11KmzVpL",
+      "configs": 4,
+      "zeroMigrationFee": 4,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "NVDAx",
+      "mint": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+      "configs": 204,
+      "zeroMigrationFee": 195,
+      "pdaFeeClaimer": 11,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "NVOx",
+      "mint": "XsfAzPzYrYjd4Dpa9BU3cusBsvWfVB9gBcyGC87S57n",
+      "configs": 2,
+      "zeroMigrationFee": 2,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "ORCLx",
+      "mint": "XsjFwUPiLofddX5cWFHW35GCbXcSu1BCUGfxoQAQjeL",
+      "configs": 2,
+      "zeroMigrationFee": 2,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "PEPx",
+      "mint": "Xsv99frTRUeornyvCfvhnDesQDWuvns1M852Pez91vF",
+      "configs": 4,
+      "zeroMigrationFee": 4,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "PFEx",
+      "mint": "XsAtbqkAP1HJxy7hFDeq7ok6yM43DQ9mQ1Rh861X8rw",
+      "configs": 2,
+      "zeroMigrationFee": 2,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "PLTRx",
+      "mint": "XsoBhf2ufR8fTyNSjqfU71DYGaE6Z3SUGAidpzriAA4",
+      "configs": 9,
+      "zeroMigrationFee": 8,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "QQQx",
+      "mint": "Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ",
+      "configs": 37,
+      "zeroMigrationFee": 31,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "RBLXx",
+      "mint": "Xss5RAku5EH6UViFdvW7ss9xQjwQLsrs2opPMhb3k43",
+      "configs": 2,
+      "zeroMigrationFee": 2,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "SPCXx",
+      "mint": "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8",
+      "configs": 45,
+      "zeroMigrationFee": 41,
+      "pdaFeeClaimer": 2,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "SPYx",
+      "mint": "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W",
+      "configs": 89,
+      "zeroMigrationFee": 73,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "STRCx",
+      "mint": "Xs78JED6PFZxWc2wCEPspZW9kL3Se5J7L5TChKgsidH",
+      "configs": 3,
+      "zeroMigrationFee": 3,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "TCENTx",
+      "mint": "XsXb7KCxcxTi6hqWfYyEe1kpTwtiCeU5TJbEz8N7RWn",
+      "configs": 1,
+      "zeroMigrationFee": 1,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "TQQQx",
+      "mint": "XsjQP3iMAaQ3kQScQKthQpx9ALRbjKAjQtHg6TFomoc",
+      "configs": 4,
+      "zeroMigrationFee": 3,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "TSLAx",
+      "mint": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+      "configs": 46,
+      "zeroMigrationFee": 46,
+      "pdaFeeClaimer": 2,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "UNHx",
+      "mint": "XszvaiXGPwvk2nwb3o9C1CX4K6zH8sez11E6uyup6fe",
+      "configs": 1,
+      "zeroMigrationFee": 1,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "VIDAx",
+      "mint": "XsfCC9VL4DamVGNgdJpfLXB3sBVa158Gbx8sh7NzmTk",
+      "configs": 2,
+      "zeroMigrationFee": 2,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "Vx",
+      "mint": "XsqgsbXwWogGJsNcVZ3TyVouy2MbTkfCFhCGGGcQZ2p",
+      "configs": 2,
+      "zeroMigrationFee": 2,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "WMTx",
+      "mint": "Xs151QeqTCiuKtinzfRATnUESM2xTU6V9Wy8Vy538ci",
+      "configs": 4,
+      "zeroMigrationFee": 4,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "XOMx",
+      "mint": "XsaHND8sHyfMfsWPj6kSdd5VwvCayZvjYgKmmcNL5qh",
+      "configs": 4,
+      "zeroMigrationFee": 3,
+      "pdaFeeClaimer": 1,
+      "pdaFeeClaimerWithMigrationFee": 0
+    },
+    {
+      "symbol": "XOPx",
+      "mint": "XsAk6BoV4kBXUM6WXodKyM21CN92G9jArwAzFvbh3LX",
+      "configs": 1,
+      "zeroMigrationFee": 1,
+      "pdaFeeClaimer": 0,
+      "pdaFeeClaimerWithMigrationFee": 0
+    }
+  ],
+  "mintsWithNoConfigs": 688
+}

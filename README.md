@@ -3,7 +3,9 @@
 **A token launchpad on Meteora DBC where every token gets a hard price floor backed by tokenized S&P 500.**
 
 It works like pump.fun, but a large share of the money raised becomes a redeemable floor in SPYx the
-moment the market opens. The token can go up without limit, and it cannot go to zero.
+moment the market opens. The token can go up without limit, and while the vault holds SPYx and the program is
+unchanged, it cannot go to zero. (Those two conditions are real: see
+[Who could still hurt the floor](#who-could-still-hurt-the-floor).)
 
 > Everyone else builds a piggy bank that might become a floor someday. We ship the floor on day one.
 
@@ -12,33 +14,54 @@ moment the market opens. The token can go up without limit, and it cannot go to 
 Built for the [Stocklana hackathon](https://hackathons.solana.com/hackathons/stocklana): the Solana
 Foundation main track and the Meteora **Best Use of DBC** bounty.
 
+**Nothing is on mainnet yet.** Deploying costs real money that only the project owner can release, and that
+approval has not come. So this table says what exists today and where the evidence for it is, instead of promising
+what is coming. Every row below is reproducible from this repository.
+
 | | |
 |---|---|
-| **Status** | The full lifecycle runs on a mainnet fork (real DBC, DAMM v2 and Token-2022 binaries, the real SPYx mint and its DBC token badge) and end to end on a **local Surfpool fork of live mainnet**, driven by the CLI and by the web app. 523 tests pass (`pnpm test`, 2026-09-16). Not deployed to mainnet yet. |
-| **Program** | `stockfloor` `98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA` (Anchor 1.0.2). Mainnet deployment: TBD (C2) |
-| **Mainnet demo launch** (Solscan) | TBD (C2) |
-| **Live app** | TBD (C3) |
-| **Video** | TBD (C3), script in [`docs/demo-script.md`](docs/demo-script.md) |
+| **Status** | The full lifecycle runs on a mainnet fork (real DBC, DAMM v2 and Token-2022 binaries, the real SPYx mint and its DBC token badge) and end to end on a **local Surfpool fork of live mainnet**, driven by the CLI and by the web app. 571 tests pass (`pnpm test`, 2026-09-16), and they also pass from a fresh clone with no `keys/` (97 s). |
+| **Program** | `stockfloor` `98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA` (Anchor 1.0.2). **Not deployed to mainnet.** The identical `solana program deploy` (481 transactions, 2.5740 SOL) ran on a local Surfpool fork of live mainnet on 2026-09-16, and `solana program dump` + `cmp` confirmed the deployed ELF byte for byte: [`scripts/e2e/reports/20260916T000744Z.md`](scripts/e2e/reports/20260916T000744Z.md) |
+| **Demo launch** | **No mainnet launch yet.** The identical $50 launch ran on a **local Surfpool fork of live mainnet** on 2026-09-16: create, two curve buys, the PartialFill buy that completes the curve, the 5-transaction graduation crank, a DAMM v2 buy and sell, an LP-fee harvest, two redemptions. 495 mainnet-equivalent transactions, no failures, every CLI quote exact to the raw unit, final phase `redeemable` with the on-chain `floor` view equal to the decoded state. Report: [`scripts/e2e/reports/20260916T000744Z.md`](scripts/e2e/reports/20260916T000744Z.md) |
+| **Mainnet run (C2)** | Blocked on the owner: approval plus 5.19 SOL and 0.0806 SPYx (≈ $61) to the five repo wallets. The whole sequence is one gated command with a read-only go/no-go preflight: [`docs/c2-runbook.md`](docs/c2-runbook.md) |
+| **Live app** | **Not hosted yet.** `pnpm --filter @stockfloor/app dev` runs it on example data with no cluster, and [Run locally](#run-locally) points it at a local mainnet fork with real transactions. |
+| **Video** | **Not recorded yet.** Shot list: [`docs/demo-script.md`](docs/demo-script.md) |
 | **Audit** | None. This is unaudited hackathon code. |
 | **Eligibility** | Not for US persons. See [Eligibility and disclaimers](#eligibility-and-disclaimers). |
+
+### For the Meteora DBC bounty
+
+The DBC configuration *is* the product here, not packaging around it:
+
+1. **The partner migration fee is routed into an admin-less PDA vault** that any holder can redeem against, instead of
+   being platform revenue — [Where the money goes](#where-the-money-goes).
+2. **One dedicated config per launch**, whose `fee_claimer` and `leftover_receiver` are a **program PDA** that signs
+   the DBC CPIs — proven on the fork and with a mainnet precedent — [Why Solana](#why-solana).
+3. **An equity-like constant-liquidity curve quoted in a stock token** (SPYx), not a memecoin curve —
+   [Phase 1](#phase-1-presale-on-the-dbc-bonding-curve).
+4. **100% of migrated liquidity permanently locked in DAMM v2** with quote-only fee collection, so LP fees can only
+   raise the floor — [Phase 2](#phase-2-graduation).
+5. **`create_launch` enforces that whole shape on-chain**, so a `Launch` account is a fact, not a UI promise —
+   [The DBC configuration is the product](#the-dbc-configuration-is-the-product).
 
 ## Contents
 
 1. [The problem](#the-problem)
-2. [How it works](#how-it-works)
-3. [Why Solana, why DBC](#why-solana-why-dbc)
-4. [The floor math](#the-floor-math)
-5. [On-chain architecture](#on-chain-architecture)
-6. [Instructions](#instructions)
-7. [Security model and risks](#security-model-and-risks)
-8. [Parameters](#parameters)
-9. [Testing](#testing)
-10. [Run locally](#run-locally)
-11. [Prior art and differentiation](#prior-art-and-differentiation)
-12. [Open-source components](#open-source-components)
-13. [Eligibility and disclaimers](#eligibility-and-disclaimers)
-14. [Roadmap](#roadmap)
-15. [Repository layout and docs](#repository-layout-and-docs)
+2. [Who pays for this](#who-pays-for-this)
+3. [How it works](#how-it-works)
+4. [Why Solana, why DBC](#why-solana-why-dbc)
+5. [The floor math](#the-floor-math)
+6. [On-chain architecture](#on-chain-architecture)
+7. [Instructions](#instructions)
+8. [Security model and risks](#security-model-and-risks)
+9. [Parameters](#parameters)
+10. [Testing](#testing)
+11. [Run locally](#run-locally)
+12. [Prior art and differentiation](#prior-art-and-differentiation)
+13. [Open-source components](#open-source-components)
+14. [Eligibility and disclaimers](#eligibility-and-disclaimers)
+15. [Roadmap](#roadmap)
+16. [Repository layout and docs](#repository-layout-and-docs)
 
 ---
 
@@ -49,19 +72,83 @@ Foundation main track and the Meteora **Best Use of DBC** bounty.
 - **Existing "floor" tokens start with an empty floor.** The designs we found fund their backing from
   trading taxes, creator fees or LP fees. The floor exists only after a lot of volume, which is exactly when
   buyers need it least. See [Prior art](#prior-art-and-differentiation).
-- **Tokenized stocks on Solana need launch mechanics built for them.** In our 2026-09-15 scan of mainnet,
-  1,118 DBC configs quote a stock token and 1,058 of them use a 0% migration fee. None routes the raise into
-  a redemption vault. Solana's share of tokenized-equity volume
-  [fell from about 71% to about 30% by late August 2026](https://cryptobriefing.com/solana-tokenized-equity-share-drops-memecoins/).
-  Meteora's bounty asks for DBC launch mechanics tuned for equity-like assets that outlast the meme-stock meta.
+- **Tokenized stocks on Solana need launch mechanics built for them.** We scanned mainnet for it, and the
+  scan is in this repository so you can re-run it ([`scripts/research/stock-quoted-dbc-configs.ts`](scripts/research/stock-quoted-dbc-configs.ts)
+  → [`docs/research/stock-quoted-dbc-configs.json`](docs/research/stock-quoted-dbc-configs.json), slot
+  447,385,123 on 2026-09-16). Of **931 DBC configs that quote an xStock**, **871 (93.6%) set the migration
+  fee to 0%** — the whole raise goes straight into the AMM — and **not one** of the 931 pays a migration fee
+  to a program rather than to a wallet, which is the minimum a redemption vault would need. Meanwhile
+  Solana's share of tokenized-equity volume
+  [fell from about 71% to about 30% by late August 2026](https://cryptobriefing.com/solana-tokenized-equity-share-drops-memecoins/),
+  and Meteora's bounty asks for DBC launch mechanics tuned for equity-like assets that outlast the
+  meme-stock meta.
 
 **StockFloor's answer:** a share of the raise (30–70%, default 50%) is locked in SPYx at graduation. Every
 holder can redeem against it pro rata, at any time, forever. No admin can withdraw it.
 
 **Who it is for.** Communities, creators and projects that want to raise from supporters without asking
 them to accept a zero-or-moon bet. Buyers get a floor held in real stock exposure and can see their maximum
-loss before they buy. **What the creator gets:** 30% of the non-protocol curve trading fees (0.24% of curve
-volume at the default 1% fee). The creator gets no free tokens and no share of the raise.
+loss before they buy.
+
+---
+
+## Who pays for this
+
+The money has to come from somewhere, and today it does not come from us or from the creator. Here is the
+whole picture, because the arithmetic is small enough to check.
+
+**What the creator earns.** 30% of the non-protocol curve trading fee. With the default 1% curve fee, DBC
+takes 20% for itself and the creator takes 30% of the rest: **0.24% of curve volume**, paid in SPYx. The
+creator gets no free tokens, no allocation and no share of the raise, and after graduation nothing at all —
+DAMM v2 fees are collected in the quote asset only and the position belongs to a program PDA, so every
+post-graduation fee goes to the vault.
+
+On a $1,000 raise (the default threshold), with curve volume above the raise coming from buyers selling back
+and rebuying before graduation:
+
+| Curve volume | Creator (0.24%) | Vault from curve fees (0.56%) | Vault from the migration fee (50% of a $1,000 raise) |
+|---:|---:|---:|---:|
+| $1,000 (the raise, bought once) | $2.40 | $5.60 | $500 |
+| $10,000 | $24 | $56 | $500 |
+| $100,000 | $240 | $560 | $500 |
+
+A bigger *raise* scales the migration fee with it: a $10,000 threshold puts $5,000 in the vault.
+
+So on a default launch a creator earns about the price of a coffee. That is a deliberate trade — the same
+fee that a normal launchpad pays out is what makes the floor real — but it is also the honest answer to "why
+would a creator pick this": **for a raise you intend to keep working on, not for fee revenue.** A creator who
+wants a fee-maximising launch should not use StockFloor.
+
+**What StockFloor earns: nothing.** There is no protocol fee anywhere in the design. The whole partner share
+of curve fees, the whole partner migration fee and all DAMM v2 LP fees go into the vault; the exit fee stays
+in the vault too. That is not modesty, it is what makes the vault credible: there is no instruction that pays
+anyone but a redeeming holder.
+
+**So who funds it after the hackathon?** Two levers exist that do not touch the vault or weaken anything
+`create_launch` enforces. Neither is implemented:
+
+1. **A flat launch fee in SOL**, taken in the create transaction outside the DBC config. It never enters the
+   curve, the vault or the floor arithmetic.
+2. **A platform slice of the creator's 30%**, by making the DBC pool creator a splitter program that pays the
+   human creator and the platform. `create_launch` already caps the creator trading share at 30%, so the
+   guarantees are unchanged.
+
+**And who runs the crank?** Harvests and migration are permissionless — the destinations are fixed by the
+program, so anyone can pay for a crank and nobody can redirect it. In practice we run it: the repo's cranker
+wallet is `FhaZVX91912MJTxoPDW3JtmbeDEuZdRjDQ9QfkaWohyC`, and the command is one line:
+
+```bash
+# every StockFloor launch, every 60 s; on mainnet the send guard also needs
+# --allow-mainnet and STOCKFLOOR_ALLOW_MAINNET=1
+bash packages/sdk/scripts/run.sh crank --keypair keys/cli-cranker.json --rpc "$RPC" --loop --interval 60
+```
+
+It is cheap to keep running because a pass with nothing due sends **no transaction at all** (`planCrank`
+returns an empty plan, and dust is filtered out), so idle cranking costs RPC reads and nothing else. A pass
+that finds work pays 7,000–35,000 lamports per transaction (measured per instruction in
+[`docs/research/surfpool-e2e.md`](docs/research/surfpool-e2e.md) §8). We will run it for the demo and the
+judging window once the mainnet launch exists; until then there is nothing on mainnet to crank, and we are not
+claiming otherwise.
 
 ---
 
@@ -103,8 +190,11 @@ When the curve's quote reserve reaches the migration threshold (default ≈ $1,0
 - **Any holder can redeem at any time.** Burn `N` tokens and receive `N / supply × vault` in SPYx, minus a
   **2% exit fee** that stays in the vault. Redemption is permissionless. The program has no pause, no admin
   and no withdraw instruction.
-- **Arbitrage defends the floor.** If the market price falls below the floor by more than the exit fee and
-  trading costs, buying and redeeming is profitable.
+- **Arbitrage defends the floor, about 3% below it.** A buy on DAMM v2 pays the 1% pool fee out of the quote
+  it sends in (fees are quote-only), and redeeming keeps the 2% exit fee, so buying-and-redeeming pays
+  whenever the market price is below `floor × (1 − 0.02) × (1 − 0.01) ≈ 0.970 × floor`, before price impact
+  and transaction costs. **The effective hard bid is therefore about 97% of the floor, not the floor itself**
+  — we would rather name that discount than let a reader find it.
 - **The floor never decreases through the program.** It rises from LP fees, curve fees, retained exit fees,
   burned base tokens and donations. SPYx dividends raise its USD value through the Token-2022 ScaledUiAmount
   multiplier.
@@ -195,7 +285,7 @@ DBC config.
 | Supply | **Dynamic**. Base token SPL, 6 decimals, ≈ 1B tokens at graduation | DBC burns unsold inventory at migration, so `mint.supply` is the true denominator | `create_launch` rejects fixed supply |
 | Token metadata | **Immutable** | | `create_launch` |
 | Pool creation fee, locked vesting | **0 / none** | Free allocations would drain buyers' money from the vault | `create_launch` |
-| Migration threshold | **≈ $1,000**, converted at launch from Jupiter `usdPrice` and the ScaledUiAmount multiplier | Small raises are viable. Meteora keepers reportedly auto-migrate stock-quoted pools from about $750 (off-chain policy, not verified); `migration_damm_v2` is permissionless, so our crank can migrate too | SDK (≥ $1) |
+| Migration threshold | **≈ $1,000** by default (the create form offers $50 / $100 / $1,000 / $10,000 and a custom amount), converted at launch from Jupiter `usdPrice` and the ScaledUiAmount multiplier | Small raises are viable. Meteora keepers reportedly auto-migrate stock-quoted pools from about $750 (off-chain policy, not verified); `migration_damm_v2` is permissionless, so our crank can migrate too | SDK/UI (≥ $1); `create_launch` rejects a threshold so small that the partner migration fee rounds to 0 (`MigrationQuoteThresholdTooSmall`) |
 
 Because `create_launch` checks all of the above on-chain, a `Launch` account means a StockFloor-shaped launch,
 not just a UI promise.
@@ -293,6 +383,19 @@ Z = 1 − floor / price
 A buyer at 12× the floor can lose 1 − 1/12 ≈ 91.7%. `Z` does not include the 2% exit fee or trading fees. A
 holder who exits by redeeming receives `floor × (1 − 2%)`, minus rounding. In USD the floor moves with the S&P 500.
 
+**How strong is the floor, really?** At the defaults it is 31.3% of the opening price — so a buyer at the open
+can still lose 68.7%, and we say so on the buy button. The comparison that matters is not with a perfect
+instrument, it is with the launch this replaces:
+
+| At the moment the market opens | Floor | Maximum loss | Who holds the raise |
+|---|---:|---:|---|
+| pump.fun-style launch | $0 | 100% | Market liquidity and creator revenue |
+| **StockFloor, `gentle` curve, 50% vault share** | **31.3% of the opening price** | **68.7%** | An admin-less PDA vault, redeemable pro rata, forever |
+| StockFloor, `flat` curve, 70% vault share | 53.6% | 46.4% | The same |
+
+And the floor only moves one way: every curve fee, LP fee, retained exit fee and burn raises it, and nothing in
+the program can lower it.
+
 **Floor at the opening price.** When the DAMM v2 market opens at the graduation price `p₁`, the floor is:
 
 ```
@@ -386,7 +489,7 @@ fixed by the program.
 
 | Instruction | Caller | What it does | Key guards (error names) |
 |---|---|---|---|
-| `create_launch(exit_fee_bps)` | Creator; **the DBC config keypair must sign** | Validates the DBC config shape, commits the base mint, creates `Launch` and the empty vault | `InvalidDbcConfig`, `FeeClaimerMismatch`, `LeftoverReceiverMismatch`, `MigrationFeePercentageOutOfRange`, `CreatorMigrationFeeNotZero`, `LiquidityNotFullyPartnerLocked`, `LiquidityVestingNotAllowed`, `LockedVestingNotAllowed`, `CollectFeeModeNotQuote`, `MigratedCollectFeeModeNotQuote`, `MigrationOptionNotDammV2`, `BaseTokenTypeNotSplToken`, `FixedTokenSupplyNotAllowed`, `CreatorTradingFeeTooHigh`, `CurveFeeTooHigh`, `DynamicFeeNotAllowed`, `TokenUpdateAuthorityNotImmutable`, `PoolCreationFeeNotZero`, `ExitFeeTooHigh`, `QuoteMintMismatch`, `InvalidBaseMint`, `VaultEncumbered` (pre-created vault) |
+| `create_launch(exit_fee_bps)` | Creator; **the DBC config keypair must sign** | Validates the DBC config shape, commits the base mint, creates `Launch` and the empty vault | `InvalidDbcConfig`, `FeeClaimerMismatch`, `LeftoverReceiverMismatch`, `MigrationFeePercentageOutOfRange`, `CreatorMigrationFeeNotZero`, `LiquidityNotFullyPartnerLocked`, `LiquidityVestingNotAllowed`, `LockedVestingNotAllowed`, `CollectFeeModeNotQuote`, `MigratedCollectFeeModeNotQuote`, `MigrationOptionNotDammV2`, `BaseTokenTypeNotSplToken`, `FixedTokenSupplyNotAllowed`, `CreatorTradingFeeTooHigh`, `CurveFeeTooHigh`, `DynamicFeeNotAllowed`, `TokenUpdateAuthorityNotImmutable`, `PoolCreationFeeNotZero`, `MigrationQuoteThresholdTooSmall`, `ExitFeeTooHigh`, `QuoteMintMismatch`, `InvalidBaseMint`, `VaultEncumbered` (pre-created vault) |
 | `register_pool()` | Anyone | Records the one DBC pool of the committed base mint | `PoolAlreadyRegistered`, `InvalidDbcPool`, `PoolConfigMismatch`, `BaseMintMismatch`, `PoolTypeNotSplToken`, `BaseMintDecimalsMismatch`, `BaseMintAuthorityNotRevoked`, `BaseMintHasFreezeAuthority` |
 | `harvest_curve_fees()` | Anyone | CPI DBC `claim_trading_fee` (claimer signs): SPYx into the vault, any base burned | `PoolNotRegistered`, pinned pool/vault, `QuoteMintPaused`, `QuoteMintTransferHookUnsupported`, `VaultFrozen`, `VaultDecreased`, `VaultEncumbered` |
 | `harvest_migration_fee()` | Anyone, once | CPI DBC `withdraw_migration_fee(0)` into the vault. Opens redemption together with migration | `CurveNotComplete`, `MigrationFeeAlreadyHarvested`, plus the checks above |
@@ -402,7 +505,9 @@ Crank order after the curve completes: `harvest_curve_fees` (again, for the comp
 `harvest_lp_fees` periodically. `burn_claimer_base` is only needed when someone sends base tokens to the
 claimer. The SDK crank (`planCrank`) plans exactly this order, and it harvests LP fees only for positions on
 the launch's own DAMM v2 pool, above a minimum pending fee and capped per pass, because anyone can hand the
-claimer dust positions on a pool they control.
+claimer dust positions on a pool they control. `harvest_curve_fees` and a standalone `burn_claimer_base` have
+the same kind of dust minimum, so a 1-raw transfer into the claimer's base ATA — a derivable address anyone
+can pay into — cannot make a `crank --loop` operator send a transaction every pass.
 
 ---
 
@@ -418,6 +523,11 @@ claimer dust positions on a pool they control.
 - **Harvests pay only into this launch's vault,** whoever sends them. Base tokens are burned.
 - **The creator cannot withhold the floor.** Registration is permissionless, and the committed base mint
   identifies the one pool.
+- **What is deliberately not on-chain:** the quote-asset allowlist and how large the raise is in fiat terms.
+  Both need a list or a price oracle that the program does not have, so they are UI/SDK policy.
+  `create_launch` enforces the *shape* — including that the partner migration fee cannot round to zero, so no
+  `Launch` can reach the redeemable phase with a provably empty vault — but a third party indexing `Launch`
+  accounts directly must still check the quote mint and the threshold itself.
 
 ### Who could still hurt the floor
 
@@ -425,7 +535,7 @@ claimer dust positions on a pool they control.
 |---|---|---|---|
 | **SPYx issuer** (xStocks) | Pause authority and freeze authority `JDq14…`; permanent delegate `5aMNN…`; authority to set a transfer hook `5aMNN…`; ScaledUiAmount authority `S7vYFF…` | **Yes.** The permanent delegate can move or burn tokens in any account, including the vault | Disclosed on every token page. Pause, frozen vault and active hook fail cleanly (`QuoteMintPaused`, `VaultFrozen`, `QuoteMintTransferHookUnsupported`) with no state change; retry after restore. UI-level allowlist only |
 | **Meteora** (DBC and DAMM v2 upgrade authorities; both programs are upgradeable, checked 2026-09-15) | A malicious or breaking upgrade | Not by design: the vault authority is a separate PDA that never signs into them. An upgrade could stop or divert fees that are not harvested yet. That includes an unharvested migration fee, which would keep redemption closed | Migration latch, post-CPI vault checks, strict account validation, two-PDA split (below) |
-| **stockfloor upgrade authority** | Upgrade our program | Yes, with a malicious upgrade | Revoke the upgrade authority before production. This is **pending the user's decision** (an irreversible action). Status: TBD (C2). Revoking also makes two failures permanent: an issuer-enabled transfer hook on the quote mint (below) and any future DBC or DAMM v2 change that breaks a harvest CPI |
+| **stockfloor upgrade authority** | Upgrade our program | Yes, with a malicious upgrade | Revoke the upgrade authority before production. **Not revoked, and deliberately not revoked yet:** revoking makes two failures permanent — an issuer-enabled transfer hook on the quote mint (below) and any future DBC or DAMM v2 change that breaks a harvest CPI. The app reads the live upgrade authority from chain and shows it on every token page, so a holder can see exactly who holds this power and when it goes away |
 | Launch creator | Chooses parameters within on-chain bounds | No | `create_launch` enforces the shape; the base mint is committed |
 | Crankers, other users | Call any permissionless instruction | No | Destinations and pools are pinned; covered by adversarial tests |
 
@@ -466,7 +576,13 @@ claimer dust positions on a pool they control.
 - **Thinner market liquidity.** Part of the raise goes to the floor instead of the pool. This is the intended
   trade-off.
 - **The denominator is conservative.** `mint.supply` includes base tokens sitting in the DAMM v2 pool and
-  DBC's 0.2% protocol migration base fee, so the floor is computed conservatively.
+  DBC's 0.2% protocol migration base fee, so the floor is computed conservatively. At the defaults that is
+  `(1 − f)/(√r + 1 − f)` ≈ 31.3% of the supply sitting inside the permanently locked position, backed by the
+  vault but owned by no holder. It is not stranded: as holders redeem, supply falls and the floor per token
+  rises, and once the floor exceeds the pool price net of the 1% pool fee and the 2% exit fee, buying those
+  tokens out of the locked pool and redeeming them is profitable. Arbitrage drains the locked inventory the
+  same way it defends the floor, and until it does, the conservative denominator only ever **understates** the
+  floor.
 - **Some edge cases lower or strand value.**
   - Base tokens sent to a non-ATA account owned by the claimer cannot be burned. They stay in the supply and
     lower the floor slightly.
@@ -491,7 +607,7 @@ noted. Rationale lives in [`docs/DECISIONS.md`](docs/DECISIONS.md).
 | Parameter | Default | Allowed | Enforced by |
 |---|---|---|---|
 | Quote asset | SPYx | UI allowlist: SPYx, QQQx, GLDx (calm); NVDAx, AAPLx, MSFTx, GOOGLx, TSLAx (volatile). Leveraged and hyper-volatile names excluded | UI / SDK |
-| Migration threshold | $1,000 | ≥ $1 (SDK); > 0 (DBC) | SDK, DBC |
+| Migration threshold | $1,000 | ≥ $1 (SDK/UI, ≤ $10M in the app); > 0 (DBC); on-chain, large enough that the partner migration fee is not 0 | SDK, DBC, `create_launch` |
 | Vault share (`migration_fee_percentage`) | 50% | UI 30–70%; on-chain 30–99% | UI, `create_launch` |
 | Creator migration fee | 0% | must be 0 | `create_launch` |
 | Exit fee | 200 bps | 0–500 bps, immutable per launch | `create_launch` |
@@ -516,16 +632,16 @@ noted. Rationale lives in [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 | Suite | Command | Result |
 |---|---|---|
-| Program unit and property tests (Rust, proptest with 4,096 cases per property) | `cargo test -p stockfloor` | 43 passed |
-| SDK unit and property tests (fast-check) | `pnpm --filter @stockfloor/sdk test` | 210 passed (14 files) |
-| Mainnet-fork integration (LiteSVM) | `pnpm --filter @stockfloor/tests test` | 112 passed (17 files) |
-| Web app (vitest, jsdom) | `pnpm --filter @stockfloor/app test` | 158 passed (19 files) |
+| Program unit and property tests (Rust, proptest with 4,096 cases per property) | `cargo test -p stockfloor` | 44 passed |
+| SDK unit and property tests (fast-check) | `pnpm --filter @stockfloor/sdk test` | 214 passed (14 files) |
+| Mainnet-fork integration (LiteSVM) | `pnpm --filter @stockfloor/tests test` | 113 passed (17 files) |
+| Web app (vitest, jsdom) | `pnpm --filter @stockfloor/app test` | 200 passed (23 files) |
 | Typecheck of the SDK and the fork tests | `tsc --noEmit` | pass |
-| **Total** | `pnpm test` | **523 passed** |
+| **Total** | `pnpm test` | **571 passed** |
 
-The 112 fork tests break down as follows:
+The 113 fork tests break down as follows:
 - C1 lifecycle: 20, adversarial: 17, M1 review regressions: 11
-- instruction validation: 7, vault authority: 3, redeem splits: 3, floor property (40 fast-check runs): 1
+- instruction validation: 8, vault authority: 3, redeem splits: 3, floor property (40 fast-check runs): 1
 - SDK presets on the real programs: 7, LP positions: 4, compute-budget limits: 1
 - SDK-driven: product flow 9, crank races 3, migration latch 3, base-mint lookup 2
 - M1 spike: 21
@@ -591,9 +707,9 @@ pnpm install
 pnpm test          # builds the programs, then runs every suite and prints a summary
 ```
 
-`pnpm test` builds the programs first, and the build currently needs the repo-local program keypairs
-`keys/stockfloor-program.json` and `keys/spike-program.json`. These are gitignored, so a fresh clone cannot
-build yet. Fresh-clone support: TBD (C3).
+`pnpm test` builds the programs first. The program keypairs in `keys/` are gitignored, so a fresh clone does
+not have them; `scripts/build-programs.sh` then builds with `anchor build --ignore-keys`, which produces the
+same `.so` and IDL. **A fresh clone with no `keys/` runs the whole suite** (verified 2026-09-16: `git clone`, `pnpm install --frozen-lockfile`, `pnpm test` — all steps passed in 97 s).
 
 Every fork suite runs offline against `tests/fixtures/`; only the fixture dump and the Surfpool runs need a
 network.
@@ -659,6 +775,10 @@ NEXT_PUBLIC_DATA_SOURCE=chain NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8899 pnpm --f
 
 # 4. The whole C2 sequence in one go (deploy, launch, buys, crank, DAMM v2 trades, redemptions, cost report)
 bash scripts/e2e/rehearsal.sh --restart
+
+# 5. The same sequence through the gated C2 runner, as a dry run (it cannot reach mainnet: a dry run
+#    never sets the override switches, so the SDK guard accepts only a loopback surfnet)
+bash scripts/c2/run.sh --yes
 ```
 
 On the local fork buyers pay SPYx directly, because Jupiter routing is mainnet-only. `NEXT_PUBLIC_*`
@@ -673,7 +793,8 @@ Details and recorded runs: [`packages/sdk/scripts/README.md`](packages/sdk/scrip
 
 ## Prior art and differentiation
 
-Every individual mechanism exists somewhere. **In our research (2026-09-15) we did not find the combination:**
+Every individual mechanism exists somewhere. **In our research (2026-09-15, re-checked on chain 2026-09-16
+by [the scan above](#the-problem)) we did not find the combination:**
 - Meteora DBC;
 - a curve quoted in a stock token;
 - the **raise** funding an admin-less vault through the partner migration fee;
@@ -698,6 +819,11 @@ Every individual mechanism exists somewhere. **In our research (2026-09-15) we d
 | **StockFloor** | **Raise-funded SPYx vault from day one, DBC partner migration fee → PDA vault, permissionless pro-rata redemption, 100% locked DAMM v2 LP, quote-only fees into the vault** | — |
 
 Fee-funded floors start at zero and fill with volume. Ours starts with 30–70% of the raise.
+
+The table is a manual review; the reproducible part of the claim is the scan: of the 931 stock-quoted DBC
+configs on mainnet, 153 name an off-curve (program-controlled) `fee_claimer`, and **every one of those sets
+the migration fee to 0%** — so no config on mainnet today both takes a migration fee and hands it to a
+program. What that program then does with it, a scan cannot tell you; that part is the table.
 
 ---
 
@@ -754,25 +880,20 @@ repository.
 
 ## Roadmap
 
-- **C2: mainnet.**
-  - Deploy `stockfloor` and run a real launch with a small threshold: graduation, harvest, redeem.
-  - Record Solscan links in this README.
-  - The user decides whether to revoke the upgrade authority.
-- **Hardening.**
-  - Transfer-hook support in `redeem`, or an upgrade path (multisig or timelock) if the quote issuer ever
-    enables a hook.
-  - An external audit.
-- **Product.**
-  - A crank service.
-  - Floor history charts (the app has a placeholder).
-  - One-transaction Jupiter routing into curve buys.
-  - The optional anti-snipe fee schedule in the create form: `create_launch` already accepts exponential
-    20% → about 1% over 30 minutes.
-- **Issuer tooling.** Configure and monitor StockFloor DBC pools: threshold health, migration readiness,
-  pending harvests.
-- **Basket vaults.** A floor held in several stock tokens, such as SPYx and GLDx.
-- **Yield on the vault.** Only if it keeps the vault admin-less and redemption always available.
-- **Transfer-hook support** for quote mints whose issuers enable hooks.
+Three things we are committed to, in order. Everything else we thought of is in
+[`docs/BRIEF.md`](docs/BRIEF.md) and stays there until these are done.
+
+| # | What | Why it is next | Status |
+|---|---|---|---|
+| 1 | **Mainnet: deploy and run the $50 demo launch**, then put the Solscan links in this table | Nothing else matters until a judge can click a transaction | Rehearsed to the transaction and the lamport; blocked only on the owner's approval and 5.19 SOL + 0.0806 SPYx ([`docs/c2-runbook.md`](docs/c2-runbook.md)) |
+| 2 | **Transfer-hook support in `redeem`, or a multisig/timelock upgrade path** | It is the one failure that can freeze a vault permanently, and it decides whether the upgrade authority can be revoked | Designed, not implemented ([`docs/research/program-design.md`](docs/research/program-design.md) §10); the clean failure is tested today |
+| 3 | **Run the crank continuously and publish it as a service** | A launch that graduates while nobody is watching leaves holders unable to redeem until someone cranks | The command exists and is permissionless (see [Who pays for this](#who-pays-for-this)); what is missing is uptime, not code |
+
+Not committed, and deliberately not started: an external audit (needed before this is used with other
+people's money, and not something a hackathon can produce), basket vaults across several stock tokens, yield
+on the vault, issuer tooling, floor-history charts, one-transaction Jupiter routing into curve buys, and the
+anti-snipe fee schedule in the create form (`create_launch` already accepts exponential 20% → about 1% over
+30 minutes).
 
 ---
 
@@ -786,11 +907,16 @@ repository.
 | `tests/` | LiteSVM mainnet-fork harness (`src/`), fixtures (`fixtures/`), integration suites (`integration/`, `sdk/`, `spike/`) |
 | `app/` | Next.js web app |
 | `idls/` | DBC 0.2.1 and DAMM v2 0.2.4 IDLs |
-| `scripts/` | `build-programs.sh`, `test-all.sh`, `surfpool/` (local fork helpers), `e2e/` (C2 rehearsal and cost reports) |
+| `scripts/` | `build-programs.sh`, `test-all.sh`, `surfpool/` (local fork helpers), `e2e/` (mainnet-fork rehearsal and cost reports), `c2/` (read-only mainnet preflight, gated run script), `research/` (the DBC market scan) |
 | [`docs/architecture.md`](docs/architecture.md) | Accounts, sequence diagrams of every instruction, invariants mapped to tests |
 | [`docs/demo-script.md`](docs/demo-script.md) | 2–3 minute video shot list |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | Every design decision with alternatives and reasons |
 | [`docs/STATUS.md`](docs/STATUS.md) | Current milestone and test results |
-| [`docs/research/`](docs/research/) | C1 evidence, M1 spike, DBC/DAMM v2 fact check, program design |
+| [`docs/research/`](docs/research/) | C1 evidence, M1 spike, DBC/DAMM v2 fact check, program design, the Surfpool rehearsal, the DBC stock-quote scan |
+| [`docs/c2-runbook.md`](docs/c2-runbook.md) | What the mainnet run does, what it costs, how it is approved and how it aborts |
+| [`LICENSE`](LICENSE) | MIT, for StockFloor's own code |
 
-License: TBD (C3). The root `package.json` declares MIT; the repository has no LICENSE file yet.
+License: **MIT** ([`LICENSE`](LICENSE)), matching the root `package.json`. It covers StockFloor's own code only.
+The Meteora program binaries in `tests/fixtures/` and the IDLs in `idls/` are third-party artifacts under their
+upstream licences — see [`tests/fixtures/README.md`](tests/fixtures/README.md) and
+[Open-source components](#open-source-components).

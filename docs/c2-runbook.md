@@ -284,7 +284,7 @@ Artifacts the run produces:
   identically.
 - **The evidence trail**: `docs/research/c1-evidence.md` (LiteSVM fork lifecycle),
   `docs/research/surfpool-e2e.md` (this exact sequence on a live fork, 495 mainnet-equivalent
-  transactions), and `pnpm test` (544 tests) from a fresh clone.
+  transactions), and `pnpm test` (571 tests) from a fresh clone.
 
 ---
 

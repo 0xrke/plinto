@@ -51,3 +51,127 @@ Format: date — decision · alternatives · reason.
 - **Priority fee 100,000 µlamports/CU** on every mainnet transaction (app and CLI), 0 on local forks. Measured against recent mainnet samples in the rehearsal.
 - **C2 demo threshold: $50 in SPYx** (~$53 of buys), so the whole demo is cheap while the flow stays identical to the $1,000 default. $25 and $100 also pass validation.
 - **Fresh clone runs the tests.** `keys/` is gitignored, and Anchor needs the program keypair only for its program-id check, so `build-programs.sh` falls back to `--ignore-keys` and produces the same `.so` and IDL. · Commit a dev keypair · Judges must be able to clone and run `pnpm test`.
+
+## 2026-09-16 — review pass (security findings, judge-lens findings)
+
+### Program and SDK
+
+- **`create_launch` rejects a migration threshold whose partner migration fee rounds to zero**
+  (`MigrationQuoteThresholdTooSmall`, appended to the error enum so no existing Anchor code shifts). DBC only
+  requires `migration_quote_threshold > 0`, and its rounding (`quote_amount = ceil(T × (100 − pct) / 100)`,
+  `fee = T − quote_amount`) pays the partner 0 for a dust threshold — e.g. any `T ≤ 3` at `pct = 30`. Such a
+  launch would reach the `redeemable` phase with a provably empty vault while carrying a `Launch` PDA, which is
+  the one marker the design asks integrators to trust. · A minimum expressed in quote raw units or in USD ·
+  A fiat minimum needs a price oracle, which the program deliberately does not have, and a raw minimum is a
+  price-dependent policy. "Not provably empty" is the strongest statement the program can make on its own; the
+  $1 minimum raise stays SDK/UI policy and README now says so. Covered by a Rust unit test over the whole
+  accepted percentage range and by a fork test that shows DBC accepting `T = 1` where StockFloor refuses it.
+- **Dust minimums for the two remaining crank actions.** `harvest_curve_fees` now needs `minCurveFeeQuote`
+  (default: the same 0.00001-quote threshold as the LP harvest, 1,000 raw for 8-decimal xStocks) and a
+  standalone `burn_claimer_base` needs `minClaimerBaseBurn` (default: one whole base token). · Leave them at
+  1 raw · The claimer base ATA is a derivable address and the DBC partner fee grows with any trade, so at 1 raw
+  a `crank --loop` operator paid for one transaction per pass forever. A minimum does not make griefing
+  impossible (a griefer sends exactly the minimum, and the cost ratio stays about 1:1), but dust stops
+  scheduling transactions, and nothing is stranded: a real harvest burns the whole ATA anyway.
+
+### C2 process
+
+- **The deployer is funded with 5.05 SOL, not 2.70.** · Keep the headroom optional · `solana program deploy`
+  verifies the deployed ELF only *after* the 2.57 SOL of rent is spent. If that `cmp` fails, the only
+  non-destructive repair is an upgrade, which needs 2.3309 SOL available at once; funded with 2.70 the only way
+  out would be the irreversible `solana program close`. `scripts/c2/preflight.ts` now requires the headroom by
+  default (`--no-upgrade-headroom` opts out).
+- **Two more assertions in the §9 block-0 pre-flight and in `preflight.ts`:** the program keypair really is
+  `98NLryxeg…` (`build-programs.sh` falls back to `--ignore-keys` when `keys/` is missing, so nothing else
+  enforces it at deploy time, and deploying at the wrong address strands the rent in a program whose every
+  instruction fails with `DeclaredProgramIdMismatch`), and there is no stale deploy buffer on the cluster (a
+  resumed `--buffer` would mix two ELFs).
+- **The mainnet RPC URL never reaches a command line.** The deploy takes the endpoint from `--config` only
+  (the redundant `--url "$MAINNET_RPC_URL"` is gone) and the CLI config file is `chmod 600`. · Keep `--url` ·
+  §9 is meant to be run while recording; the Solana CLI does not redact, and a provider key in a published
+  video cannot be taken back.
+
+### Docs
+
+- **The README status table states what exists instead of four TBDs.** Each row names the local-fork evidence
+  and the report file, and says plainly that nothing is on mainnet. · Leave "TBD (C2)" until C2 happens ·
+  A judge spends five minutes; "TBD" reads as a rehearsal for something that never happened, while the
+  Surfpool report is real, dated, reproducible evidence. The rows become Solscan links the day C2 runs.
+- **The headline claim is qualified everywhere it appears:** "while the vault holds SPYx and the program is
+  unchanged, it cannot go to zero". · Keep the short version · The README's own risk table contradicted the
+  unqualified sentence, and a reader who notices discounts the honest labelling everywhere else too.
+- **`LICENSE` (MIT) added, matching the root `package.json`,** with `tests/fixtures/README.md` naming the
+  upstream licences of the redistributed Meteora and SPL binaries. · Wait for the user's licence decision ·
+  `package.json` already declares MIT, so the repository was making a claim its files did not back;
+  without a LICENSE file the code is strictly all-rights-reserved on a hackathon that requires open-source
+  disclosure. **If the owner wants a different licence, this file is the only thing to change.**
+- **The market claim is backed by a committed, re-runnable scan**
+  (`scripts/research/stock-quoted-dbc-configs.ts` → `docs/research/stock-quoted-dbc-configs.json`), and the
+  README quotes that scan's numbers. · Keep the undocumented 2026-09-15 figures (1,118 / 1,058) · Meteora's
+  judges can query their own program in a minute; the one claim they are best placed to test was the one with
+  no method shown. The scan defines "a stock token" as a Token-2022 mint whose permanent delegate is the SPYx
+  issuer authority, which is an on-chain property rather than a curated list.
+- **The roadmap is three committed items with evidence, not a wish list.** · Keep the eight-item list ·
+  A long list of unstarted ambitions reads as a toy; three items with an honest status reads as a plan.
+
+## 2026-09-16 — app: graduation threshold on `/create`, frozen parameters, honest money labels
+
+- **Threshold control shape: quick-pick buttons ($50 / $100 / $1,000 default / $10,000) plus an always-visible
+  custom USD field** · a slider; a select with "Other…"; a plain number input · The demo needs one click for
+  $50 and a judge needs to see it is a real parameter, not a preset list. The buttons write into the same
+  field, so there is one source of truth, and `aria-pressed` makes the current choice testable.
+- **Threshold validation runs the SDK's `previewLaunch` *and* `buildDbcConfigParams`** (the port of everything
+  DBC's `create_config` checks) on every keystroke, on top of the `MIN_THRESHOLD_USD`/`THRESHOLD_MAX_USD`
+  range · range check only; `previewLaunch` only; no client validation · `previewLaunch` alone does not cover
+  the migration-base threshold, the u64 initial supply or `CurveCannotComplete`. The full port is what the
+  chain enforces and costs 0.03 ms per keystroke, so the user learns at typing time, not at signing time.
+- **`THRESHOLD_MAX_USD = $10,000,000` is an app bound, not a chain limit** · no maximum; a tighter $100,000 ·
+  With no maximum one extra zero silently 10×s the raise, and the true chain limit (about 1e21 for SPYx) is
+  not a usable guardrail. Documented as an app choice.
+- **The parameter fieldsets freeze while a launch is in flight, after it succeeded and while a retry is
+  pending** · reset the form on success; clear the retry handle on any edit · This was a real bug:
+  `ChainLaunchActions.createLaunch` with a `resume` handle ignores its `input` argument and re-sends the
+  transactions built from the original one, while the first-buy field and the live preview stayed editable —
+  so the form promised a floor and a threshold that were not being launched.
+- **The post-redemption floor is labelled "(never falls in SPYx)", not "(never lower)"** · drop the
+  qualifier; show the floor in SPYx · The guarantee is real but only in the quote asset, and the figure shown
+  is USD, which moves with the underlying.
+- **The vault card rounds the floor per token *down*** (new `formatSignificantDown`) · leave `Intl`'s
+  round-half-up · It is a quote-asset amount, so it falls under `format.ts`'s existing "never overstate a
+  balance or payout" rule; `Intl` could show a floor above what the vault backs.
+- **The $50 UI demo is a second end-to-end case in `app/e2e/render.e2e.tsx`, through to a redemption**, rather
+  than a re-tuning of the existing $1,000 driver · re-tune `local-fork.e2e.ts`; assert only that the launch
+  was created · The $1,000 driver's raw amounts and PartialFill assertions are tuned to that threshold, and
+  the point is to prove the whole demo can be recorded from the UI — crank and redemption included.
+
+## 2026-09-16 — C2 runbook and the gated mainnet run
+
+- **The approval marker is a file the user creates by hand, `keys/c2-approved`** · a CLI flag only; an env
+  var only · Agents never write `keys/` (it is gitignored and `run.sh` never touches it), and the file
+  survives an orchestrator restart. `run.sh --mainnet` additionally requires `--allow-mainnet`,
+  `STOCKFLOOR_ALLOW_MAINNET=1` and a GO preflight.
+- **`scripts/c2/preflight.ts` is structurally read-only**: its JSON-RPC client has a method allowlist with no
+  `sendTransaction`, no `requestAirdrop` and no `simulateTransaction`, and its `ChainReader.simulate()` throws
+  · reuse the SDK `ConnectionSender` · The go/no-go tool must be impossible to turn into a sender by a later
+  edit.
+- **The dry run is the same script and the same command list as the mainnet run, switched only by
+  `--mainnet`** · a separate rehearsal script · One code path means the prompts, guards, resume and report
+  format are all verified before real funds move.
+- **A dry run does not set `STOCKFLOOR_ALLOW_MAINNET` / `--allow-mainnet`** (guard mode `surfnet`, not
+  `mainnet-override`) · replay the documented mainnet commands verbatim, as
+  `scripts/e2e/replay-doc-commands.sh` does · Without the override the SDK guard accepts only a loopback
+  Surfpool surfnet, so a mistyped RPC in a dry run cannot reach mainnet at all. The verbatim-override replay
+  is still covered by `replay-doc-commands.sh`.
+- **A DBC / DAMM v2 binary drift against `tests/fixtures/manifest.json` is a preflight NO-GO**, with
+  `--accept-program-drift` as the conscious escape hatch · a plain warning · Every CU, fee and behaviour
+  figure in the C2 evidence was measured against those exact binaries, so a silent Meteora upgrade
+  invalidates the rehearsal. Both still matched mainnet on 2026-09-16.
+- **Deploy verification compares the ELF prefix and requires the remainder to be zero** · compare the whole
+  programdata hash · `--max-len` pads the programdata past the ELF, so a full-buffer hash never matches; this
+  is what the doc's `cmp <(head -c … dump) so` does.
+- **Run state, per-step logs and the Solana CLI config live in `target/c2/<run id>/` (gitignored); only the
+  sanitized report goes to `scripts/c2/reports/`** · keep everything in `reports/` · The CLI config and raw
+  logs can contain an RPC URL with an API key; the report has the RPC string redacted.
+- **Demo amounts come from one price snapshot per run** (`scripts/e2e/plan.ts`, reused by the preflight via
+  `--plan-file`) · recompute them inside `preflight.ts` · A single source of truth means the checked amounts
+  are exactly the amounts the run sends, and the same snapshot is the baseline for the price-drift abort.

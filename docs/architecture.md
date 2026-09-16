@@ -361,6 +361,7 @@ The config is decoded only if all of these hold: owner = DBC, the `PoolConfig` d
 | `leftover_receiver == claimer PDA` | `LeftoverReceiverMismatch` |
 | `creator_migration_fee_percentage == 0` | `CreatorMigrationFeeNotZero` |
 | `migration_fee_percentage ∈ [30, 99]` | `MigrationFeePercentageOutOfRange` |
+| partner migration fee `T − ceil(T × (100 − pct) / 100) > 0` (DBC allows any `T > 0`, and its rounding pays the partner nothing for a dust threshold) | `MigrationQuoteThresholdTooSmall` |
 | partner permanent-locked liquidity = 100, partner unlocked = creator permanent = creator unlocked = 0 | `LiquidityNotFullyPartnerLocked` |
 | no partner or creator liquidity vesting | `LiquidityVestingNotAllowed` |
 | no locked vesting (amount per period, cliff unlock, number of periods all 0) | `LockedVestingNotAllowed` |
@@ -377,8 +378,11 @@ The config is decoded only if all of these hold: owner = DBC, the `PoolConfig` d
 | committed base mint is not the default pubkey or the quote mint | `InvalidBaseMint` |
 | a pre-existing vault ATA has no delegate, close authority, CPI Guard or required memos | `VaultEncumbered` |
 
-The quote allowlist is intentionally UI-level. DBC itself enforces the token badge, the fee minimum (0.25%),
-the curve shape and the other `create_config` rules ([`research/dbc-facts.md`](research/dbc-facts.md) Q9).
+The quote allowlist is intentionally UI-level, and so is the minimum raise in fiat terms ($1 in the SDK):
+both need a list or a price oracle that the program does not have. The on-chain threshold check is therefore
+only the weakest statement the program can make on its own — that the vault cannot be *provably* empty. DBC
+itself enforces the token badge, the fee minimum (0.25%), the curve shape and the other `create_config` rules
+([`research/dbc-facts.md`](research/dbc-facts.md) Q9).
 
 ### 4.2 `register_pool`
 
