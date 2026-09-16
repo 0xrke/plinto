@@ -118,9 +118,11 @@ slightly from the funding table in §3 (that one carries the +10% headroom).
 
 ## 3. Funding table
 
-Send from the user's own wallet **before** the run (SPYx directly, not USDC — the sequence pays in
-SPYx). The SPYx column is the rehearsal plan + 10% for price moves; the preflight recomputes the
-exact requirement from the live price.
+These are the balances every wallet must hold **before** the run. They can be sent from the user's
+own wallet (SPYx directly, not USDC — the sequence pays in SPYx), but the intended route is §3.1:
+the user funds the **deployer** alone, and `scripts/c2/fund.ts` spreads the SOL and buys the SPYx in
+one gated, idempotent command. The SPYx column is the rehearsal plan + 10% for price moves; the
+preflight and the funding script both recompute the exact requirement from the live price.
 
 | Wallet | Address | Key file | Send SOL | Send SPYx (raw / as wallets show it) |
 |---|---|---|---:|---:|
@@ -143,6 +145,118 @@ exact requirement from the live price.
 - Re-check the rent before funding (read-only): `solana rent 505901`. It was 5,080 lamports/byte on
   2026-09-16; the recommendation carries about 5% headroom.
 - Full derivation: `docs/research/surfpool-e2e.md` §7.
+
+### 3.1 Spreading it from the deployer — `scripts/c2/fund.ts`
+
+The user funds **one** wallet. `keys/deployer.json` (`BBU1tTr4BTrEeVfNG4wWLmrmyhDHdeLZeny5C5FsdstV`)
+was funded with **6.108 SOL** on 2026-09-16. `scripts/c2/fund.ts` is the single command that turns
+that into the table above: it spreads the SOL to the four demo wallets, buys the SPYx through
+Jupiter, creates the three SPYx token accounts and transfers each wallet its share. Nothing else in
+the repo moves funds between the wallets.
+
+**Check the plan first — read-only, any time, no switches:**
+
+```bash
+packages/sdk/node_modules/.bin/tsx scripts/c2/fund.ts --rpc "$MAINNET_RPC_URL" --plan-only
+```
+
+**Run it** (this spends real money; it is the step the user approves together with §1):
+
+```bash
+export MAINNET_RPC_URL="<the RPC the user chose>"
+export STOCKFLOOR_ALLOW_MAINNET=1
+packages/sdk/node_modules/.bin/tsx scripts/c2/fund.ts \
+  --rpc "$MAINNET_RPC_URL" --allow-mainnet --yes-i-am-spending-real-money
+```
+
+It stops twice and waits for `yes`: once on the whole plan, and once after the test swap. Run the
+identical sequence against a local mainnet fork first with `bash scripts/c2/fund-fork-test.sh`.
+
+**The stages**, in order; each is confirmed on chain and written to the run state before the next one
+starts, so a crash can never lose track of what already moved:
+
+| # | Stage | What it sends | Idempotent because |
+|---:|---|---|---|
+| 1 | `sol:creator` … `sol:cranker` | one `System::Transfer` per wallet, topping it up to its target (0.06 / 0.02 / 0.02 / 0.04 SOL) | a wallet already at or above its target is skipped |
+| 2 | `ata:deployer` | the deployer's own SPYx token account | skipped when the account exists |
+| 3 | `swap:test` | a **≈ $5** Jupiter swap (SOL → SPYx), then the received amount is read back from chain and checked against the accepted range and printed | the deployer's SPYx balance is re-read; what the test swap bought counts toward the requirement |
+| 4 | — | **second confirmation**, showing exactly what the rest of the swap will cost | — |
+| 5 | `swap:main` | the remaining SPYx, sized against the quote so the output lands in [needed, needed + 2%] | only the shortfall against the deployer's balance is bought |
+| 6 | `ata:creator` … `ata:buyer2` | `ATA::CreateIdempotent`, rent paid by the deployer (≈ 0.00156 SOL each on mainnet) | skipped when the account exists |
+| 7 | `spyx:creator` … `spyx:buyer2` | `Token-2022::TransferChecked` of each wallet's SPYx | a wallet already holding its target is skipped |
+| 8 | `verify` | nothing — re-reads every balance from chain, prints the end-state table and **exits non-zero on any shortfall** | — |
+
+**How much it moves** (measured by `--plan-only` against mainnet, 2026-09-16 05:25 UTC, SPYx
+$757.81, SOL $97.09):
+
+| | |
+|---|---:|
+| SOL to the four wallets | 0.140000 SOL ($13.59) |
+| SPYx to buy (8,060,000 raw = 0.0806 SPYx) | ≈ 0.6516 SOL ($61.43) |
+| Rent for 4 SPYx token accounts | 0.006238 SOL |
+| Fee buffer | 0.005000 SOL |
+| **Total off the deployer** | **≈ 0.8029 SOL ≈ $77.47** |
+| **Deployer afterwards** | **≈ 5.3051 SOL** (floor **5.05**) |
+
+The SPYx target of each wallet is the **larger** of the rehearsed plan in §3 and the live requirement
+recomputed the way the preflight computes it (`scripts/e2e/plan.ts pre-launch` against the live
+Jupiter price) **+ 10%**, so a price move between funding and launch cannot underfund the run. At the
+price above the rehearsed plan is the larger of the two; a 30% SPYx drop would make the live figure
+win. The swap is sized 1% over the requirement, so the deployer keeps ≈ 0.7% of the SPYx (≈ $0.50) as
+a leftover — it stays in the deployer's token account and is reported as such.
+
+**The gate.** Sending on mainnet needs **all four** of: `--allow-mainnet`,
+`STOCKFLOOR_ALLOW_MAINNET=1` (together these are the SDK send guard of `packages/sdk/src/guard.ts`,
+reused unchanged), a **non-loopback `--rpc` that really is mainnet**, and
+`--yes-i-am-spending-real-money`. It deliberately does **not** require `keys/c2-approved`: that
+marker authorises the C2 run itself (§1), not the funding. On top of that the script refuses to
+start when the plan would leave the deployer under the 5.05 SOL the deploy needs, when the deployer
+cannot pay for the plan at all, when a `keys/` file no longer derives the address this table names,
+when SPYx is paused or has grown a transfer hook or transfer fee, and when a Jupiter route's implied
+price is more than **2%** (`--max-deviation-bps`) from the Jupiter Price V3 mid. Both swaps carry a
+hard **50 bps** slippage cap (`--slippage-bps`) and a minimum-received assertion checked against the
+balance the chain actually shows. The RPC URL is never printed or written to the report
+(`rpcDisplay`), and only keypairs under `keys/` can be loaded.
+
+**What the fork test proves, and what it cannot.** `bash scripts/c2/fund-fork-test.sh` runs the whole
+command against a local Surfpool mainnet fork (RPC 127.0.0.1:58899, WS 58900) with the deployer set
+to the same 6.108 SOL and the demo wallets empty, and stops the surfnet afterwards. Committed
+evidence: `scripts/c2/reports/fund-dry-20260916T054016Z.md` — **11 transactions** (4 SOL transfers, 4
+token accounts, 3 SPYx transfers; on mainnet the two swap stages add 2 more), end state all `OK`,
+deployer 6.108 → 5.3019 SOL.
+The test also asserts the refusals (deploy floor, deployer too poor, the mainnet override pointed at
+a loopback RPC, Jupiter asked for on a fork) and the recovery paths.
+**The Jupiter swap path itself is only exercised on mainnet**: Jupiter has no local fork, so
+`--swap-provider cheat` replaces it with a Surfpool cheatcode that mints the SPYx at the live mid
+price and charges the SOL. Everything around the swap — the sizing, the quote checks, the deviation
+and slippage caps, the received-amount assertion, the second confirmation, the resume logic — runs
+the same code on the fork as on mainnet; the quote request, the signature and the
+`POST /ultra/v1/execute` do not. A Jupiter **quote** was fetched read-only against mainnet while this
+was written (0.6 SOL → 7,612,126 raw SPYx, 14 bps from the Price V3 mid, route SOL → USDC → SPYx),
+which is what the checks are calibrated against.
+
+**If it dies midway.** Run exactly the same command again.
+
+- Every stage recomputes what is missing **from the balances it reads**, not from the state file, so
+  the only effect of a resume is that the missing transfers are sent. Proved on the fork by deleting
+  the state file and wiping one wallet's SPYx: the run topped that wallet up and touched nothing
+  else.
+- The state file `target/c2/fund/<mainnet|fork>.json` (gitignored) carries the run id, every stage,
+  every signature and the prices used, and is rewritten after every confirmed transaction. The
+  report `scripts/c2/reports/fund-<run id>.md` is rewritten at the same points, so an interrupted run
+  still leaves a complete log.
+- A swap is the one stage that could have landed while the process was dying. It is marked `pending`
+  with the pre-swap SPYx balance **before** the transaction is signed; on the next run that balance
+  decides: if the deployer gained SPYx, the stage is recorded as landed and not repeated; if it did
+  not, the swap is re-quoted. Either way the next swap only buys the shortfall, so a double spend
+  would have to survive both the balance check and the plan's deployer floor.
+- If the state file is lost entirely, nothing breaks: the run starts a new run id and, because the
+  wallets are already funded, sends nothing. The one cost is that the ≈ $5 test swap is repeated —
+  and even that SPYx counts toward the requirement rather than being wasted.
+- A resume that would have to buy SPYx again while the deployer is near 5.05 SOL is **refused**, not
+  half-done: the deploy money is never spent on a repair. Top the deployer up and re-run.
+- After a successful funding, `scripts/c2/preflight.ts` is the independent check: all five funding
+  rows must turn `GO`.
 
 ---
 
@@ -255,6 +369,9 @@ idempotent.
 
 ## 6. Recovery
 
+A failure of the **funding step** (§3.1) has its own recovery, in §3.1: re-run the same command, it
+sends only what is still missing. This section is about the run itself.
+
 Every failure leaves a resumable run. The generic move is:
 
 ```bash
@@ -349,6 +466,10 @@ Artifacts the run produces:
 
 | Path | What |
 |---|---|
+| `scripts/c2/fund.ts` | the funding step: deployer SOL → the four demo wallets + the SPYx purchase (§3.1) |
+| `scripts/c2/libfund.ts` | its pure parts: the plan, the guard, the swap checks, the end-state verification (unit-tested in `packages/sdk/test/c2-fund.test.ts`) |
+| `scripts/c2/fund-fork-test.sh` | runs the funding step end to end on a local Surfpool fork and asserts the refusals (§3.1) |
+| `target/c2/fund/<mainnet\|fork>.json` | funding run state: stages, signatures, prices (gitignored) |
 | `scripts/c2/preflight.ts` | read-only go/no-go table (§2) |
 | `scripts/c2/run.sh` | the sequence, dry run by default, `--mainnet` behind the gate (§4) |
 | `scripts/c2/checks.ts` | the abort conditions checked between steps (§5) |
