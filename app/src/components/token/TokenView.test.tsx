@@ -92,4 +92,15 @@ describe("<TokenView /> after migration", () => {
     expect(within(stepper).getByText("Redeem any time")).toBeTruthy();
     expect(screen.queryByText(/has not been harvested into the vault yet/)).toBeNull();
   });
+
+  it("shows no unbuilt chart, and keeps what it said in the vault card", async () => {
+    renderToken(summary("redeemable"));
+    const vault = await screen.findByRole("region", { name: "Vault" });
+    // The empty "Floor history" placeholder ("once the indexer is connected") is gone…
+    expect(screen.queryByRole("heading", { name: "Floor history" })).toBeNull();
+    expect(screen.queryByText(/indexer/)).toBeNull();
+    // …and its two honest sentences are a footnote of the vault card.
+    expect(within(vault).getByText(/the floor per token only rises/)).toBeTruthy();
+    expect(within(vault).getByText(/In USD it also moves with/)).toBeTruthy();
+  });
 });

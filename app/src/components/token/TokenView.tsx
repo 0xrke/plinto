@@ -24,7 +24,7 @@ import { MarketBuyPanel } from "./MarketBuyPanel";
 import { PhaseStepper } from "./PhaseStepper";
 import { PresaleTradePanel } from "./PresaleTradePanel";
 import { RedeemPanel } from "./RedeemPanel";
-import { FloorHistoryPlaceholder, VaultStats } from "./VaultStats";
+import { VaultStats } from "./VaultStats";
 
 /**
  * Two-column layout on large screens: the primary card (row 1) and the secondary cards
@@ -189,7 +189,6 @@ function GraduatedBody({ launch }: { launch: LaunchSummary }) {
       </div>
       <div className="space-y-6 lg:col-start-1 lg:row-start-2">
         <VaultStats launch={launch} />
-        <FloorHistoryPlaceholder quoteSymbol={launch.quote.asset.symbol} underlying={launch.quote.asset.underlying} />
       </div>
     </div>
   );

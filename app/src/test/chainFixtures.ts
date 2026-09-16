@@ -5,6 +5,9 @@
  */
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {
+  LAUNCH_ACCOUNT_SIZE,
+  LAUNCH_DISCRIMINATOR,
+  LAUNCH_OFFSETS,
   QUOTE_ALLOWLIST,
   TOKEN_2022_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
@@ -19,6 +22,7 @@ import {
   type ChainReader,
   type DammV2Pool,
   type KeyedAccount,
+  type LaunchAccount,
   type LaunchInput,
   type LaunchState,
   type MintInfo,
@@ -225,6 +229,40 @@ export function encodeMetadata(mint: PublicKey, name: string, symbol: string, ur
     off += p.length;
   }
   return out;
+}
+
+/**
+ * A `Launch` account as getProgramAccounts returns it (351 bytes, discriminator + fixed offsets),
+ * so tests can put several Launch accounts behind one base mint.
+ */
+export function encodeLaunch(launch: LaunchAccount): Uint8Array {
+  const data = new Uint8Array(LAUNCH_ACCOUNT_SIZE);
+  const view = new DataView(data.buffer);
+  const o = LAUNCH_OFFSETS;
+  data.set(LAUNCH_DISCRIMINATOR, 0);
+  data[o.version] = launch.version;
+  data[o.bump] = launch.bump;
+  data[o.claimerBump] = launch.claimerBump;
+  data[o.vaultAuthorityBump] = launch.vaultAuthorityBump;
+  view.setUint16(o.exitFeeBps, launch.exitFeeBps, true);
+  data[o.migrationFeeHarvested] = launch.migrationFeeHarvested ? 1 : 0;
+  data[o.surplusHarvested] = launch.surplusHarvested ? 1 : 0;
+  data[o.migrated] = launch.migrated ? 1 : 0;
+  data.set(launch.config.toBytes(), o.config);
+  data.set(launch.creator.toBytes(), o.creator);
+  // `poolRegistered` is derived: the pool field is the default key until register_pool.
+  data.set((launch.poolRegistered ? launch.pool : PublicKey.default).toBytes(), o.pool);
+  data.set(launch.baseMint.toBytes(), o.baseMint);
+  data.set(launch.quoteMint.toBytes(), o.quoteMint);
+  data.set(launch.quoteTokenProgram.toBytes(), o.quoteTokenProgram);
+  data.set(launch.vault.toBytes(), o.vault);
+  view.setBigInt64(o.createdAt, launch.createdAt, true);
+  u64(view, o.totalHarvestedQuote, launch.totalHarvestedQuote);
+  u64(view, o.totalBurnedBase, launch.totalBurnedBase);
+  u64(view, o.totalRedeemedBase, launch.totalRedeemedBase);
+  u64(view, o.totalRedeemedQuote, launch.totalRedeemedQuote);
+  u64(view, o.totalExitFees, launch.totalExitFees);
+  return data;
 }
 
 export function encodeClock(slot: bigint, unixTimestamp: bigint): Uint8Array {

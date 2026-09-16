@@ -13,6 +13,12 @@ import { isLoopbackRpcUrl } from "@stockfloor/sdk";
  *                            otherwise the app sends only to a loopback surfnet or local validator.
  * NEXT_PUBLIC_PRIORITY_FEE_MICROLAMPORTS  Priority fee per compute unit for app transactions. Default:
  *                            100000 on mainnet, 0 on local clusters.
+ * NEXT_PUBLIC_SITE_URL       Public origin of this deployment. Used as the metadata base for link
+ *                            previews (Open Graph / Twitter cards).
+ * NEXT_PUBLIC_REPO_URL       Source repository (https). When set, the footer links to the code, the
+ *                            architecture document and the security model.
+ * NEXT_PUBLIC_LIVE_APP_URL   Where the chain-connected deployment lives. Shown in the demo-data
+ *                            banner of a preview build.
  */
 export const DEFAULT_RPC_URL = "http://127.0.0.1:8899";
 
@@ -64,6 +70,33 @@ export function networkLabel(url: string): string {
   if (labels.some((l) => l.includes("mainnet"))) return "Mainnet";
   return "Custom RPC";
 }
+
+/** An https URL from the environment, or undefined. Never a relative or non-https value. */
+function httpsEnv(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? value.replace(/\/+$/, "") : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Public origin of this deployment (link previews). Vercel's own value is used when nothing is set. */
+export const SITE_URL: string | undefined =
+  httpsEnv(process.env.NEXT_PUBLIC_SITE_URL) ??
+  httpsEnv(process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : undefined);
+
+/** Source repository, for the footer links. Undefined hides them rather than guessing a URL. */
+export const REPO_URL: string | undefined = httpsEnv(process.env.NEXT_PUBLIC_REPO_URL);
+
+/** A file in the repository (default branch), or undefined when the repository is not configured. */
+export function repoFileUrl(path: string): string | undefined {
+  return REPO_URL ? `${REPO_URL}/blob/main/${path}` : undefined;
+}
+
+/** The chain-connected deployment, named by a preview build's demo-data banner. */
+export const LIVE_APP_URL: string | undefined = httpsEnv(process.env.NEXT_PUBLIC_LIVE_APP_URL);
 
 /** Base token parameters from docs/BRIEF.md section 4. */
 export const BASE_DECIMALS = 6;

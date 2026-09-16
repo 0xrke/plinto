@@ -4,7 +4,7 @@ import { LaunchList } from "@/components/launch/LaunchList";
 const STEPS = [
   {
     title: "Presale on a bonding curve",
-    body: "Buyers pay USDC or SOL, routed to a tokenized stock such as SPYx. The flat or gently rising curve fills toward a threshold of about $1,000.",
+    body: "Buyers pay in a tokenized stock such as SPYx, straight into the curve. The flat or gently rising curve fills toward the graduation threshold the creator set. On mainnet, USDC and SOL can be routed into that asset through Jupiter first.",
   },
   {
     title: "Graduation",

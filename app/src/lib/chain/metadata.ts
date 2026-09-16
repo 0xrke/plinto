@@ -6,6 +6,12 @@ export interface TokenMetadata {
   name: string;
   symbol: string;
   uri: string;
+  /**
+   * Image resolved from `uri` (`resolveTokenImageUrl`): the URI itself when it is an image, the
+   * `image` field when it is a metadata JSON document. Undefined when nothing resolved it yet;
+   * null when there is no usable image.
+   */
+  imageUrl?: string | null;
 }
 
 function readString(data: Uint8Array, offset: number, maxLen: number): { value: string; next: number } {
@@ -37,18 +43,66 @@ export function metadataAddress(mint: PublicKey): PublicKey {
   return metaplexMetadataPda(mint);
 }
 
-/**
- * Image URL for the avatar. The create form stores an https image URL as the token URI (MVP). A
- * metadata JSON URI (path ending in .json) is not fetched; the avatar falls back to initials, and
- * so does an image that fails to load.
- */
-export function imageUrlFromUri(uri: string): string | null {
-  if (!uri) return null;
+/** An https URL, or null. Everything else (http, ipfs:, data:, javascript:, junk) is refused. */
+function httpsUrl(value: unknown): string | null {
+  if (typeof value !== "string" || value === "") return null;
   try {
-    const u = new URL(uri);
-    if (u.protocol !== "https:") return null;
-    return /\.json$/i.test(u.pathname) ? null : uri;
+    return new URL(value).protocol === "https:" ? value : null;
   } catch {
     return null;
+  }
+}
+
+/** A token URI that points at a metadata JSON document rather than at an image. */
+export function isJsonMetadataUri(uri: string): boolean {
+  const https = httpsUrl(uri);
+  if (!https) return false;
+  return /\.json$/i.test(new URL(https).pathname);
+}
+
+/**
+ * Image URL for the avatar, without a network read: the token URI itself when it is a plain image
+ * URL. A metadata JSON URI needs `resolveTokenImageUrl`; here it is null, so the avatar falls back
+ * to initials rather than loading a JSON document into an `<img>`.
+ */
+export function imageUrlFromUri(uri: string): string | null {
+  const https = httpsUrl(uri);
+  if (!https) return null;
+  return isJsonMetadataUri(https) ? null : https;
+}
+
+/** Fetch timeout for a token's metadata JSON. Long enough for a slow gateway, short enough to not stall a page. */
+export const METADATA_FETCH_TIMEOUT_MS = 4_000;
+
+/**
+ * The image of a token URI. A plain image URL is used as is; a metadata JSON URI (the shape wallets
+ * and explorers expect: `{ name, symbol, description, image }`) is fetched once and its `image`
+ * field is used. Any failure — offline, a timeout, non-JSON, no https `image` — is null, and the
+ * avatar shows the token's initials.
+ *
+ * Only a `.json` path is fetched. A JSON document served under an extension-less URI (some IPFS
+ * pinning services) is not detected; such a token shows initials.
+ */
+export async function resolveTokenImageUrl(
+  uri: string,
+  opts: { fetchImpl?: typeof fetch; timeoutMs?: number } = {},
+): Promise<string | null> {
+  const https = httpsUrl(uri);
+  if (!https) return null;
+  if (!isJsonMetadataUri(https)) return https;
+  const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
+  if (typeof fetchImpl !== "function") return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? METADATA_FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetchImpl(https, { signal: controller.signal, redirect: "follow" });
+    if (!res.ok) return null;
+    const doc: unknown = await res.json();
+    if (!doc || typeof doc !== "object") return null;
+    return httpsUrl((doc as { image?: unknown }).image);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
   }
 }

@@ -13,7 +13,7 @@ import {
 const valid: LaunchFormValues = {
   name: "Harbor Coffee Co-op",
   symbol: "HRBR",
-  imageUrl: "https://example.com/logo.png",
+  metadataUri: "https://example.com/token.json",
   quoteSymbol: "SPYx",
   preset: "gentle",
   vaultSharePct: 50,
@@ -21,9 +21,10 @@ const valid: LaunchFormValues = {
 };
 
 describe("validateLaunchForm", () => {
-  it("accepts a valid form, including an empty image URL", () => {
+  it("accepts a valid form, including an empty metadata URI and a bare image URL", () => {
     expect(validateLaunchForm(valid)).toEqual({});
-    expect(validateLaunchForm({ ...valid, imageUrl: "" })).toEqual({});
+    expect(validateLaunchForm({ ...valid, metadataUri: "" })).toEqual({});
+    expect(validateLaunchForm({ ...valid, metadataUri: "https://example.com/logo.png" })).toEqual({});
   });
 
   it("requires a name of at most 32 characters", () => {
@@ -41,11 +42,11 @@ describe("validateLaunchForm", () => {
     expect(validateLaunchForm({ ...valid, symbol: "abc1" }).symbol).toBeUndefined();
   });
 
-  it("only accepts https image URLs", () => {
-    expect(validateLaunchForm({ ...valid, imageUrl: "http://example.com/a.png" }).imageUrl).toBeDefined();
-    expect(validateLaunchForm({ ...valid, imageUrl: "not a url" }).imageUrl).toBeDefined();
+  it("only accepts an https metadata URI that fits the on-chain field", () => {
+    expect(validateLaunchForm({ ...valid, metadataUri: "http://example.com/a.json" }).metadataUri).toBeDefined();
+    expect(validateLaunchForm({ ...valid, metadataUri: "not a url" }).metadataUri).toBeDefined();
     expect(
-      validateLaunchForm({ ...valid, imageUrl: `https://example.com/${"a".repeat(200)}` }).imageUrl,
+      validateLaunchForm({ ...valid, metadataUri: `https://example.com/${"a".repeat(200)}` }).metadataUri,
     ).toBeDefined();
   });
 

@@ -1,9 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import {
+  AmbiguousLaunchError,
   CURVE_PRESETS,
-  LAUNCH_ACCOUNT_SIZE,
-  LAUNCH_DISCRIMINATOR,
-  LAUNCH_OFFSETS,
   PARTNER_MIGRATION_FEE_MASK,
   QUOTE_ALLOWLIST,
   STOCKFLOOR_PROGRAM_ID,
@@ -19,12 +17,13 @@ import {
   findQuoteAsset,
   getMigrationFeeDistribution,
   listLaunches,
+  resolveLaunchByBaseMint,
   sqrtPriceX64ToUsd,
   type ChainReader,
   type CurvePreset,
   type LaunchState,
 } from "@stockfloor/sdk";
-import { decodeMetaplexMetadata, imageUrlFromUri, metadataAddress, type TokenMetadata } from "../chain/metadata";
+import { decodeMetaplexMetadata, imageUrlFromUri, metadataAddress, resolveTokenImageUrl, type TokenMetadata } from "../chain/metadata";
 import type { PriceProvider, UsdPrice } from "../chain/prices";
 import { readUpgradeStatus, type UpgradeStatus } from "../chain/upgradeAuthority";
 import type { LaunchDataSource, LaunchPhase, LaunchSummary, PayToken, QuoteMarket } from "./types";
@@ -39,6 +38,8 @@ export interface ChainDataSourceDeps {
   reader: ChainReader;
   prices: PriceProvider;
   sdk?: Partial<ChainReadFns>;
+  /** Used to read token metadata JSON documents (injectable for tests). */
+  fetchImpl?: typeof fetch;
 }
 
 /** SDK phase → UI phase: the SDK's "graduated" (fee not yet harvested) and "redeemable" are both graduated. */
@@ -119,7 +120,8 @@ export function toLaunchSummary(state: LaunchState, meta: TokenMetadata | null, 
     vault: state.vault.toBase58(),
     name: meta?.name || `Launch ${fallbackSymbol}`,
     symbol: meta?.symbol || fallbackSymbol,
-    imageUrl: meta ? imageUrlFromUri(meta.uri) : null,
+    // `imageUrl` is set once the metadata JSON (if any) was read; a plain image URI needs no read.
+    imageUrl: meta ? (meta.imageUrl ?? imageUrlFromUri(meta.uri)) : null,
     creator: state.launch.creator.toBase58(),
     createdAt: Number(state.launch.createdAt) * 1000,
     baseDecimals,
@@ -154,7 +156,11 @@ export class ChainDataSource implements LaunchDataSource {
   private readonly reader: ChainReader;
   private readonly prices: PriceProvider;
   private readonly sdk: ChainReadFns;
-  /** base mint → Launch address (never changes once created). */
+  private readonly fetchImpl?: typeof fetch;
+  /**
+   * base mint → Launch address. Only launches that own the mint's DBC pool are cached: anyone can
+   * create a pool-less Launch account that commits someone else's base mint.
+   */
   private readonly launchByMint = new Map<string, PublicKey>();
   /** Metadata is immutable (token update authority Immutable), so it is cached per mint. */
   private readonly metadata = new Map<string, TokenMetadata | null>();
@@ -165,25 +171,32 @@ export class ChainDataSource implements LaunchDataSource {
     this.reader = deps.reader;
     this.prices = deps.prices;
     this.sdk = { listLaunches, fetchLaunchState, ...deps.sdk };
+    this.fetchImpl = deps.fetchImpl;
   }
 
   private async loadMetadata(mints: PublicKey[]): Promise<void> {
     const missing = mints.filter((m) => !this.metadata.has(m.toBase58()));
     if (missing.length === 0) return;
     const accounts = await this.reader.getMultipleAccountsInfo(missing.map(metadataAddress));
+    const found: Array<{ mint: PublicKey; meta: TokenMetadata }> = [];
     missing.forEach((mint, i) => {
       const acc = accounts[i];
-      let meta: TokenMetadata | null = null;
-      if (acc) {
-        try {
-          meta = decodeMetaplexMetadata(acc.data);
-        } catch {
-          meta = null;
-        }
+      if (!acc) return;
+      try {
+        found.push({ mint, meta: decodeMetaplexMetadata(acc.data) });
+      } catch {
+        // Not a metadata account (or malformed): the card falls back to the mint's initials.
       }
-      // Only cache hits: the metadata account appears with the pool transaction.
-      if (meta) this.metadata.set(mint.toBase58(), meta);
     });
+    // A metadata JSON URI has to be fetched for its image; a plain image URI resolves offline. One
+    // failed document must not hide a launch, so every read is settled and a failure means initials.
+    await Promise.all(
+      found.map(async ({ mint, meta }) => {
+        const imageUrl = await resolveTokenImageUrl(meta.uri, { fetchImpl: this.fetchImpl });
+        // Only cache hits: the metadata account appears with the pool transaction.
+        this.metadata.set(mint.toBase58(), { ...meta, imageUrl });
+      }),
+    );
   }
 
   private async summarize(states: LaunchState[]): Promise<LaunchSummary[]> {
@@ -201,7 +214,9 @@ export class ChainDataSource implements LaunchDataSource {
 
   async listLaunches(): Promise<LaunchSummary[]> {
     const launches = (await this.sdk.listLaunches(this.reader)).filter((l) => isAllowlisted(l.launch.quoteMint));
-    for (const l of launches) this.launchByMint.set(l.launch.baseMint.toBase58(), l.address);
+    // Only a launch that registered the mint's DBC pool: a pool-less Launch account committing a
+    // live launch's mint would otherwise take over its token page through this cache.
+    for (const l of launches) if (l.launch.poolRegistered) this.launchByMint.set(l.launch.baseMint.toBase58(), l.address);
     const results = await Promise.allSettled(
       launches.map((l) => this.sdk.fetchLaunchState(this.reader, { launch: l.address }, { includePositions: false })),
     );
@@ -218,21 +233,25 @@ export class ChainDataSource implements LaunchDataSource {
     return summaries.sort((a, b) => b.createdAt - a.createdAt);
   }
 
-  /** Launch address for a base mint: cached, else getProgramAccounts on the Launch base_mint offset. */
+  /**
+   * Launch address for a base mint: cached, else the SDK's `resolveLaunchByBaseMint`.
+   *
+   * `create_launch` accepts any base mint, so anyone can create extra pool-less Launch accounts
+   * that commit a live launch's mint, and getProgramAccounts returns matches in no guaranteed
+   * order. The SDK picks the launch that owns the mint's DBC pool (a mint has exactly one) and
+   * throws `AmbiguousLaunchError` when several pool-less launches claim it. Taking the first match
+   * instead would let a ~0.01 SOL shadow launch turn a real token page into "not found".
+   */
   private async resolveLaunch(mint: PublicKey): Promise<PublicKey | null> {
     const key = mint.toBase58();
     const hit = this.launchByMint.get(key);
     if (hit) return hit;
-    const found = await this.reader.getProgramAccounts(STOCKFLOOR_PROGRAM_ID, {
-      dataSize: LAUNCH_ACCOUNT_SIZE,
-      memcmp: [
-        { offset: 0, bytes: LAUNCH_DISCRIMINATOR },
-        { offset: LAUNCH_OFFSETS.baseMint, bytes: mint.toBytes() },
-      ],
-    });
-    const address = found[0]?.pubkey ?? null;
-    if (address) this.launchByMint.set(key, address);
-    return address;
+    const match = await resolveLaunchByBaseMint(this.reader, mint);
+    if (!match) return null;
+    // A pool-less match is the window between the two launch transactions: real, but not yet the
+    // proven owner of the mint, so it is not cached.
+    if (match.canonical) this.launchByMint.set(key, match.address);
+    return match.address;
   }
 
   async getLaunch(mint: string): Promise<LaunchSummary | null> {
@@ -242,7 +261,17 @@ export class ChainDataSource implements LaunchDataSource {
     } catch {
       return null;
     }
-    const address = await this.resolveLaunch(key);
+    let address: PublicKey | null;
+    try {
+      address = await this.resolveLaunch(key);
+    } catch (err) {
+      if (err instanceof AmbiguousLaunchError) {
+        throw new Error(
+          `${err.candidates.length} launch accounts claim this mint and none of them owns its Meteora pool yet, so this page cannot tell which one is real. Anyone can create such an account; open the launch from the list, or wait for the pool transaction.`,
+        );
+      }
+      throw err;
+    }
     if (!address) return null;
     const state = await this.sdk.fetchLaunchState(this.reader, { launch: address }, { includePositions: true });
     if (!state) return null;

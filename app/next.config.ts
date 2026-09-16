@@ -1,4 +1,6 @@
 import type { NextConfig } from "next";
+import { PHASE_PRODUCTION_BUILD } from "next/constants";
+import { assertDeployableProductionBuild } from "./src/lib/deployGuard";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -14,4 +16,18 @@ const nextConfig: NextConfig = {
   agentRules: false,
 };
 
-export default nextConfig;
+/**
+ * `next build` only: a build that would be hosted must be wired to a chain, so a deploy cannot
+ * quietly ship the mock launches or an RPC URL pointing at the build machine (see lib/deployGuard).
+ * `next dev` and `next start` are unaffected.
+ */
+export default function config(phase: string): NextConfig {
+  if (phase === PHASE_PRODUCTION_BUILD) {
+    assertDeployableProductionBuild({
+      NEXT_PUBLIC_DATA_SOURCE: process.env.NEXT_PUBLIC_DATA_SOURCE,
+      NEXT_PUBLIC_RPC_URL: process.env.NEXT_PUBLIC_RPC_URL,
+      STOCKFLOOR_LOCAL_BUILD: process.env.STOCKFLOOR_LOCAL_BUILD,
+    });
+  }
+  return nextConfig;
+}

@@ -25,6 +25,7 @@ import {
   SPYX_PRICE,
   account,
   encodeClock,
+  encodeLaunch,
   encodeMetadata,
   encodeMint,
   launchState,
@@ -154,6 +155,21 @@ describe("toLaunchSummary", () => {
   });
 });
 
+/** One `Launch` account as getProgramAccounts returns it. */
+function launchAccount(state: LaunchState) {
+  return { pubkey: state.address, account: account(encodeLaunch(state.launch), STOCKFLOOR_PROGRAM_ID) };
+}
+
+/**
+ * The shadow-launch attack: `create_launch` takes any base mint, so anyone can create a pool-less
+ * Launch account (their own DBC config, about 0.01 SOL) that commits a live launch's base mint.
+ */
+function shadowLaunch(target: LaunchState): LaunchState {
+  const other = launchState().state;
+  const launch = { ...other.launch, baseMint: target.launch.baseMint, pool: PublicKey.default, poolRegistered: false };
+  return { ...other, launch, dbcPool: null };
+}
+
 function sourceWith(reader: FakeReader, states: LaunchState[], fetchImpl?: (ref: { launch: PublicKey }) => Promise<LaunchState | null>) {
   const listLaunches = vi.fn(async () => states.map((s) => ({ address: s.address, launch: s.launch })));
   const fetchLaunchState = vi.fn(async (_r: unknown, ref: { launch: PublicKey }, _opts?: { includePositions?: boolean }) =>
@@ -162,6 +178,10 @@ function sourceWith(reader: FakeReader, states: LaunchState[], fetchImpl?: (ref:
   const source = new ChainDataSource({
     reader,
     prices,
+    // Hermetic: a metadata JSON document is never read over the network here.
+    fetchImpl: (async () => {
+      throw new Error("no network in unit tests");
+    }) as unknown as typeof fetch,
     sdk: { listLaunches: listLaunches as never, fetchLaunchState: fetchLaunchState as never },
   });
   return { source, listLaunches, fetchLaunchState };
@@ -193,6 +213,38 @@ describe("ChainDataSource", () => {
     expect(metadataReads()).toBe(before);
   });
 
+  it("reads the image out of a metadata JSON document, once per mint, and survives a failed read", async () => {
+    const withJson = launchState({ input: { name: "Tidepool", symbol: "TIDE" } }).state;
+    const broken = launchState({ createdAt: NOW - 100n, input: { name: "Broken", symbol: "BRKN" } }).state;
+    const reader = new FakeReader();
+    reader.set(metadataAddress(withJson.launch.baseMint), account(encodeMetadata(withJson.launch.baseMint, "Tidepool", "TIDE", "https://x.test/tide.json"), PublicKey.default));
+    reader.set(metadataAddress(broken.launch.baseMint), account(encodeMetadata(broken.launch.baseMint, "Broken", "BRKN", "https://x.test/broken.json"), PublicKey.default));
+    const urls: string[] = [];
+    const fetchImpl = (async (input: string) => {
+      urls.push(String(input));
+      if (String(input).includes("broken")) throw new Error("gateway down");
+      return { ok: true, json: async () => ({ name: "Tidepool", image: "https://x.test/tide.png", description: "d" }) } as Response;
+    }) as unknown as typeof fetch;
+    const source = new ChainDataSource({
+      reader,
+      prices,
+      fetchImpl,
+      sdk: {
+        listLaunches: (async () => [withJson, broken].map((s) => ({ address: s.address, launch: s.launch }))) as never,
+        fetchLaunchState: (async (_r: unknown, ref: { launch: PublicKey }) =>
+          [withJson, broken].find((s) => s.address.equals(ref.launch)) ?? null) as never,
+      },
+    });
+
+    const list = await source.listLaunches();
+    expect(list.find((l) => l.symbol === "TIDE")!.imageUrl).toBe("https://x.test/tide.png");
+    // A document that cannot be read (or has no https image) shows the token's initials, not a broken image.
+    expect(list.find((l) => l.symbol === "BRKN")!.imageUrl).toBeNull();
+    expect(urls.sort()).toEqual(["https://x.test/broken.json", "https://x.test/tide.json"]);
+    await source.listLaunches();
+    expect(urls.length).toBe(2); // metadata is immutable: cached with its resolved image
+  });
+
   it("keeps the other launches when one state read fails, and throws when every read fails", async () => {
     const good = launchState().state;
     const bad = launchState().state;
@@ -217,7 +269,7 @@ describe("ChainDataSource", () => {
       const memcmp = filter!.memcmp!;
       expect(memcmp[1]!.offset).toBe(LAUNCH_OFFSETS.baseMint);
       const wanted = new PublicKey(memcmp[1]!.bytes);
-      return wanted.equals(state.launch.baseMint) ? [{ pubkey: state.address, account: account(new Uint8Array(351), STOCKFLOOR_PROGRAM_ID) }] : [];
+      return wanted.equals(state.launch.baseMint) ? [launchAccount(state)] : [];
     };
     const { source, fetchLaunchState } = sourceWith(reader, [state]);
 
@@ -231,6 +283,51 @@ describe("ChainDataSource", () => {
     const gpa = reader.calls.filter((c) => c.method === "getProgramAccounts").length;
     await source.getLaunch(state.launch.baseMint.toBase58());
     expect(reader.calls.filter((c) => c.method === "getProgramAccounts").length).toBe(gpa);
+  });
+
+  it("keeps the real launch when a shadow Launch account commits its mint, in either RPC order", async () => {
+    const { state } = launchState();
+    const mint = state.launch.baseMint;
+    const shadow = shadowLaunch(state);
+    // getProgramAccounts ordering is unspecified and varies per RPC node.
+    for (const order of [[shadow, state], [state, shadow]]) {
+      const reader = new FakeReader();
+      reader.programAccounts = async (_p, filter) => {
+        const wanted = new PublicKey(filter!.memcmp![1]!.bytes);
+        return wanted.equals(mint) ? order.map(launchAccount) : [];
+      };
+      const { source } = sourceWith(reader, [state, shadow]);
+      const found = await source.getLaunch(mint.toBase58());
+      // The shadow launch has no pool, so taking it would answer "launch not found" for a funded launch.
+      expect(found?.launchAddress).toBe(state.address.toBase58());
+      // Only the launch that owns the pool is cached.
+      reader.programAccounts = async () => {
+        throw new Error("resolved from the cache");
+      };
+      expect((await source.getLaunch(mint.toBase58()))?.launchAddress).toBe(state.address.toBase58());
+    }
+  });
+
+  it("refuses to guess when two pool-less launches claim one mint, with a message instead of a wrong page", async () => {
+    const { state } = launchState();
+    const mint = state.launch.baseMint;
+    const reader = new FakeReader();
+    reader.programAccounts = async () => [shadowLaunch(state), shadowLaunch(state)].map(launchAccount);
+    const { source } = sourceWith(reader, []);
+    await expect(source.getLaunch(mint.toBase58())).rejects.toThrow(/2 launch accounts claim this mint/);
+  });
+
+  it("does not let a shadow launch in the list poison the mint → launch cache", async () => {
+    const { state } = launchState();
+    const shadow = shadowLaunch(state);
+    const reader = new FakeReader();
+    // Listed last: last-write-wins caching would hand the token page to the shadow launch.
+    const { source } = sourceWith(reader, [state, shadow]);
+    expect((await source.listLaunches()).map((l) => l.launchAddress)).toEqual([state.address.toBase58()]);
+    reader.programAccounts = async () => {
+      throw new Error("resolved from the cache");
+    };
+    expect((await source.getLaunch(state.launch.baseMint.toBase58()))?.launchAddress).toBe(state.address.toBase58());
   });
 
   it("surfaces RPC failures of a token page as errors, not as 'not found'", async () => {

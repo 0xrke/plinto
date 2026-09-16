@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:local": "STOCKFLOOR_LOCAL_BUILD=1 next build",
     "start": "next start",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

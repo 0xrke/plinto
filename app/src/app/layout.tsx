@@ -1,17 +1,23 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import { SITE_URL } from "@/lib/config";
 import { AppProviders } from "@/components/providers/AppProviders";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 
+const TITLE = "StockFloor · Launches with a floor in tokenized stocks";
+const DESCRIPTION =
+  "A token launchpad on Meteora DBC where the raise becomes a redeemable floor backed by tokenized S&P 500.";
+
 export const metadata: Metadata = {
-  title: {
-    default: "StockFloor · Launches with a floor in tokenized stocks",
-    template: "%s · StockFloor",
-  },
-  description:
-    "A token launchpad on Meteora DBC where the raise becomes a redeemable floor backed by tokenized S&P 500.",
+  // Without a base, a shared link previews as a blank card (the OG image cannot be made absolute).
+  metadataBase: SITE_URL ? new URL(SITE_URL) : undefined,
+  title: { default: TITLE, template: "%s · StockFloor" },
+  description: DESCRIPTION,
+  applicationName: "StockFloor",
+  openGraph: { type: "website", siteName: "StockFloor", title: TITLE, description: DESCRIPTION, url: SITE_URL },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
 
 export const viewport: Viewport = {

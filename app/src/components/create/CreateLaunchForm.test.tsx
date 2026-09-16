@@ -147,17 +147,17 @@ describe("<CreateLaunchForm />", () => {
     await screen.findByText(formatUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Harbor Coffee Co-op" } });
     fireEvent.change(screen.getByLabelText("Symbol"), { target: { value: "hrbr" } });
-    fireEvent.change(screen.getByLabelText(/Image URL/), { target: { value: "http://insecure.example/logo.png" } });
+    fireEvent.change(screen.getByLabelText(/Token metadata JSON URL/), { target: { value: "http://insecure.example/token.json" } });
     expect((screen.getByRole("button", { name: "Launch token" }) as HTMLButtonElement).disabled).toBe(true);
 
-    fireEvent.change(screen.getByLabelText(/Image URL/), { target: { value: "https://example.com/logo.png" } });
+    fireEvent.change(screen.getByLabelText(/Token metadata JSON URL/), { target: { value: "https://example.com/token.json" } });
     const button = screen.getByRole("button", { name: "Launch token" }) as HTMLButtonElement;
     expect(button.disabled).toBe(false);
 
     await act(async () => {
       fireEvent.click(button);
     });
-    expect(await screen.findByText(/^Parameters are valid\./)).toBeTruthy();
+    expect(await screen.findByText(/^These launch parameters are valid\./)).toBeTruthy();
   });
 
   it("requires the non-US attestation before a launch with a first buy (a curve trade in the xStock)", async () => {
@@ -203,6 +203,34 @@ describe("<CreateLaunchForm />", () => {
     expect(screen.getByText(formatUsd(at2500.floorAtGraduationUsd))).toBeTruthy();
     expect(screen.getByText(`≈ ${formatUsd(2500)}`)).toBeTruthy();
     expect(screen.queryByText(/Meteora's keeper does not migrate the pool for you/)).toBeNull();
+  });
+
+  it("sends the metadata URI as the token URI, and never renders a JSON document as the avatar", async () => {
+    const captured: string[] = [];
+    const actions = new StubLaunchActions(0) as unknown as LaunchActions;
+    actions.createLaunch = async (input) => {
+      captured.push(input.uri);
+      return { ok: false, error: "recorded", signatures: [] };
+    };
+    const { container } = renderForm(true, new MockDataSource(0), actions);
+    await screen.findByText(formatUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Harbor Coffee Co-op" } });
+    fireEvent.change(screen.getByLabelText("Symbol"), { target: { value: "HRBR" } });
+    // The field wallets and explorers read: a JSON document, not an image.
+    expect(screen.getByLabelText(/Token metadata JSON URL/)).toBeTruthy();
+    expect(screen.getByText(/name, symbol, description and image/)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText(/Token metadata JSON URL/), { target: { value: "https://example.com/token.json" } });
+    // The preview cannot fetch the document, so the avatar stays on initials instead of <img src=…json>.
+    expect(container.querySelector("img")).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Launch token" }));
+    });
+    expect(captured).toEqual(["https://example.com/token.json"]);
+
+    // A bare image URL still works, and is shown.
+    fireEvent.change(screen.getByLabelText(/Token metadata JSON URL/), { target: { value: "https://example.com/logo.png" } });
+    expect(container.querySelector("img")?.getAttribute("src")).toBe("https://example.com/logo.png");
   });
 
   it("refuses a threshold below the SDK minimum or above the maximum, and sends the chosen one", async () => {

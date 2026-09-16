@@ -16,7 +16,12 @@ import type {
   WalletSigner,
 } from "./types";
 
-export const NOT_WIRED = "Demo data: switch NEXT_PUBLIC_DATA_SOURCE to chain to send transactions.";
+/**
+ * Shown to whoever clicks a button on demo data. It has to make sense to a visitor, not only to
+ * whoever deployed the app: the environment variable behind it is in app/README.md.
+ */
+export const NOT_WIRED =
+  "This is a preview with example launches, not real tokens, so there is nothing to send. Open a deployment connected to a chain to trade.";
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -49,7 +54,7 @@ export class StubLaunchActions implements LaunchActions {
       return { ok: false, error: `Invalid launch parameters: ${errorMessage(err)}` };
     }
     await wait(this.latencyMs);
-    return { ok: false, error: `Parameters are valid. ${NOT_WIRED}` };
+    return { ok: false, error: `These launch parameters are valid. ${NOT_WIRED}` };
   }
 
   async trade(request: TradeRequest, wallet: WalletSigner, _opts?: ActionOptions): Promise<ActionResult<TradeOutcome>> {

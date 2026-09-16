@@ -28,7 +28,8 @@ export function LaunchPreviewPanel({
   thresholdUsd: number | null;
   name: string;
   symbol: string;
-  imageUrl: string;
+  /** Direct image URL for the avatar, or null (a metadata JSON document is not read here). */
+  imageUrl: string | null;
 }) {
   const displaySymbol = symbol.trim() || "TOKEN";
   const quoteSymbol = market?.asset.symbol ?? "";
@@ -36,7 +37,7 @@ export function LaunchPreviewPanel({
   return (
     <section aria-labelledby="preview-heading" className="card overflow-hidden" aria-live="polite">
       <header className="flex items-center gap-3 border-b border-line bg-sunken/60 px-5 py-4">
-        <TokenAvatar symbol={displaySymbol} imageUrl={imageUrl.trim() || null} size={40} />
+        <TokenAvatar symbol={displaySymbol} imageUrl={imageUrl} size={40} />
         <div className="min-w-0">
           <h2 id="preview-heading" className="truncate font-semibold text-ink">
             {name.trim() || "Your token"}

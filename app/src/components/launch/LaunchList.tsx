@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useLaunches } from "@/lib/data/context";
 import type { LaunchSummary } from "@/lib/data/types";
+import { DemoDataBanner } from "@/components/layout/DemoDataBanner";
 import { LaunchCard } from "./LaunchCard";
 
 type Filter = "all" | "presale" | "graduated";
@@ -28,6 +29,7 @@ export function LaunchList() {
 
   return (
     <section id="launches" aria-labelledby="launches-heading" className="scroll-mt-20">
+      <DemoDataBanner />
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 id="launches-heading" className="text-xl font-semibold tracking-tight text-ink">

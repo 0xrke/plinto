@@ -83,22 +83,10 @@ export function VaultStats({ launch }: { launch: LaunchSummary }) {
           sub={launch.dammPool ? `DAMM v2 pool ${truncateAddress(launch.dammPool)}` : `DBC pool ${truncateAddress(launch.pool)}`}
         />
       </dl>
-    </section>
-  );
-}
-
-export function FloorHistoryPlaceholder({ quoteSymbol, underlying }: { quoteSymbol: string; underlying: string }) {
-  return (
-    <section aria-labelledby="history-heading" className="card p-5 sm:p-6">
-      <h2 id="history-heading" className="text-lg font-semibold text-ink">
-        Floor history
-      </h2>
-      <div className="mt-4 flex h-36 items-center justify-center rounded-lg border border-dashed border-line-strong bg-sunken/50 px-4 text-center text-sm text-ink-3">
-        History appears here once the indexer is connected.
-      </div>
-      <p className="mt-3 text-sm text-ink-2">
-        In {quoteSymbol}, the floor per token only rises: through the vault share of trading fees, retained exit fees,
-        burned fees and dividends paid through the {quoteSymbol} multiplier. In USD it also moves with {underlying}.
+      <p className="mt-4 border-t border-line pt-4 text-sm text-ink-2">
+        In {quote.asset.symbol}, the floor per token only rises: through the vault share of trading fees, retained exit
+        fees, burned fees and dividends paid through the {quote.asset.symbol} multiplier. In USD it also moves with{" "}
+        {quote.asset.underlying}.
       </p>
     </section>
   );

@@ -4,7 +4,7 @@
  *
  * Prerequisites (see app/README.md, "Local fork end-to-end"):
  *   RPC_PORT=28899 bash scripts/surfpool/up.sh
- *   NEXT_PUBLIC_DATA_SOURCE=chain NEXT_PUBLIC_RPC_URL=http://127.0.0.1:28899 STOCKFLOOR_NEXT_DIST_DIR=.next-e2e-local next build
+ *   STOCKFLOOR_LOCAL_BUILD=1 NEXT_PUBLIC_DATA_SOURCE=chain NEXT_PUBLIC_RPC_URL=http://127.0.0.1:28899 STOCKFLOOR_NEXT_DIST_DIR=.next-e2e-local next build
  *   ... next start -p 3288 -H 127.0.0.1
  *
  * Wallets are in-memory keypairs funded through the running app's /api/faucet route. Every transaction

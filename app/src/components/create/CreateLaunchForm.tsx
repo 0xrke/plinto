@@ -21,6 +21,7 @@ import {
   VAULT_SHARE_MAX,
   VAULT_SHARE_MIN,
 } from "@/lib/config";
+import { imageUrlFromUri } from "@/lib/chain/metadata";
 import type { LaunchResume } from "@/lib/data/types";
 import { useCluster, useData, useQuoteMarkets, useRefreshChainData, useTokenBalance, useTxFlow } from "@/lib/data/context";
 import { parseUiNumber } from "@/lib/estimates";
@@ -73,7 +74,7 @@ export function CreateLaunchForm() {
   const [values, setValues] = useState<LaunchFormValues>({
     name: "",
     symbol: "",
-    imageUrl: "",
+    metadataUri: "",
     quoteSymbol: QUOTE_ALLOWLIST[0]?.symbol ?? "SPYx",
     preset: "gentle",
     vaultSharePct: VAULT_SHARE_DEFAULT,
@@ -109,8 +110,8 @@ export function CreateLaunchForm() {
       ? {
           name: values.name.trim(),
           symbol: values.symbol.trim().toUpperCase(),
-          // M4 replaces this with a metadata JSON URI that references the image.
-          uri: values.imageUrl.trim(),
+          // Written into the immutable Metaplex metadata: a metadata JSON document, or a bare image URL.
+          uri: values.metadataUri.trim(),
           quote: market.asset,
           quotePriceUsd: market.priceUsd,
           quoteMultiplier: market.multiplier,
@@ -189,7 +190,7 @@ export function CreateLaunchForm() {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
-    setTouched({ name: true, symbol: true, imageUrl: true });
+    setTouched({ name: true, symbol: true, metadataUri: true });
     if (hasErrors || !input) return;
     await run();
   }
@@ -258,24 +259,25 @@ export function CreateLaunchForm() {
             </div>
           </div>
           <div className="space-y-1.5">
-            <label htmlFor={`${formId}-image`} className="field-label">
-              Image URL <span className="font-normal text-ink-3">(optional)</span>
+            <label htmlFor={`${formId}-uri`} className="field-label">
+              Token metadata JSON URL <span className="font-normal text-ink-3">(optional)</span>
             </label>
             <input
-              id={`${formId}-image`}
+              id={`${formId}-uri`}
               className="input"
               type="url"
               inputMode="url"
-              value={values.imageUrl}
-              placeholder="https://example.com/logo.png"
+              value={values.metadataUri}
+              placeholder="https://example.com/token.json"
               autoComplete="off"
-              aria-invalid={fieldError("imageUrl") ? true : undefined}
-              aria-describedby={`${formId}-image-hint`}
-              onChange={(e) => update("imageUrl", e.target.value)}
-              onBlur={() => setTouched((t) => ({ ...t, imageUrl: true }))}
+              aria-invalid={fieldError("metadataUri") ? true : undefined}
+              aria-describedby={`${formId}-uri-hint`}
+              onChange={(e) => update("metadataUri", e.target.value)}
+              onBlur={() => setTouched((t) => ({ ...t, metadataUri: true }))}
             />
-            <p id={`${formId}-image-hint`} className={fieldError("imageUrl") ? "text-sm text-risk" : "field-hint"}>
-              {fieldError("imageUrl") ?? "Square image, served over https. Token metadata is immutable after launch."}
+            <p id={`${formId}-uri-hint`} className={fieldError("metadataUri") ? "text-sm text-risk" : "field-hint"}>
+              {fieldError("metadataUri") ??
+                "This is what wallets and explorers read: an https link to a JSON document with name, symbol, description and image (a square image). A bare image URL also works, but then they show your token without a description. The URI is immutable after launch."}
             </p>
           </div>
         </fieldset>
@@ -558,7 +560,8 @@ export function CreateLaunchForm() {
           thresholdUsd={thresholdUsd}
           name={values.name}
           symbol={values.symbol}
-          imageUrl={errors.imageUrl ? "" : values.imageUrl}
+          // The avatar can only show a direct image; a metadata JSON document is read after launch.
+          imageUrl={errors.metadataUri ? null : imageUrlFromUri(values.metadataUri.trim())}
         />
       </div>
     </div>

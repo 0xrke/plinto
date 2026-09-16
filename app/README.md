@@ -25,6 +25,10 @@ Environment:
 |---|---|---|
 | `NEXT_PUBLIC_DATA_SOURCE` | `mock` | `mock` (design work, tests) or `chain` (on-chain launches through the SDK) |
 | `NEXT_PUBLIC_RPC_URL` | `http://127.0.0.1:8899` | RPC for reads, the wallet connection and sends |
+| `NEXT_PUBLIC_SITE_URL` | unset (Vercel's production URL when it is set) | Public origin of the deployment, used as the metadata base for link previews (Open Graph / Twitter card) |
+| `NEXT_PUBLIC_REPO_URL` | unset | Source repository (https). When set, the footer links to the code, `docs/architecture.md` and the README security section; when unset those links are hidden rather than guessed |
+| `NEXT_PUBLIC_LIVE_APP_URL` | unset | The chain-connected deployment. Named by the demo-data banner of a preview build |
+| `STOCKFLOOR_LOCAL_BUILD` | unset | `1` marks a production build as local (fork or demo data), which is what the deploy guard below asks for |
 | `NEXT_PUBLIC_WS_URL` | RPC port + 1 | WebSocket endpoint, only if it is not the RPC port + 1 |
 | `NEXT_PUBLIC_ALLOW_MAINNET` | unset | First mainnet send switch. Sending through a non-loopback RPC needs `1` here **and** `STOCKFLOOR_ALLOW_MAINNET=1` (checkpoint C2 only), the same two-switch rule as the CLI (`--allow-mainnet` + `STOCKFLOOR_ALLOW_MAINNET=1`). With neither, the app sends only to a loopback surfnet or local validator; with only one, it sends nowhere and says which switch is missing |
 | `STOCKFLOOR_ALLOW_MAINNET` | unset | Second mainnet send switch, read at build time by `next.config.ts` and inlined into the bundle |
@@ -34,11 +38,53 @@ Environment:
 
 `NEXT_PUBLIC_*` values are inlined at build time. Never put a keyed RPC URL in a committed file.
 
+## Deploying the app
+
+The defaults are development defaults: **demo data** (four invented launches, every button refused) and a
+**loopback RPC** (a Surfpool fork on the machine that ran the build). A hosted build that forgets both
+shows made-up tokens to whoever opens the link, so `next build` refuses to produce one. Required for a
+hosted deployment:
+
+| Variable | Value |
+|---|---|
+| `NEXT_PUBLIC_DATA_SOURCE` | `chain` |
+| `NEXT_PUBLIC_RPC_URL` | the mainnet RPC endpoint the browser uses (a provider key restricted to the deployment's domain; the public endpoint is rate-limited) |
+| `STOCKFLOOR_RPC_URL` | the RPC the server routes use (`/api/launches`, `/api/launches/[mint]`). Can be a second, unrestricted key; it never reaches the browser |
+| `NEXT_PUBLIC_SITE_URL` | the public origin, so a shared link previews with a card instead of blank |
+| `NEXT_PUBLIC_REPO_URL` | the repository, so a judge who likes the app can reach the code from the footer |
+
+Do **not** set `NEXT_PUBLIC_ALLOW_MAINNET` / `STOCKFLOOR_ALLOW_MAINNET` unless the deployment is meant to
+send mainnet transactions from the browser; without them the app reads mainnet and refuses to send
+(useful for a read-only demo deployment next to the C2 launch). `/api/faucet` refuses anything but a
+loopback surfnet, so it is inert on a hosted build.
+
+```bash
+# hosted build (what a deploy platform runs)
+NEXT_PUBLIC_DATA_SOURCE=chain NEXT_PUBLIC_RPC_URL=https://<provider>/<key> \
+NEXT_PUBLIC_SITE_URL=https://<domain> NEXT_PUBLIC_REPO_URL=https://github.com/<org>/<repo> \
+pnpm --filter @stockfloor/app build
+
+# local production build (Surfpool fork, or a design preview on demo data)
+pnpm --filter @stockfloor/app build:local      # = STOCKFLOOR_LOCAL_BUILD=1 next build
+```
+
+The guard lives in `src/lib/deployGuard.ts` and runs from `next.config.ts` in the production-build phase
+only (`next dev` and `next start` are untouched). It fails the build when the data source is not `chain`
+or the RPC URL is loopback, unless `STOCKFLOOR_LOCAL_BUILD=1` says the build is local. A build that does
+run on demo data shows a banner above the launch list saying the launches are made up, and every action
+answers with the same sentence instead of a developer message.
+
 ## Pages and routes
 
 - `/` launches list: phase, progress to graduation, price, floor, max loss, quote asset.
 - `/create` launch form with a live `previewLaunch` preview and an optional creator first buy. Submitting
   runs the SDK launch composer's transactions with step-by-step progress (see below).
+  - **Token metadata JSON URL**: the value goes into DBC's `initialize_virtual_pool_with_spl_token` as the
+    token `uri` and from there into the immutable Metaplex metadata account, which is what Phantom,
+    Solscan, Jupiter and DexScreener read. The field asks for a metadata JSON document
+    (`{ name, symbol, description, image }`); a bare image URL still works (the app reads it as the image)
+    but leaves the token without a description everywhere else, forever. The preview avatar shows initials
+    for a JSON URI, because the document is only fetched once the token exists.
   - **Graduation threshold (advanced)**: quick picks ($50, $100, $1,000 default, $10,000) plus a custom
     USD amount. The preview (threshold in the quote asset, floor at graduation, vault, prices) follows it.
     Validation is in `src/lib/launchForm.ts`: the field takes a dollar amount with at most two decimals
@@ -57,7 +103,7 @@ Environment:
   `Price $X · Floor at graduation (est.) $Y · Max loss if it graduates: −Z%` (there is no floor before
   graduation, and the page says so); after graduation the floor meter, the market panel with the honest buy
   label (`Price $X · Floor $Y · Max loss if you buy now: −Z%`). With an exact quote, X is the buy's average
-  price (pool fee and price impact included), so a thin pool does not understate the max loss; the redeem panel and vault stats; the permissionless crank panel; disclosures (tracker certificate, issuer controls,
+  price (pool fee and price impact included), so a thin pool does not understate the max loss; the redeem panel and vault stats (which end with the two sentences about where the floor can and cannot move; there is no empty chart card); the permissionless crank panel; disclosures (tracker certificate, issuer controls,
   program upgradeability with the StockFloor upgrade authority read from chain, floor in USD, unaudited) with the non-US
   attestation on every token page, and on `/create` when the launch includes a first buy (a curve trade in the xStock).
 - `GET /api/launches`, `GET /api/launches/[mint]`: read-only JSON of the same `LaunchSummary` mapping the
@@ -71,17 +117,25 @@ Environment:
 - `listLaunches`: SDK `listLaunches` (getProgramAccounts on the `Launch` discriminator), then
   `fetchLaunchState` per launch without DAMM positions. One broken launch does not hide the others; if
   every read fails the error reaches the page's error state.
-- `getLaunch(mint)`: getProgramAccounts with a memcmp on `Launch.base_mint` (offset 113, cached per mint),
-  then `fetchLaunchState` with claimer positions (for the LP-fee crank). An invalid or unknown mint is
-  "not found"; an RPC failure is an error, not "not found".
+- `getLaunch(mint)`: the SDK's `resolveLaunchByBaseMint` (getProgramAccounts with a memcmp on
+  `Launch.base_mint`, offset 113), then `fetchLaunchState` with claimer positions (for the LP-fee crank).
+  `create_launch` takes any base mint, so anyone can create a pool-less `Launch` account that commits a
+  live launch's mint for about 0.01 SOL; getProgramAccounts returns matches in no guaranteed order, so the
+  page must not take the first one. The SDK picks the launch that owns the mint's DBC pool (a mint has
+  exactly one) and refuses to guess when several pool-less launches claim it — the page then says so
+  instead of showing a wrong or empty token. Only a launch that owns the pool is cached per mint, in
+  `getLaunch` and in `listLaunches`. An invalid or unknown mint is "not found"; an RPC failure is an error,
+  not "not found".
 - Mapping (`toLaunchSummary`): SDK phases `presale`/`graduating` map 1:1, `graduated` and `redeemable`
   become the UI's `graduated` (redeem opens only with `migrationFeeHarvested`). Price from the DBC curve
   sqrt price before migration and the DAMM v2 pool after; floor = vault ÷ supply; ScaledUiAmount
   multiplier from the quote mint at the cluster clock; preset from the config's price ratio; vault share =
   the DBC migration fee percentage; the graduation projection = vault now + partner migration fee (added only while the fee is still in
   DBC: the Launch flag and the DBC partner withdraw bit are both unset) over
-  `swap_base_amount + migration_base_threshold` (equals the launch composer preview). Name, symbol and
-  image come from the Metaplex metadata account (cached; metadata is immutable).
+  `swap_base_amount + migration_base_threshold` (equals the launch composer preview). Name, symbol and the
+  token URI come from the Metaplex metadata account (cached; metadata is immutable). The image is the URI
+  itself when it is an image, or the `image` field of the metadata JSON document when the URI ends in
+  `.json` (fetched once per mint, 4 s timeout; any failure means the token shows its initials).
 - Launches quoted in a mint outside the allowlist, or without a DBC pool yet, are not shown.
 - Prices: Jupiter Price V3 (lite-api, one request for the allowlist plus USDC and SOL, 30 s cache). If
   Jupiter is unreachable, the last read is served, labelled "stale" once it is older than 5 minutes;
@@ -157,12 +211,27 @@ e2e/                        local-fork end-to-end driver and page render check (
 
 ## Tests
 
-`pnpm --filter @stockfloor/app test` (part of the root `pnpm test`): 19 files, 173 tests.
+`pnpm --filter @stockfloor/app test` (part of the root `pnpm test`): 23 files, 200 tests.
 
 - `lib/data/chain.test.ts`: mapping of SDK `LaunchState`s built with the launch composer (presale,
   graduating, graduated, redeemable, paused, flat preset, missing metadata, unlisted quote, no pool) and
-  `ChainDataSource` over a fake `ChainReader` with hand-encoded Metaplex metadata, Token-2022 mints with
-  ScaledUiAmount and token accounts (sorting, caching, partial failures, memcmp resolution, RPC errors).
+  `ChainDataSource` over a fake `ChainReader` with hand-encoded Metaplex metadata, `Launch` accounts,
+  Token-2022 mints with ScaledUiAmount and token accounts (sorting, caching, partial failures, base-mint
+  resolution, RPC errors). Two of them are the shadow-launch cases: a pool-less `Launch` account that
+  commits a live launch's base mint never takes over its token page (in either getProgramAccounts order,
+  and it cannot poison the mint → launch cache through the list), and two pool-less launches for one mint
+  produce a message rather than a wrong page. A third checks that the image of a metadata JSON URI is read
+  from the document once per mint and that a failed read degrades to initials.
+- `lib/chain/metadata.test.ts`: the Metaplex decoder, and `resolveTokenImageUrl` (a plain image URI needs
+  no network read; the `image` field of a JSON document is used; a failed, non-JSON, hanging or non-https
+  document means no image).
+- `lib/deployGuard.test.ts`: the production-build guard refuses demo data and a loopback RPC, names both
+  in one message, and lets an explicitly local build through.
+- `components/layout/DemoDataBanner.test.tsx`, `components/layout/SiteFooter.test.tsx`: the demo-data
+  banner appears only on mock data and can be dismissed; the footer always links the deployed program and
+  links the repository documents only when `NEXT_PUBLIC_REPO_URL` is a valid https URL.
+- `app/page.test.tsx`: the home page leads with the quote-asset path (Jupiter routing is named as a
+  mainnet convenience, not as the headline) and no longer claims a fixed ~$1,000 raise.
 - `lib/chain/txFlow.test.ts`: the flow reducer (order, single active step, failure, resume, late events,
   discovered steps) and the step runner (phases, earlier completions, on-chain detection, first failure).
 - `lib/data/chainActions.test.ts`: create launch through the real `ConnectionSender` over a fake
@@ -178,7 +247,8 @@ e2e/                        local-fork end-to-end driver and page render check (
   the chain would reject comes back as the chain's own message).
 - `components/create/CreateLaunchForm.test.tsx`: the threshold presets and the custom field move the
   preview, an out-of-range threshold disables Launch, the chosen threshold is what reaches the action,
-  and the parameters are frozen after a launch and while a retry is pending.
+  the parameters are frozen after a launch and while a retry is pending, and the metadata JSON URL reaches
+  the SDK input as the token `uri` while never being rendered as an `<img>`.
 - `lib/chain/{cluster,errors,metadata,prices}.test.ts`, `components/token/TradePanels.test.tsx` (the buy
   label stays exactly the price / floor / max-loss sentence; USDC/SOL disabled on the fork; exact curve
   quote), plus the earlier format, metrics, estimates, form, card, floor meter and redeem panel tests.
@@ -195,7 +265,7 @@ recorded run: RPC 28899, WS 28900, Surfpool studio 38488, app 3288.
 ```bash
 RPC_PORT=28899 bash scripts/surfpool/up.sh
 cd app
-NEXT_PUBLIC_DATA_SOURCE=chain NEXT_PUBLIC_RPC_URL=http://127.0.0.1:28899 STOCKFLOOR_NEXT_DIST_DIR=.next-e2e-local pnpm build
+STOCKFLOOR_LOCAL_BUILD=1 NEXT_PUBLIC_DATA_SOURCE=chain NEXT_PUBLIC_RPC_URL=http://127.0.0.1:28899 STOCKFLOOR_NEXT_DIST_DIR=.next-e2e-local pnpm build
 NEXT_PUBLIC_DATA_SOURCE=chain NEXT_PUBLIC_RPC_URL=http://127.0.0.1:28899 STOCKFLOOR_NEXT_DIST_DIR=.next-e2e-local pnpm exec next start -p 3288 -H 127.0.0.1 &
 pnpm e2e:local        # STOCKFLOOR_E2E_RPC_URL / STOCKFLOOR_E2E_APP_URL override the defaults above
 RPC_PORT=28899 bash scripts/surfpool/stop.sh
