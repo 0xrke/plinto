@@ -188,7 +188,9 @@ extend transaction.
 **Upgrade** (rehearsed with the same ELF, not part of C2):
 - 481 transactions; the buffer is funded with 2,332,923,960 lamports and refunded by `Upgrade`.
 - Net cost is the fees, 2,538,442 lamports.
-- The deployer needs **2.3309 SOL available at once** to upgrade. An ELF above max-len also pays the extension rent.
+- The deployer needs **2.3329 SOL available at once** to upgrade (2,332,923,960 lamports, the buffer's rent — the same figure
+  `scripts/c2/preflight.ts` computes from the live rent and requires as headroom). An ELF above max-len also pays the
+  extension rent.
 - **Buffer keypair:** `keys/stockfloor-deploy-buffer.json` (created if missing). After a failed deploy, rerunning the same
   command resumes into the same buffer. `solana program close --buffers` recovers a stranded buffer.
 
@@ -215,14 +217,14 @@ Measured SOL per wallet over the C2 steps and the recommendation:
 The planned SPYx for buyer2 is the PartialFill **offer** (50% of T). The completing buy used 2,990,711 raw.
 
 Notes for the user's transfers:
-- **Send SPYx directly**, not USDC: the CLI sequence pays in SPYx. Buying 0.0802 SPYx through Jupiter costs about
-  **$62 of USDC**.
+- **Send SPYx directly**, not USDC: the CLI sequence pays in SPYx. Buying the 0.0806 SPYx of the table through Jupiter
+  costs about **$62 of USDC**.
 - **The sender pays** 1,559,560 lamports to create each demo wallet's SPYx ATA (three wallets: 0.0047 SOL), plus its
   own fees. This is not in the table.
 - **Why 5.05 SOL and not 2.70 (the amount actually spent).** `solana program deploy` verifies the deployed ELF only
   *after* the 2.57 SOL of rent is spent (§9 block 1). If that `cmp` fails — a corrupted or partially resumed buffer, a
   rebuild between attempts, a wrong `--max-len` — the only non-destructive repair is an upgrade, which needs
-  2.3309 SOL available **at once** (the new buffer), refunded when the upgrade lands, so only about 0.0025 SOL of fees
+  2.3329 SOL available **at once** (the new buffer), refunded when the upgrade lands, so only about 0.0025 SOL of fees
   is really spent. Funded with 2.70 only, the sole way out would be `solana program close`, which is irreversible and a
   hard stop. After a clean deploy the extra 2.48 SOL is untouched and can be swept back.
   `scripts/c2/preflight.ts` requires the headroom by default (`--no-upgrade-headroom` drops it to a warning).
@@ -278,6 +280,11 @@ These are the rehearsal commands with the mainnet RPC and the SDK guard override
   accepts about 470 `sendTransaction` calls quickly.
 - **Launch references.** Run every command in bash from the repo root. Launch commands use `--launch`, which avoids
   `getProgramAccounts` on public RPCs.
+- **Where the RPC URL appears.** The deploy takes it from `--config` only, so the endpoint (and any API key in it) is
+  not an argument of that long-running process. The SDK CLI commands and the planner still take `--rpc "$MAINNET_RPC_URL"`
+  on their command lines, and so does `scripts/c2/run.sh`, so on a shared machine `ps` can see it for the seconds each of
+  them runs; their own output only ever prints scheme, host and port (`rpcDisplay`), and the run report never contains the
+  URL at all. On a shared machine, prefer an endpoint whose key can be rotated.
 - **Resuming a launch.** `create-launch` writes `keys/launches/<config>.json` (gitignored, mode 0600) with the launch
   input and the DBC config and base-mint keypairs **before** the first transaction, and refuses to start when SPYx is
   paused or the creator cannot pay the first buy. If a transaction fails or the process dies, rerun with
@@ -305,7 +312,10 @@ shasum -a 256 target/deploy/stockfloor.so
 # DeclaredProgramIdMismatch.
 test "$(solana-keygen pubkey keys/stockfloor-program.json)" = 98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA \
   && echo "program keypair ok"
-# No stale deploy buffer: `--buffer` would resume writing into it and mix two ELFs.
+# The deploy buffer. An existing buffer is only a problem when it holds a DIFFERENT ELF: after an
+# interrupted deploy, re-running the same command resumes into it (that is the recovery in
+# docs/c2-runbook.md 6.1). `scripts/c2/preflight.ts` compares its contents with the local binary;
+# `solana program close --buffers --keypair keys/deployer.json` returns the rent of one that is stale.
 solana program show --buffers --config "$C2_DIR/solana-cli.yml" || true
 test ! -f keys/stockfloor-deploy-buffer.json ||
   solana account "$(solana-keygen pubkey keys/stockfloor-deploy-buffer.json)" --config "$C2_DIR/solana-cli.yml" ||
@@ -321,7 +331,9 @@ solana account 98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA --config "$C2_DIR/so
 
 ```bash
 # ---- 1. Deploy stockfloor (481 transactions, about 2.574 SOL from the deployer) -- DO NOT RUN WITHOUT OK
-# No --url here: the RPC endpoint comes from --config, so the key never reaches the command line.
+# No --url here: this process takes the endpoint from --config, so an RPC key does not sit on the
+# command line of the ten-minute deploy (`ps` shows every argument to any local user).
+# scripts/c2/run.sh builds the same command.
 solana program deploy --config "$C2_DIR/solana-cli.yml" \
   --keypair keys/deployer.json --fee-payer keys/deployer.json --upgrade-authority keys/deployer.json \
   --program-id keys/stockfloor-program.json --buffer keys/stockfloor-deploy-buffer.json --max-len 505856 \
@@ -409,7 +421,8 @@ Operational notes for C2:
 `replay-20260915T230348Z` and `replay-20260915T220310Z` passed the same way on the two previous binaries).
 
 Every command block above ran verbatim, with two changes: `MAINNET_RPC_URL=http://127.0.0.1:8899`, and `--use-rpc`
-appended to `solana program deploy`. The demo wallets were funded by cheatcodes with the plan +10%.
+appended to `solana program deploy`. (The §9 edits made after that run are comments and the note on where the RPC URL
+appears; no command changed.) The demo wallets were funded by cheatcodes with the plan +10%.
 - **Pre-flight:** printed the stockfloor.so sha256, SOL and SPYx balances, and `solana rent 505901` = 2.57062732 SOL.
   The two assertions added after the security review passed: "program keypair ok" (the keypair really is
   `98NLryxeg…`) and "buffer address is free" (no stale deploy buffer on the cluster). It printed "program id is free".

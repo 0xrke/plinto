@@ -2,8 +2,9 @@
 
 **Nothing in this file has been executed on mainnet.** It is the plan the user approves, and the
 scripts that run it. The whole sequence was rehearsed on a live Surfpool mainnet fork
-(`docs/research/surfpool-e2e.md`) and the runbook's own scripts were verified with a dry run on
-2026-09-16 (`scripts/c2/reports/dry-20260915T235142Z.md`).
+(`docs/research/surfpool-e2e.md`) and the runbook's own scripts were verified with a dry run on the
+current binary, 2026-09-16 (`scripts/c2/reports/dry-20260916T020703Z.md`: 15 lifecycle transactions
+plus a 481-transaction deploy, 0 of 503 local signatures on mainnet).
 
 | | |
 |---|---|
@@ -44,6 +45,11 @@ printf 'C2 approved %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > keys/c2-approved
 `--allow-mainnet`, `STOCKFLOOR_ALLOW_MAINNET=1`, `MAINNET_RPC_URL`, `TOKEN_URI` and a preflight
 verdict of GO.
 
+**One marker, one run.** The run records the marker's sha256 in its own state. A *new* mainnet run
+refuses to start on a marker that already authorised an earlier one, and names it: resuming that run
+(`--resume <run id>`) is always allowed, while a second full run needs the user to write the marker
+again. Nothing but the user ever creates or changes `keys/c2-approved`.
+
 ---
 
 ## 2. Preflight (read-only, run it as often as you like)
@@ -57,32 +63,49 @@ It sends nothing: its JSON-RPC client has a read-only method allowlist (no `send
 `requestAirdrop`, no `simulateTransaction`), and the only other calls are Jupiter Price V3 and the
 read-only amount planner. Verdict `GO` exits 0, `NO-GO` exits 3.
 
-Real output against mainnet before funding (2026-09-16, funding rows still red as expected):
+Real output against mainnet before funding (2026-09-16 01:55 UTC, public endpoint, 2.5 s; the funding rows are
+red as expected and the approval marker is the user's):
 
 ```
+StockFloor C2 preflight — read-only, nothing is sent
+2026-09-16T01:55:33.123Z · rpc https://api.mainnet-beta.solana.com · threshold $50 · priority fee 100,000 µlamports/CU
+
 STATUS  CHECK               DETAIL
-GO      mainnet RPC         healthy, solana-core 4.3.0-rc.0, slot 447,375,375, genesis mainnet
-GO      stockfloor.so       459,064 bytes, sha256 9fd9a0a8fc80cbfe… = the rehearsed binary
+GO      mainnet RPC         https://api.mainnet-beta.solana.com healthy, solana-core 4.3.0-rc.0, slot 447,402,568, genesis mainnet
+GO      stockfloor.so       459,064 bytes, sha256 9fd9a0a8fc80cbfe… = the rehearsed binary (20260916T000744Z)
+GO      program keypair     keys/stockfloor-program.json = 98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA (declare_id!)
+GO      deploy buffer       keys/stockfloor-deploy-buffer.json exists but GLjqCV1f… holds no account on this cluster: the deploy writes a fresh buffer at that address
 GO      program id free     98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA does not exist yet
-GO      deploy cost         2.568797 SOL = programdata rent 2.565425 SOL (max-len 504,832 + 45 B …)
-GO      SPYx mint           not paused, no transfer hook, multiplier 1.005714560286254, 8 decimals
-GO      SPYx price          $757.4160 per SPYx → threshold $50 = 6,563,883 raw (0.06563883 SPYx)
-NO-GO   deployer funded     BBU1tTr4… has 0.000000 SOL; needs 2.568797 SOL, recommended 2.670173 SOL
-…
+GO      deploy cost         2.574004 SOL = programdata rent 2.570627 SOL (max-len 505,856 + 45 B at 5,080 lamports/byte) + program account 0.000833 SOL + 481 tx fees 2,543,472 lamports
+GO      SPYx mint           not paused, no transfer hook, multiplier 1.005714560286254, 8 decimals, supply 9,523,191,354,017
+GO      SPYx price          $754.6075 per SPYx (Jupiter Price V3), multiplier 1.005714560286254 → threshold $50 = 6,588,312 raw (0.06588312 SPYx)
+NO-GO   deployer funded     BBU1tTr4… has 0.000000 SOL; needs 2.574004 SOL + 2.332924 SOL to repair a bad deploy by upgrade, recommended 5.008408 SOL
+NO-GO   creator funded      EFSrr7pe… 0.000000 SOL (need 0.032151 SOL, rec. 0.060000 SOL), SPYx 0 raw (need 665,486, rec. 732,035)
+NO-GO   buyer1 funded       ED77vdfS… 0.000000 SOL (need 0.001528 SOL, rec. 0.020000 SOL), SPYx 0 raw (need 3,324,103, rec. 3,656,514)
+NO-GO   buyer2 funded       5Wgdkguw… 0.000000 SOL (need 0.001528 SOL, rec. 0.020000 SOL), SPYx 0 raw (need 3,327,431, rec. 3,660,175)
+NO-GO   cranker funded      FhaZVX91… 0.000000 SOL (need 0.018133 SOL, rec. 0.040000 SOL)
 GO      DBC binary          dbcij3LW… sha256 4c26a8a5da99f8ce… = tests/fixtures (2,326,577 bytes)
 GO      DAMM v2 binary      cpamdpZC… sha256 4d5b920baebc090f… = tests/fixtures (2,174,352 bytes)
-GO      priority fees       planned 100,000 µlamports/CU vs the last 150 slots: … max 10,000
-GO      timing window       outside the 00:15–00:45 UTC xStocks multiplier window
-WARN    user approval       keys/c2-approved is missing
-WARN    token metadata URI  TOKEN_URI is unset
+GO      priority fees       planned 100,000 µlamports/CU vs the last 150 slots: cluster p50 0 / max 0, DBC+DAMM accounts p50 0 / p90 0 / max 10,001
+GO      timing window       01:55 UTC, outside the 00:15–00:45 UTC xStocks multiplier window
+WARN    user approval       keys/c2-approved is missing: run.sh --mainnet refuses to start until the user creates it
+WARN    token metadata URI  TOKEN_URI is unset or not an https URL: the user must choose and host the metadata JSON (publishing is a hard stop)
+
+VERDICT: NO-GO — 19 checks, 2 warning(s), 5 blocker(s)
+blockers: fund-deployer, fund-creator, fund-buyer1, fund-buyer2, fund-cranker
 ```
+
+The SPYx amounts move with the price: they are recomputed from the live quote on every run, which is why they differ
+slightly from the funding table in §3 (that one carries the +10% headroom).
 
 | Check | Blocks the run when |
 |---|---|
-| mainnet RPC | the endpoint is unreachable or is not mainnet |
-| stockfloor.so | the local binary is not the rehearsed one (sha256 from the newest `scripts/e2e/reports/*.json`) |
+| mainnet RPC | the endpoint is unreachable, or is not the expected cluster. A surfnet is recognised by `getVersion().surfnet-version`, whatever its host name, and is a blocker for a mainnet run; `--expect-cluster surfnet` turns it round for the dry run, where real mainnet is the blocker |
+| stockfloor.so | the local binary is not the rehearsed one (sha256 from the newest `scripts/e2e/reports/<run id>.json`). `--expect-sha <hex>` accepts another hash, and then the row can only be a warning |
+| program keypair | `keys/stockfloor-program.json` is not the declared program id |
+| deploy buffer | `keys/stockfloor-deploy-buffer.json` has an on-chain account holding a **different** binary, or one the deployer may not write to. A buffer that holds a prefix of this binary is a GO: it is an interrupted deploy, and re-running resumes into it (§6.1). The row says how many bytes are already written |
 | program id free | `98NLry…` already exists with a different binary (an identical one only warns: the deploy is then skipped) |
-| deploy cost / rent | never blocks; warns when mainnet rent rose above the rehearsed 2.5688 SOL |
+| deploy cost / rent | never blocks; warns when mainnet rent rose above the rehearsed 2.5740 SOL |
 | SPYx mint | the mint is paused, or a transfer hook appeared (unsupported, documented limitation) |
 | SPYx price | never blocks; warns when Jupiter is unreachable or the price moved > 2% from the planned amounts |
 | funding | any wallet holds less than the measured requirement |
@@ -112,8 +135,9 @@ exact requirement from the live price.
 - Buying 0.0806 SPYx through Jupiter costs about **$62 of USDC**.
 - **Why the deployer gets 5.05 SOL when the deploy costs 2.574.** `solana program deploy` verifies
   the deployed ELF only after the rent is spent. If that check fails, the only non-destructive
-  repair is an upgrade, which needs 2.3309 SOL available at once (refunded when it lands). Funded
-  with 2.70 the only way out is `solana program close`, which is irreversible and a hard stop.
+  repair is an upgrade, which needs 2.3329 SOL available at once (refunded when it lands; the
+  preflight prints the exact figure it computed from the live rent). Funded with 2.70 the only way
+  out is `solana program close`, which is irreversible and a hard stop.
   After a clean deploy the extra 2.48 SOL is untouched and can be swept back. The preflight requires
   the headroom by default; `--no-upgrade-headroom` drops it to a warning.
 - Re-check the rent before funding (read-only): `solana rent 505901`. It was 5,080 lamports/byte on
@@ -127,13 +151,26 @@ exact requirement from the live price.
 ### 4.1 Dry run first (no approval needed, nothing leaves the machine)
 
 ```bash
-bash scripts/c2/run.sh --yes          # fresh local Surfpool fork on 127.0.0.1:8899, ~2 minutes
+bash scripts/c2/run.sh --yes                     # fresh local Surfpool fork on 127.0.0.1:8899, ~2 minutes
+bash scripts/c2/run.sh --yes --rpc-port 48899    # on another port, when 8899 is taken
 ```
 
 It runs the identical sequence against a local mainnet fork: same commands, same amounts, same
 guards, same report format. It funds the demo wallets with Surfpool cheatcodes, and at the end
-verifies that **none** of the local signatures exist on mainnet, then stops the surfnet. The dry run
-never sets the mainnet override switches, so its transactions can only reach a loopback surfnet.
+verifies that **none** of the local signatures exist on mainnet, then stops the surfnet.
+
+Three separate things keep a dry run local, and all three are load-bearing:
+
+1. it never sets the mainnet override switches, so the SDK send guard accepts only a loopback
+   Surfpool surfnet;
+2. the preflight classifies the endpoint and the run **aborts unless it is a surfnet** (`getVersion`
+   must report `surfnet-version`);
+3. `scripts/e2e/setup.ts mainnet-rent` writes the Rent sysvar through a Surfpool-only cheatcode, so
+   it fails against anything that is not a surfnet — including a mainnet RPC behind a loopback
+   tunnel.
+
+The last committed dry run is `scripts/c2/reports/dry-20260916T020703Z.md` (the `--rpc-port 48899`
+form, which is why its cluster row names that port).
 
 ### 4.2 Mainnet run
 
@@ -146,8 +183,10 @@ printf 'C2 approved %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > keys/c2-approved   
 bash scripts/c2/run.sh --mainnet --allow-mainnet
 ```
 
-The script stops before each step and prints what it is about to send; answer `yes`, `skip` or
-`abort`. `--yes` runs unattended (not recommended for the first mainnet run).
+The script stops before each step and prints what it is about to send — the step, the amount and the
+wallet that pays it — then asks: answer `yes`, `skip` or `abort` (case does not matter; anything else
+is asked again rather than treated as an answer). `--yes` runs unattended (not recommended for the
+first mainnet run).
 
 What it does, in order — each row is exactly the command the rehearsal and the dry run executed:
 
@@ -180,10 +219,10 @@ The script checks these automatically before each step and stops the run when on
 
 | Abort condition | Checked before | What it means |
 |---|---|---|
-| **SPYx paused** | every step that moves SPYx | the issuer paused transfers; every swap, harvest and redeem would fail cleanly. Wait, then resume |
+| **SPYx paused** | every step | the issuer paused transfers; every swap, harvest and redeem would fail cleanly. Wait, then resume |
 | **SPYx transfer hook appeared** | same | unsupported by the deployed program (documented limitation): the vault would be stuck until a program upgrade |
-| **Price moved > 5%** since the plan | same | the planned raw amounts no longer match the $50 target (`--max-price-drift-pct` to change, a new run re-plans) |
-| **Jupiter unreachable** | same | no price baseline; `--skip-price-guard` continues with only the pause/hook checks |
+| **Price moved > 5%** since the plan | `create-launch`, `buy1`, `buy2`, `damm-buy` | only these steps take their raw amount from the planned price. The sell and the redemptions spend on-chain balances, so they are not stopped by a price move (`--max-price-drift-pct` to change the window; a new run re-plans) |
+| **Jupiter unreachable** | same four steps | no price baseline. **After the first buy has landed it is only a warning**: the threshold is then fixed on chain in raw units, so a rate-limit blip cannot strand a run between the buys and the redemptions. Before that, `--skip-price-guard` continues with the pause and transfer-hook checks alone |
 | **Deploy write failed** | during `deploy` | the CLI exits non-zero; see §6.1 |
 | **Deployed ELF ≠ local binary** | after `deploy` | the run stops before anything else is sent |
 | **Unexpected launch phase** | steps 3–10 | someone else traded, cranked or migrated the pool first; check `status` before continuing |
@@ -205,6 +244,13 @@ Watch by eye:
 To stop the run at any point: answer `abort` at a prompt, or press Ctrl-C. Nothing is sent after
 that; the transaction log keeps everything already sent.
 
+**A failed step may still have landed.** A send whose confirmation timed out is a failure to the
+script but may be a transaction on chain. On abort the script collects the signatures of the failing
+step into the report and prints them, so the first thing to do is check them
+(`solana confirm -v <signature> --url "$MAINNET_RPC_URL"`, or the launch state with `status`). If one
+landed, answer `skip` for that step when you resume: buys, sells and redemptions are not
+idempotent.
+
 ---
 
 ## 6. Recovery
@@ -218,15 +264,25 @@ bash scripts/c2/run.sh --resume <run id> --mainnet --allow-mainnet     # the id 
 Steps already marked `done` are skipped; the run continues from the failed one. (Verified on the
 local fork: a run aborted after the deploy resumed and finished the remaining 13 transactions.)
 
+`--resume latest` picks the newest run **of the same mode** (by modification time), and a run
+recorded as a dry run is refused in mainnet mode and the other way round — so a mainnet resume can
+never continue a local-fork run, nor rewrite its committed report.
+
 ### 6.1 A failed deploy
 
 - The buffer keypair `keys/stockfloor-deploy-buffer.json` keeps the chunks already written, so
   **re-running the same deploy resumes into the same buffer** instead of paying for the writes again.
-- `solana program show --buffers --keypair keys/deployer.json` lists a stranded buffer;
-  `solana program close --buffers` returns its rent (≈ 2.57 SOL) to the deployer.
+  Resuming the run does exactly that; the preflight first compares what the buffer holds with
+  `target/deploy/stockfloor.so` and prints how many bytes are already written.
+- **Never delete the buffer keypair to "start clean".** The account and its ≈ 2.57 SOL of rent stay
+  on chain; the file is only how the deployer addresses it. The one way to get that rent back is
+  `solana program close --buffers --keypair keys/deployer.json` (the deployer is the buffer
+  authority); `solana program show --buffers --keypair keys/deployer.json` lists what exists.
+- A buffer holding a *different* binary is the only buffer state that blocks the run: close it as
+  above, then re-run.
 - If the program account was created but the ELF does not match the local file, the run stops before
   anything else. Re-deploying the correct binary is a normal upgrade (fees only, ≈ 0.0025 SOL, needs
-  2.33 SOL free at once for the buffer).
+  2.3329 SOL free at once for the buffer).
 
 ### 6.2 A partial launch (step 2)
 
@@ -271,7 +327,8 @@ Artifacts the run produces:
 
 - **`scripts/c2/reports/<run id>.md`** — every transaction with a Solscan link, every address with a
   Solscan link, the steps, the preflight verdict and the irreversible parts. The dry-run version of
-  exactly this file is committed: `scripts/c2/reports/dry-20260915T235142Z.md`.
+  exactly this file is committed: `scripts/c2/reports/dry-20260916T020703Z.md` (a report is bound to
+  its cluster: rendering refuses to overwrite a dry-run report with a mainnet run, or the reverse).
 - **Solscan**: the program `98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA`, the launch PDA, the base
   mint with its metadata, the DBC pool, the DAMM v2 pool, and the floor vault whose SPYx balance
   moves with every harvest and redemption.
@@ -284,7 +341,7 @@ Artifacts the run produces:
   identically.
 - **The evidence trail**: `docs/research/c1-evidence.md` (LiteSVM fork lifecycle),
   `docs/research/surfpool-e2e.md` (this exact sequence on a live fork, 495 mainnet-equivalent
-  transactions), and `pnpm test` (571 tests) from a fresh clone.
+  transactions), and `pnpm test` (577 tests) from a fresh clone.
 
 ---
 
@@ -299,5 +356,5 @@ Artifacts the run produces:
 | `scripts/c2/reports/` | the logs, one `.md` and one `.json` per run |
 | `target/c2/<run id>/` | run state, per-step logs, the Solana CLI config with the RPC URL (gitignored) |
 | `keys/c2-approved` | the approval marker (gitignored, created by the user) |
-| `keys/stockfloor-deploy-buffer.json` | deploy buffer keypair, makes a failed deploy resumable |
+| `keys/stockfloor-deploy-buffer.json` | deploy buffer keypair, makes a failed deploy resumable (never delete it: see §6.1) |
 | `keys/launches/<config>.json` | launch session: input + both throwaway keypairs (mode 0600) |

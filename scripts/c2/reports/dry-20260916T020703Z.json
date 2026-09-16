@@ -1,0 +1,231 @@
+{
+  "runId": "dry-20260916T020703Z",
+  "mode": "dry",
+  "meta": {
+    "RUN_ID": "dry-20260916T020703Z",
+    "MODE": "dry",
+    "CLUSTER": "local Surfpool mainnet fork (127.0.0.1:48899)",
+    "RPC_DISPLAY": "http://127.0.0.1:48899",
+    "STARTED_AT": "2026-09-16T02:07:03Z",
+    "PROGRAM_ID": "98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA",
+    "ELF_SHA": "9fd9a0a8fc80cbfeb7e253bee114c06b319b3ef0558638ebfbdb600957fc19e3",
+    "ELF_BYTES": "459064",
+    "MAX_LEN": "505856",
+    "THRESHOLD_USD": "50",
+    "PRIORITY_FEE": "100000",
+    "QUOTE": "SPYx",
+    "TOKEN_NAME": "StockFloor Demo",
+    "TOKEN_SYMBOL": "SFDEMO",
+    "TOKEN_URI": "https://raw.githubusercontent.com/stockfloor/stockfloor/main/app/public/demo/sfdemo.json",
+    "PRICE_USD": "760.6018817304101"
+  },
+  "state": {
+    "MODE": "dry",
+    "PRICE_USD": "760.6018817304101",
+    "FUNDED": "yes",
+    "PREFLIGHT": "GO (5 warning(s), cluster surfnet)",
+    "DEPLOY_TX_COUNT": "481",
+    "STEP_deploy": "done",
+    "LAUNCH": "5NkjnnMZ9naLeoFoUiDMUX3F7oB2hUDzNHqp9J1sSDpd",
+    "CONFIG": "B3VWGgtdYVHED8GqPjMyt25xNeP78yV8nujSGbpMH74m",
+    "STEP_buy1": "done",
+    "STEP_buy2": "done",
+    "STEP_redeem1": "done",
+    "STEP_redeem2": "done",
+    "OUTCOME": "completed",
+    "FINISHED_AT": "2026-09-16T02:08:37Z"
+  },
+  "steps": [
+    {
+      "index": 1,
+      "id": "deploy",
+      "status": "done",
+      "seconds": "29",
+      "note": "deployed ELF verified"
+    },
+    {
+      "index": 2,
+      "id": "create-launch",
+      "status": "done",
+      "seconds": "2",
+      "note": "launch 5NkjnnMZ9naLeoFoUiDMUX3F7oB2hUDzNHqp9J1sSDpd"
+    },
+    {
+      "index": 3,
+      "id": "buy1",
+      "status": "done",
+      "seconds": "1",
+      "note": "paid 2971086 raw SPYx"
+    },
+    {
+      "index": 4,
+      "id": "buy2",
+      "status": "done",
+      "seconds": "2",
+      "note": "offered 3301207 raw SPYx (PartialFill)"
+    },
+    {
+      "index": 5,
+      "id": "crank-graduate",
+      "status": "done",
+      "seconds": "3",
+      "note": "harvests + migration + sync"
+    },
+    {
+      "index": 6,
+      "id": "damm-buy",
+      "status": "done",
+      "seconds": "1",
+      "note": "paid 326820 raw SPYx"
+    },
+    {
+      "index": 7,
+      "id": "damm-sell",
+      "status": "done",
+      "seconds": "1",
+      "note": "sold 73390716461655 raw base"
+    },
+    {
+      "index": 8,
+      "id": "crank-lp",
+      "status": "done",
+      "seconds": "11",
+      "note": "LP fees into the vault"
+    },
+    {
+      "index": 9,
+      "id": "redeem1",
+      "status": "done",
+      "seconds": "1",
+      "note": "burned 173383703550092 raw base"
+    },
+    {
+      "index": 10,
+      "id": "redeem2",
+      "status": "done",
+      "seconds": "1",
+      "note": "burned the whole balance"
+    },
+    {
+      "index": 11,
+      "id": "status-final",
+      "status": "done",
+      "seconds": "0",
+      "note": ""
+    }
+  ],
+  "transactions": [
+    {
+      "step": "deploy",
+      "signature": "3LA9LC7odpPq3QJnzPPf8RFHVbFMhHhqZoskq8ArMJiyvAqztoAR8WZCxQseEekDkPufVkfLnWsgidbhsyRLdEM",
+      "explorer": "https://solscan.io/tx/3LA9LC7odpPq3QJnzPPf8RFHVbFMhHhqZoskq8ArMJiyvAqztoAR8WZCxQseEekDkPufVkfLnWsgidbhsyRLdEM"
+    },
+    {
+      "step": "create-launch",
+      "signature": "2Ph3nhNnkEAqE9LSFQKWRUYE6h2tKGEbYY989wBKSk4bW7WCV1u6ZmWXoxQBdineG995fTRMnB11mp8Y9edBLbkj",
+      "explorer": "https://solscan.io/tx/2Ph3nhNnkEAqE9LSFQKWRUYE6h2tKGEbYY989wBKSk4bW7WCV1u6ZmWXoxQBdineG995fTRMnB11mp8Y9edBLbkj"
+    },
+    {
+      "step": "create-launch",
+      "signature": "3fQdonhX6FvGrbEHWmAkeMQHJLMyGFuRkfDSPhhFcb6VFQLDmZKiU3D85MPd2kFVqHxD523MunDsUP3cThzqyWMD",
+      "explorer": "https://solscan.io/tx/3fQdonhX6FvGrbEHWmAkeMQHJLMyGFuRkfDSPhhFcb6VFQLDmZKiU3D85MPd2kFVqHxD523MunDsUP3cThzqyWMD"
+    },
+    {
+      "step": "buy1",
+      "signature": "4X7Pebfce896BszgYRsnH1MQaPwTi3YnD3WCBx96XxgNaRgyCmby5sxfwx3SeWaEzoYGYEX2XGKiYkQyYZU94ndx",
+      "explorer": "https://solscan.io/tx/4X7Pebfce896BszgYRsnH1MQaPwTi3YnD3WCBx96XxgNaRgyCmby5sxfwx3SeWaEzoYGYEX2XGKiYkQyYZU94ndx"
+    },
+    {
+      "step": "buy2",
+      "signature": "9cfjQoAoB3L2x3rXwCoG3gEiKkjeT8ELvC8YnDMPukvtajnvF5jTNp57GpP3TNynTRS7H6jdDhdPpdPw1vswjGF",
+      "explorer": "https://solscan.io/tx/9cfjQoAoB3L2x3rXwCoG3gEiKkjeT8ELvC8YnDMPukvtajnvF5jTNp57GpP3TNynTRS7H6jdDhdPpdPw1vswjGF"
+    },
+    {
+      "step": "crank-graduate",
+      "signature": "4kCFe9quGntA1Cv9m1Bd5YpHnzqEDHx5j9fukSGYtvsYtpfNWYwkBoo7GcjM3ct8mUvGx3HfynC8jFremNbrzrWN",
+      "explorer": "https://solscan.io/tx/4kCFe9quGntA1Cv9m1Bd5YpHnzqEDHx5j9fukSGYtvsYtpfNWYwkBoo7GcjM3ct8mUvGx3HfynC8jFremNbrzrWN"
+    },
+    {
+      "step": "crank-graduate",
+      "signature": "2UsdgeCxuVbEpNB8zmuZsQWqbJPH2rC5UrGNzWzX1ZaMLfHJgnd4aEmziDTESsMF4FTXwYi3vivomWQZmya5N389",
+      "explorer": "https://solscan.io/tx/2UsdgeCxuVbEpNB8zmuZsQWqbJPH2rC5UrGNzWzX1ZaMLfHJgnd4aEmziDTESsMF4FTXwYi3vivomWQZmya5N389"
+    },
+    {
+      "step": "crank-graduate",
+      "signature": "3DuZmGAwbsvDgLvK8ewprqFaLFuMMbryZchhCYbGrSG6N3QjTcL56abBQmtNtiHSSWpbXysBFpFXtCpyrpr2bdHK",
+      "explorer": "https://solscan.io/tx/3DuZmGAwbsvDgLvK8ewprqFaLFuMMbryZchhCYbGrSG6N3QjTcL56abBQmtNtiHSSWpbXysBFpFXtCpyrpr2bdHK"
+    },
+    {
+      "step": "crank-graduate",
+      "signature": "kR8WwnV9JDvYyvqBQcDChUqhm5wqLawgK9bWvN8BtfRJWMNAfS9JCXJBG8RoBruyoWnqnzq4Vx9nNtkvT6Zbewm",
+      "explorer": "https://solscan.io/tx/kR8WwnV9JDvYyvqBQcDChUqhm5wqLawgK9bWvN8BtfRJWMNAfS9JCXJBG8RoBruyoWnqnzq4Vx9nNtkvT6Zbewm"
+    },
+    {
+      "step": "crank-graduate",
+      "signature": "3dybMqhv94vdgrzDEU2cPR4Dmm8sjTpKviSX8fzuQpJVhWT4t62P6jFY5CK9pTp9u14wBWX292QTSprivZnPdxWK",
+      "explorer": "https://solscan.io/tx/3dybMqhv94vdgrzDEU2cPR4Dmm8sjTpKviSX8fzuQpJVhWT4t62P6jFY5CK9pTp9u14wBWX292QTSprivZnPdxWK"
+    },
+    {
+      "step": "damm-buy",
+      "signature": "3VSMYVeyB2zHfJQmNZAdosnBQLYMFD2cNwPSHNLoK9rcbAqkzkeJ3VMbNXcLEnhS49qd9CufX8vcvvCZMDYXUseZ",
+      "explorer": "https://solscan.io/tx/3VSMYVeyB2zHfJQmNZAdosnBQLYMFD2cNwPSHNLoK9rcbAqkzkeJ3VMbNXcLEnhS49qd9CufX8vcvvCZMDYXUseZ"
+    },
+    {
+      "step": "damm-sell",
+      "signature": "3Kf8ADNo14URhzSCcoiYcfRxqMwEZdPzSnHiXfgHyJUMfa7LynKaJc6FC5GmGUZg2evFKNESyYVdniAD4Myr9D7h",
+      "explorer": "https://solscan.io/tx/3Kf8ADNo14URhzSCcoiYcfRxqMwEZdPzSnHiXfgHyJUMfa7LynKaJc6FC5GmGUZg2evFKNESyYVdniAD4Myr9D7h"
+    },
+    {
+      "step": "crank-lp",
+      "signature": "4kcjwfs5wpPqtz5oAYwdNMqxD62xSBkQSEnTBye1fyFMYEtWpgVH3QqAyX4AEAUbQ5nC4f2MhUtBxQm4MUpff5EM",
+      "explorer": "https://solscan.io/tx/4kcjwfs5wpPqtz5oAYwdNMqxD62xSBkQSEnTBye1fyFMYEtWpgVH3QqAyX4AEAUbQ5nC4f2MhUtBxQm4MUpff5EM"
+    },
+    {
+      "step": "redeem1",
+      "signature": "4T93DzFWyi7pdGxpbFG91tiqXEtqLgfXRDmvMjgmZsDwJPf8bdLLhiVzqaBKasD8bUKViB9JEc3kP2KpPhqTtQmy",
+      "explorer": "https://solscan.io/tx/4T93DzFWyi7pdGxpbFG91tiqXEtqLgfXRDmvMjgmZsDwJPf8bdLLhiVzqaBKasD8bUKViB9JEc3kP2KpPhqTtQmy"
+    },
+    {
+      "step": "redeem2",
+      "signature": "QNYN53zWnhET8yAw65L2ZiM6k7iR3CQQCdRKqXZ7S2qzmscHnZbz41mbE6i2qw49KVKZeBRcqJxSd9isMfqLeEr",
+      "explorer": "https://solscan.io/tx/QNYN53zWnhET8yAw65L2ZiM6k7iR3CQQCdRKqXZ7S2qzmscHnZbz41mbE6i2qw49KVKZeBRcqJxSd9isMfqLeEr"
+    }
+  ],
+  "addresses": [
+    {
+      "label": "stockfloor program",
+      "address": "98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA",
+      "explorer": "https://solscan.io/account/98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA"
+    },
+    {
+      "label": "launch (StockFloor)",
+      "address": "5NkjnnMZ9naLeoFoUiDMUX3F7oB2hUDzNHqp9J1sSDpd",
+      "explorer": "https://solscan.io/account/5NkjnnMZ9naLeoFoUiDMUX3F7oB2hUDzNHqp9J1sSDpd"
+    },
+    {
+      "label": "base mint",
+      "address": "593RScUPW2AJt5uLpnrGsdPYV2qMxNfwETRwfvp8MBVL",
+      "explorer": "https://solscan.io/account/593RScUPW2AJt5uLpnrGsdPYV2qMxNfwETRwfvp8MBVL"
+    },
+    {
+      "label": "DBC config",
+      "address": "B3VWGgtdYVHED8GqPjMyt25xNeP78yV8nujSGbpMH74m",
+      "explorer": "https://solscan.io/account/B3VWGgtdYVHED8GqPjMyt25xNeP78yV8nujSGbpMH74m"
+    },
+    {
+      "label": "DBC pool",
+      "address": "A7rr13D7xJysbUwJfd3ZZczBrb4QLNDaLGNkHnWYBWbT",
+      "explorer": "https://solscan.io/account/A7rr13D7xJysbUwJfd3ZZczBrb4QLNDaLGNkHnWYBWbT"
+    },
+    {
+      "label": "floor vault (SPYx)",
+      "address": "9yt93UKPo8v5C6jpT3J1FPdgyaJuevkHrarT76ytjqY9",
+      "explorer": "https://solscan.io/account/9yt93UKPo8v5C6jpT3J1FPdgyaJuevkHrarT76ytjqY9"
+    },
+    {
+      "label": "DAMM v2 pool",
+      "address": "3yt7vEavR1FXqhcy76hLYXp3L5MP3YE8wrfaJmyQcW6G",
+      "explorer": "https://solscan.io/account/3yt7vEavR1FXqhcy76hLYXp3L5MP3YE8wrfaJmyQcW6G"
+    }
+  ]
+}
