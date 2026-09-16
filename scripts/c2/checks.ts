@@ -148,18 +148,21 @@ main(async () => {
       const launch = flag(flags, "launch");
       if (!launch) throw new Error("--launch <address> is required");
       const reader = new ReadOnlyChainReader(rpc);
-      // A provider endpoint load-balances across nodes, so an account written moments ago can be
-      // missing from the node that answers this read. Observed on mainnet: this guard reported the
-      // launch absent right after create-launch had confirmed and printed its state. Poll before
-      // believing "absent"; a launch that truly does not exist just costs ~30 s of retries.
-      let state = await fetchLaunchState(reader, {
-        launch: new web3.PublicKey(launch),
-      });
-      for (let i = 1; i < 15 && !state; i++) {
-        await new Promise((r) => setTimeout(r, 2000));
-        state = await fetchLaunchState(reader, {
-          launch: new web3.PublicKey(launch),
-        });
+      const expect = flag(flags, "expect");
+      const expected = expect ? expect.split(",").map((s) => s.trim()) : null;
+      // A provider endpoint load-balances across nodes, and some of them lag by minutes. Observed on
+      // mainnet: right after create-launch this guard reported the launch absent, and right after two
+      // confirmed buys it still read the pre-buy reserve. So poll until the account exists AND the
+      // phase is one the caller expects. A launch that is genuinely absent, or genuinely in another
+      // phase, only costs the retry window before the same abort.
+      const read = async () =>
+        await fetchLaunchState(reader, { launch: new web3.PublicKey(launch) });
+      const settled = (s: Awaited<ReturnType<typeof read>>) =>
+        !!s && (!expected || expected.includes(s.phase));
+      let state = await read();
+      for (let i = 1; i < 20 && !settled(state); i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        state = await read();
       }
       if (!state) return abort(`launch ${launch} not found on this cluster`);
       const summary = {
@@ -172,8 +175,6 @@ main(async () => {
         migrationFeeHarvested: state.launch.migrationFeeHarvested,
         dammPool: state.migrated ? state.damm.pool.toBase58() : null,
       };
-      const expect = flag(flags, "expect");
-      const expected = expect ? expect.split(",").map((s) => s.trim()) : null;
       console.log(
         `launch-phase: ${summary.phase}, progress ${summary.progress} (${groupDigits(summary.quoteReserve)} / ${groupDigits(summary.threshold)} raw), vault ${groupDigits(summary.vaultRaw)} raw, supply ${groupDigits(summary.baseSupplyRaw)}${summary.dammPool ? `, DAMM v2 pool ${summary.dammPool}` : ""}`,
       );
