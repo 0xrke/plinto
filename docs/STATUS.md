@@ -35,7 +35,10 @@ and a handful of decisions only the user can make.
 6. **Optional:** the Pyth market-data bounty is a cheap fit (USD valuation of the floor, xStock premium/discount);
    PreStocks and Tessera are not reachable without a redesign (their mints carry transfer fees, which DBC rejects).
 7. **Product name:** the user is reconsidering "StockFloor" now that there is time. Rejected so far: Stoa (a Stoa
-   Protocol exists or existed; stoa.xyz and stoa.fun are taken) and Stowa (a German watch brand). A rename would be
+   Protocol exists or existed; stoa.xyz taken, stoa.fun registry-reserved), Stowa (a German watch brand), Keel and
+   every Keel compound (Sky runs a Solana capital allocator called Keel), Ballast (DeFi on Sui), Cellar (Sommelier
+   vaults). Plain English words are taken on .com/.xyz/.app but mostly free on .fi; compounds are free everywhere.
+   Under review: Plinth, Bollard, Holdground, Underpin, Hardpan, Lastro. A rename would be
    user-facing only: the program id, the crate name and the immutable demo token (`StockFloor Demo` / `SFDEMO`) keep
    the old name.
 
