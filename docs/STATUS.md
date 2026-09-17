@@ -45,7 +45,10 @@ and a handful of decisions only the user can make.
    Later the same day the user asked to follow launchpad naming (pump.fun, bonk.fun, bags.fm, believe.app,
    metadao.fi): a short everyday word with the domain as part of the brand. Free on .fun at registry level (price and
    premium tier unknown): wall, street, steady, solid, keep, stay, par, share, sober; sober is also free on .fi and
-   .finance. A rename would be
+   .finance.
+   The user then chose a serious launchpad for tokens meant to outlive memecoins. Long-term names free on .fi:
+   decade, tenure, cohort, annum, lasting, staying, slowburn (keepsake only on .finance). Dropped: long* (Long.xyz),
+   Perennial (Perennial Finance), Evergreen, Redwood, Keeper. A rename would be
    user-facing only: the program id, the crate name and the immutable demo token (`StockFloor Demo` / `SFDEMO`) keep
    the old name.
 
@@ -56,6 +59,7 @@ and a handful of decisions only the user can make.
 - **StonkFun (stonkfun.xyz, $STONK) already pairs new Solana tokens with tokenized stocks** (Raydium LaunchLab;
   STONK rose to about $140M market cap on 2026-09-06 per The Block). "Tokens quoted in stocks" is therefore not our
   differentiator any more. The pitch has to lead with the redeemable floor funded at graduation and with DBC.
+  Long.xyz does the same on Robinhood Chain (tokens paired with Robinhood Stock Tokens).
 - **A close concept already exists under a "floor" name.** FLOOR ($FLR, thefloor.finance) routes a token's creator
   fees into four tokenized equities plus gold, half claimable by holders and half backing a floor (per its own
   description in search results; the site itself failed TLS when fetched on 2026-09-17). Floors Finance and FloorFi
