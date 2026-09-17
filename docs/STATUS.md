@@ -48,7 +48,9 @@ and a handful of decisions only the user can make.
    .finance.
    The user then chose a serious launchpad for tokens meant to outlive memecoins. Long-term names free on .fi:
    decade, tenure, cohort, annum, lasting, staying, slowburn (keepsake only on .finance). Dropped: long* (Long.xyz),
-   Perennial (Perennial Finance), Evergreen, Redwood, Keeper. A rename would be
+   Perennial (Perennial Finance), Evergreen, Redwood, Keeper.
+   Stock-derived coinages: Stockhold (.fi/.finance), Stockstead and Stockvale (all four zones), Stonking and Stonko
+   (all four, but the stonk family is crowded). Dropped: Stocko (an Indian trading platform), Stockr (STOKR), Stoken. A rename would be
    user-facing only: the program id, the crate name and the immutable demo token (`StockFloor Demo` / `SFDEMO`) keep
    the old name.
 
