@@ -50,7 +50,10 @@ and a handful of decisions only the user can make.
    decade, tenure, cohort, annum, lasting, staying, slowburn (keepsake only on .finance). Dropped: long* (Long.xyz),
    Perennial (Perennial Finance), Evergreen, Redwood, Keeper.
    Stock-derived coinages: Stockhold (.fi/.finance), Stockstead and Stockvale (all four zones), Stonking and Stonko
-   (all four, but the stonk family is crowded). Dropped: Stocko (an Indian trading platform), Stockr (STOKR), Stoken. A rename would be
+   (all four, but the stonk family is crowded). Dropped: Stocko (an Indian trading platform), Stockr (STOKR), Stoken.
+   The user dropped .fi (too expensive) and asked for "floor / foundation" in other languages. Shortlist: Taban
+   (Turkish floor; "taban fiyat" = floor price), Lantai (Malay/Indonesian floor), Sakafu (Swahili floor), Osnova,
+   Patoma (Greek floor), Zemin, Alusta, Temel, Planko, Karka. Dropped: Zoru (one letter from Zora), Solera, Yesod. A rename would be
    user-facing only: the program id, the crate name and the immutable demo token (`StockFloor Demo` / `SFDEMO`) keep
    the old name.
 
