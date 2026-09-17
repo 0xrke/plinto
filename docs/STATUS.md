@@ -53,7 +53,10 @@ and a handful of decisions only the user can make.
    (all four, but the stonk family is crowded). Dropped: Stocko (an Indian trading platform), Stockr (STOKR), Stoken.
    The user dropped .fi (too expensive) and asked for "floor / foundation" in other languages. Shortlist: Taban
    (Turkish floor; "taban fiyat" = floor price), Lantai (Malay/Indonesian floor), Sakafu (Swahili floor), Osnova,
-   Patoma (Greek floor), Zemin, Alusta, Temel, Planko, Karka. Dropped: Zoru (one letter from Zora), Solera, Yesod. A rename would be
+   Patoma (Greek floor), Zemin, Alusta, Temel, Planko, Karka. Dropped: Zoru (one letter from Zora), Solera, Yesod.
+   The user liked Planko; its risk is Plinko (a crypto-casino game). Plank-rooted alternatives, all free on .xyz/.fun/
+   .finance: Planken, Plankway, Plankr, Plankly, Plankstone, Plankade, Tabulo. Dropped: Plank (taken; $PLANK exists),
+   Planka (Swedish slang for fare dodging). A rename would be
    user-facing only: the program id, the crate name and the immutable demo token (`StockFloor Demo` / `SFDEMO`) keep
    the old name.
 
