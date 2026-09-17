@@ -38,9 +38,10 @@ and a handful of decisions only the user can make.
    Protocol exists or existed; stoa.xyz taken, stoa.fun registry-reserved), Stowa (a German watch brand), Keel and
    every Keel compound (Sky runs a Solana capital allocator called Keel), Ballast (DeFi on Sui), Cellar (Sommelier
    vaults). Plain English words are taken on .com/.xyz/.app but mostly free on .fi; compounds are free everywhere.
-   Also dropped: Ironfloor (echoes the collapsed Iron Finance). The user now ranks easy reading and pronunciation above
-   brevity. Under review: Nonzero (nonzero.fi), Footing (footing.fi), Stockroot (.xyz/.app/.fi), Lowerbound,
-   Underpin, Hardpan, Lastro, Holdground. A rename would be
+   Also dropped: Ironfloor (echoes the collapsed Iron Finance). The user ranks easy reading and pronunciation above
+   brevity, and on 2026-09-17 asked to stop describing the mechanism in the name: invented words only, domains in
+   .xyz / .fun / .fi / .finance. Invented-word shortlist: Nardo, Ravona, Orvelo, Bevano, Norvo, Talaro, Tamo, Amvo.
+   Dropped for existing tokens or look-alikes: Lorvan, Zonto, Zamo, Tavro, Tanzo, Temaro, Monavo, Lumaro, Venzo. A rename would be
    user-facing only: the program id, the crate name and the immutable demo token (`StockFloor Demo` / `SFDEMO`) keep
    the old name.
 
