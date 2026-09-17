@@ -41,7 +41,11 @@ and a handful of decisions only the user can make.
    Also dropped: Ironfloor (echoes the collapsed Iron Finance). The user ranks easy reading and pronunciation above
    brevity, and on 2026-09-17 asked to stop describing the mechanism in the name: invented words only, domains in
    .xyz / .fun / .fi / .finance. Invented-word shortlist: Nardo, Ravona, Orvelo, Bevano, Norvo, Talaro, Tamo, Amvo.
-   Dropped for existing tokens or look-alikes: Lorvan, Zonto, Zamo, Tavro, Tanzo, Temaro, Monavo, Lumaro, Venzo. A rename would be
+   Dropped for existing tokens or look-alikes: Lorvan, Zonto, Zamo, Tavro, Tanzo, Temaro, Monavo, Lumaro, Venzo.
+   Later the same day the user asked to follow launchpad naming (pump.fun, bonk.fun, bags.fm, believe.app,
+   metadao.fi): a short everyday word with the domain as part of the brand. Free on .fun at registry level (price and
+   premium tier unknown): wall, street, steady, solid, keep, stay, par, share, sober; sober is also free on .fi and
+   .finance. A rename would be
    user-facing only: the program id, the crate name and the immutable demo token (`StockFloor Demo` / `SFDEMO`) keep
    the old name.
 
@@ -49,6 +53,9 @@ and a handful of decisions only the user can make.
 - Nothing is blocking. Remaining work is the app deploy and the recording, both of which need the decisions above.
 
 ## Risks / surprises
+- **StonkFun (stonkfun.xyz, $STONK) already pairs new Solana tokens with tokenized stocks** (Raydium LaunchLab;
+  STONK rose to about $140M market cap on 2026-09-06 per The Block). "Tokens quoted in stocks" is therefore not our
+  differentiator any more. The pitch has to lead with the redeemable floor funded at graduation and with DBC.
 - **A close concept already exists under a "floor" name.** FLOOR ($FLR, thefloor.finance) routes a token's creator
   fees into four tokenized equities plus gold, half claimable by holders and half backing a floor (per its own
   description in search results; the site itself failed TLS when fetched on 2026-09-17). Floors Finance and FloorFi
