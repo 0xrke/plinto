@@ -38,7 +38,9 @@ and a handful of decisions only the user can make.
    Protocol exists or existed; stoa.xyz taken, stoa.fun registry-reserved), Stowa (a German watch brand), Keel and
    every Keel compound (Sky runs a Solana capital allocator called Keel), Ballast (DeFi on Sui), Cellar (Sommelier
    vaults). Plain English words are taken on .com/.xyz/.app but mostly free on .fi; compounds are free everywhere.
-   Under review: Plinth, Bollard, Holdground, Underpin, Hardpan, Lastro. A rename would be
+   Also dropped: Ironfloor (echoes the collapsed Iron Finance). The user now ranks easy reading and pronunciation above
+   brevity. Under review: Nonzero (nonzero.fi), Footing (footing.fi), Stockroot (.xyz/.app/.fi), Lowerbound,
+   Underpin, Hardpan, Lastro, Holdground. A rename would be
    user-facing only: the program id, the crate name and the immutable demo token (`StockFloor Demo` / `SFDEMO`) keep
    the old name.
 
@@ -46,6 +48,11 @@ and a handful of decisions only the user can make.
 - Nothing is blocking. Remaining work is the app deploy and the recording, both of which need the decisions above.
 
 ## Risks / surprises
+- **A close concept already exists under a "floor" name.** FLOOR ($FLR, thefloor.finance) routes a token's creator
+  fees into four tokenized equities plus gold, half claimable by holders and half backing a floor (per its own
+  description in search results; the site itself failed TLS when fetched on 2026-09-17). Floors Finance and FloorFi
+  also pitch floor-backed tokens. The README should state the difference plainly: here the floor is funded once, at
+  graduation, from half of the raise, and holders redeem by burning. It is also a reason to drop "Floor" from the name.
 - **The demo token's on-chain name is `StockFloor Demo` / `SFDEMO`, while its metadata JSON describes a fictional
   roastery.** `TOKEN_URI` was set for the run but `TOKEN_NAME` / `TOKEN_SYMBOL` were left at the script's defaults.
   The metadata is immutable (`isMutable: 0`, update authority cleared) and the URI is pinned to a commit, so neither
