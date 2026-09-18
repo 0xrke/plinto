@@ -4,15 +4,15 @@ import { LaunchList } from "@/components/launch/LaunchList";
 const STEPS = [
   {
     title: "Presale on a bonding curve",
-    body: "Buyers pay in a tokenized stock such as SPYx, straight into the curve. The flat or gently rising curve fills toward the graduation threshold the creator set. On mainnet, USDC and SOL can be routed into that asset through Jupiter first.",
+    body: "Buyers pay in a tokenized stock such as SPYx, straight into the curve. The flat or gently rising curve fills toward the graduation threshold the creator set. While it is filling you can sell back into it at close to what you paid, and nobody — not the creator, not us — can take that money out. On mainnet, USDC and SOL can be routed into that asset through Jupiter first.",
   },
   {
     title: "Graduation",
-    body: "A fixed share of the raise (30 to 70%, default 50%) moves into the token's vault. The rest seeds a Meteora DAMM v2 pool with permanently locked liquidity.",
+    body: "A fixed share of the raise (30 to 70%, default 50%) moves into the token's vault. The rest seeds a Meteora DAMM v2 pool with permanently locked liquidity. Your cover changes here in one transaction, from close to what you paid down to the floor, and anyone can complete the curve at any time.",
   },
   {
     title: "Free market with a floor",
-    body: "Any holder can burn tokens for a pro-rata share of the vault at any time, minus a 2% exit fee that stays in the vault. The program has no admin withdraw; the quote issuer's controls and program upgradeability are disclosed on every token page.",
+    body: "Any holder can burn tokens for a pro-rata share of the vault at any time, minus a 2% exit fee that stays in the vault. The floor only rises from there: trading fees from the locked pool and every retained exit fee go to the vault. The program has no admin withdraw; the quote issuer's controls and program upgradeability are disclosed on every token page.",
   },
 ];
 
@@ -38,8 +38,9 @@ export default function HomePage() {
             </Link>
           </div>
           <p className="mt-4 max-w-xl text-sm text-ink-3">
-            The floor protects from zero, not from loss. Buying far above the floor can still lose most of the
-            purchase. Every token page shows the maximum loss before you buy.
+            The floor protects from zero, not from loss. It is a fixed amount per token, not a share of what
+            you paid, so buying far above it can still lose most of the purchase. Every token page shows the
+            maximum loss before you buy.
           </p>
         </div>
         <ol className="card divide-y divide-line" aria-label="How it works">

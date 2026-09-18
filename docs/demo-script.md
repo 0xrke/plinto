@@ -81,6 +81,13 @@ build brief (§12).
 ### 0.3 Rules for the voiceover
 
 - **Say "protects from zero, not from loss".** Never say "guaranteed", "risk-free" or "can't lose".
+- **The floor is a fixed amount per token,** not a share of what a buyer paid. If the price is far above it,
+  say so: "a buyer at twelve times the floor still loses about ninety percent".
+- **The presale is not a refund.** Say "while the curve is filling you can sell back into it at close to what
+  you paid", never "you get your money back". Add that anyone can complete the curve, so that cover can end
+  at any moment.
+- **The creator takes no part of the raise.** If the raise is mentioned as money "raised", follow it with
+  where it goes: the vault and locked liquidity, never the creator's wallet.
 - **Graduation.** Say "half of the raise goes to the vault" only together with the setting "at the default 50%
   vault share". On-chain, the amount is 50% of the threshold, `T − ceil(T × 50 / 100)`.
 - **After a redemption,** the floor for everyone else "does not go down; the 2% exit fee nudges it up". Do not
@@ -97,7 +104,7 @@ build brief (§12).
 |---|---|
 | **Screen** | `/`, the home page. Hero headline "Token launches with a floor in tokenized S&P 500" |
 | **Actions** | 1. Hold on the hero for 3 s. 2. Slow scroll to the "How it works" card (Presale on a bonding curve → Graduation → Free market with a floor). |
-| **Voiceover** | "Most tokens go to zero. What if the money raised became a floor in the S&P 500? StockFloor is a launchpad on Meteora's Dynamic Bonding Curve where every token gets a hard floor in tokenized stocks from day one." |
+| **Voiceover** | "Most tokens go to zero. What if the money raised became a floor in the S&P 500? StockFloor is a launchpad on Meteora's Dynamic Bonding Curve where every token gets a hard floor in tokenized stocks from day one — and that floor only ever moves up." |
 | **Overlay** | Lower third, 2 s: "Not for US persons · Unaudited hackathon code" |
 | **Proof** | — |
 
@@ -106,9 +113,9 @@ build brief (§12).
 | | |
 |---|---|
 | **Screen** | Click **"Launch a token"** (or **Create** in the header) to open `/create` |
-| **Actions** | 1. **Name:** `StockFloor Demo`, **Symbol:** `SFDEMO` (a clearly fictional demo token). 2. **Quote asset:** keep **SPYx** and point at its "calm" tag. 3. **Curve preset:** **Gentle**. 4. Drag **"Share of the raise locked in the floor vault"** from 50% to 70%, then back to 50%. Keep the right-hand preview in frame: "Floor at graduation", "Floor vs graduation price", "Max loss at graduation price". 5. Open **"Graduation threshold (advanced)"** and click the **$50** quick pick; the whole preview follows it. 6. Point at **Fixed terms**: Exit fee 2%, Curve trading fee 1%, Team allocation None. 7. Click **"Launch token"** and approve in the wallet, then cut to the new token page. |
+| **Actions** | 1. **Name:** `StockFloor Demo`, **Symbol:** `SFDEMO` (a clearly fictional demo token). 2. **Quote asset:** keep **SPYx** and point at its "calm" tag. 3. **Curve preset:** **Gentle**. 4. Drag **"Share of the raise locked in the floor vault"** from 50% to 70%, then back to 50%. Keep the right-hand preview in frame: "Floor at graduation", "Floor vs graduation price", "Max loss at graduation price". 5. Open **"Graduation threshold (advanced)"** and click the **$50** quick pick; the whole preview follows it. 6. Point at **Fixed terms**: Exit fee 2%, Curve trading fee 1%, Team allocation None, **Your share of the raise None**, and the line under them ("This is not a fundraising round…"). 7. Click **"Launch token"** and approve in the wallet, then cut to the new token page. |
 | **Expected preview values** | From the SDK formula `floor / price = f / (√r + 1 − f)`. Gentle at 50%: floor ≈ 31% of the graduation price, max loss ≈ 69%. Gentle at 70%: ≈ 50% and ≈ 50%. If the app shows something else, stop and report it. |
-| **Voiceover** | "A creator launches a token quoted in SPYx, on a gentle IPO-style curve. They choose how much of the raise becomes the floor: at fifty percent, the preview shows the floor at graduation and the maximum loss for a buyer at the opening price. No team allocation, no free tokens." |
+| **Voiceover** | "A creator launches a token quoted in SPYx, on a gentle IPO-style curve. They choose how much of the raise becomes the floor: at fifty percent, the preview shows the floor at graduation and the maximum loss for a buyer at the opening price. No team allocation, no free tokens — and no share of the raise for the creator either. It all goes to the vault and to locked liquidity." |
 | **Proof** | Solscan: DBC config `DCXNPXrb…` and the `create_launch` transaction `3aFjp7pZ…` |
 
 ### Scene 3: Presale · 0:35–1:00 · `MAINNET (C2)` or `FORK`, paying in SPYx
@@ -117,7 +124,8 @@ build brief (§12).
 |---|---|
 | **Screen** | `/t/<mint>`, the token page. Phase stepper on **Presale** |
 | **Actions** | 1. Scroll to **Disclosures** and tick "I confirm that I am not a US person…". Scroll back up. 2. In **"Trade on the curve"**, choose **Buy**, keep "Pay with" on **SPYx**, enter an amount and click the buy button (its label reads `Price $X · Floor at graduation (est.) $Y · Max loss if it graduates: −Z%`). Approve. 3. Cut to the second buyer wallet (pre-staged) that buys again. 4. Show **"Progress to graduation"** filling, plus "Floor at graduation (est.)" and "Vault at graduation". |
-| **Voiceover** | "Buyers pay in SPYx, tokenized S&P 500, straight into the bonding curve. The raise stays in SPYx inside the DBC pool, and the partner share of every trading fee is already flowing into this token's vault." |
+| **Voiceover** | "Buyers pay in SPYx, tokenized S&P 500, straight into the bonding curve. The raise stays in SPYx inside the DBC pool — nobody can take it out, and while the curve is still filling a buyer can sell back into it at close to what they paid. The partner share of every trading fee is already flowing into this token's vault." |
+| **Also say it, over the progress bar** | "That changes the moment the curve fills, and anyone can fill it: from then on the cover is the floor, about a third of the opening price at these settings." |
 | **If Jupiter is exercised first** | The "Pay with" selector also offers USDC and SOL, routed through Jupiter (mainnet only). That path has never been run against the live API, so test it with a small amount before recording, or keep SPYx. |
 | **Proof** | Solscan: curve buy `R7r9wkTz…` and the DBC pool `ARBkYsKy…` |
 
@@ -164,7 +172,7 @@ build brief (§12).
 |---|---|
 | **Screen** | README "Prior art and differentiation" table, then "Roadmap" |
 | **Actions** | Scroll the prior-art table; stop on the StockFloor row. Cut to the roadmap. |
-| **Voiceover** | "Other stock-backed floors are funded by fees, so they start at zero. Ours starts with a share of the raise. Next up: basket vaults and yield on the vault. StockFloor: the floor ships on day one." |
+| **Voiceover** | "Launchpads that pair tokens with stocks already exist — StonkFun, Long-dot-xyz — but there the stock only sits in the pool and holders have no claim on it. Other stock-backed floors are funded by fees, so they start at zero. Ours starts with a share of the raise, and every holder can redeem against it. Next up: basket vaults and yield on the vault. StockFloor: the floor ships on day one." |
 | **Overlay** | End card: repository link (TBD (C3)), live app (TBD (C3)), "Not for US persons · Unaudited hackathon code" |
 | **Proof** | — |
 

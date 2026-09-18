@@ -492,7 +492,16 @@ export function CreateLaunchForm() {
               <dt className="text-ink-2">Team allocation</dt>
               <dd className="font-semibold text-ink">None</dd>
             </div>
+            <div className="flex justify-between gap-3 rounded-lg bg-sunken px-3 py-2">
+              <dt className="text-ink-2">Your share of the raise</dt>
+              <dd className="font-semibold text-ink">None</dd>
+            </div>
           </dl>
+          <p className="field-hint">
+            This is not a fundraising round. The raise splits between the floor vault and permanently locked
+            liquidity, and you receive none of it: your only income is 30% of the curve trading fee. Launch
+            here for a token you intend to keep working on, not for launch revenue.
+          </p>
         </fieldset>
 
         <div className="space-y-3 border-t border-line pt-6">
