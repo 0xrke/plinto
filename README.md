@@ -7,6 +7,22 @@ moment the market opens. The token can go up without limit, and while the vault 
 unchanged, it cannot go to zero. (Those two conditions are real: see
 [Who could still hurt the floor](#who-could-still-hurt-the-floor).)
 
+**What that means for a buyer, phase by phase:**
+
+- **During the presale** the money sits in the bonding curve. You can sell back into it at close to what you
+  paid: the curve moves 1.2× from its first price to its last, and each trade pays a 1% fee. Nobody — not the
+  creator, not us — can take that money out.
+- **When the curve completes, the protection changes in one transaction.** Half the raise becomes the
+  redeemable floor and the rest becomes permanently locked liquidity, so cover drops from "almost what you
+  paid" to the floor: **31.3% of the opening price at the defaults**. Anyone can complete the curve, so a
+  buyer late in the presale should expect that switch at any moment.
+- **After that the floor only rises.** 0.8% of every trade on the DAMM v2 pool and the 2% kept from every
+  redemption go to the vault. On a $1,000 raise (a $500 vault), $100,000 of lifetime volume adds roughly $800
+  — the floor per token more than doubles.
+
+The floor is a fixed amount per token, not a percentage of what you paid. A buyer at 12× the floor still
+loses about 92%, which is why every buy button prints the maximum loss before you press it.
+
 > Everyone else builds a piggy bank that might become a floor someday. We ship the floor on day one.
 
 > Launch mechanics for equity-like assets: the raise is locked in stocks, not burned on hype.
@@ -160,9 +176,14 @@ The DBC configuration *is* the product here, not packaging around it:
 **StockFloor's answer:** a share of the raise (30–70%, default 50%) is locked in SPYx at graduation. Every
 holder can redeem against it pro rata, at any time, forever. No admin can withdraw it.
 
-**Who it is for.** Communities, creators and projects that want to raise from supporters without asking
-them to accept a zero-or-moon bet. Buyers get a floor held in real stock exposure and can see their maximum
-loss before they buy.
+**Who it is for.** Communities, creators and projects launching a token that is meant to outlive the week it
+was launched in. Buyers get a floor held in real stock exposure and can see their maximum loss before they
+buy.
+
+**What it is not.** It is not a fundraising round. The creator receives no part of the raise, no allocation
+and no vesting — the whole raise splits between the vault and locked liquidity, and the creator's only income
+is 30% of the curve trading fee (see [Who pays for this](#who-pays-for-this)). This is a community token with
+a floor, and a creator who needs the proceeds to fund work should not use StockFloor as it stands.
 
 ---
 
@@ -894,6 +915,7 @@ by [the scan above](#the-problem)) we did not find the combination:**
 | daos.fun | Part of the raise goes to a fund; redemption at expiry only | Not a floor while trading; SOL |
 | Juicebox cash-outs / Revnets, Baseline, NOTCH, RISE, Nirvana, MetaDAO bid wall, Moloch ragequit | The floor / cash-out mechanism family | Not stocks, not DBC |
 | Stock-quoted DBC operators: Ember (embercurve.fun, about 2,720 markets, 81 graduated), StockLaunch, Lattice | Stock-quoted launches with dividends, buybacks or fee rewards | No floor |
+| StonkFun (stonkfun.xyz, $STONK, Solana, Raydium LaunchLab), Long.xyz (Robinhood Chain) | Launches paired against tokenized stocks | Pairing only. The stock sits in the pool, holders have no claim on it and there is no redemption. Checked 2026-09-17 |
 | **StockFloor** | **Raise-funded SPYx vault from day one, DBC partner migration fee → PDA vault, permissionless pro-rata redemption, 100% locked DAMM v2 LP, quote-only fees into the vault** | — |
 
 Fee-funded floors start at zero and fill with volume. Ours starts with 30–70% of the raise.
