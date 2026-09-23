@@ -5,6 +5,7 @@ import { SITE_URL } from "@/lib/config";
 import { AppProviders } from "@/components/providers/AppProviders";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
+import { Chrome } from "@/components/layout/Chrome";
 
 const TITLE = "StockFloor · Launches with a floor in tokenized stocks";
 const DESCRIPTION =
@@ -37,11 +38,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           >
             Skip to content
           </a>
-          <SiteHeader />
+          <Chrome>
+            <SiteHeader />
+          </Chrome>
           <main id="main" className="flex-1">
             {children}
           </main>
-          <SiteFooter />
+          <Chrome>
+            <SiteFooter />
+          </Chrome>
         </AppProviders>
       </body>
     </html>
