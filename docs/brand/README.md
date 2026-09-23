@@ -36,3 +36,29 @@ exploration page. Swapping it means editing the two `fill`/`stroke` values in ea
   to outlines and the spacing corrected by hand.
 - PNG exports (180px for Apple touch icons, 512px for manifests) and the OG image.
 - A decision on the name, which is tracked in `docs/STATUS.md`.
+
+## Social images (`social/`)
+
+Drawn as SVG and rasterised with `rsvg-convert`; regenerate with the script kept alongside this repo's
+brand notes. Every file exists as both `.svg` (the source) and `.png` (what you upload).
+
+| File | Size | Use |
+|---|---|---|
+| `avatar-navy.png` | 400×400 | Profile picture, the app's navy |
+| `avatar-ink.png` | 400×400 | Profile picture, near-black — pairs with the ink headers |
+| `avatar-light.png` | 400×400 | Profile picture on white, with a hairline ring so it does not vanish on a light timeline |
+| `header-white-wordmark.png` | 1500×500 | Header: mark, wordmark and tagline over the price-and-floor line |
+| `header-ink-wordmark.png` | 1500×500 | The same on near-black |
+| `header-navy-wordmark.png` | 1500×500 | The same on the app's navy |
+| `header-white-statement.png` | 1500×500 | Header: "The floor ships on day one." |
+| `header-ink-chart.png` | 1500×500 | Header: wordmark small, the chart carrying the image |
+
+Notes for X specifically:
+
+- **Avatars are cropped to a circle.** These are drawn full-bleed, so the crop takes the middle and the
+  corners are spare on purpose. Do not add padding.
+- **The avatar sits over the lower left of the header**, roughly the first 300×160 points. That corner
+  holds nothing but the faint presale line in every header here.
+- **Headers are cropped on narrow screens**, most on the left and right. The wordmark sits near the
+  middle for that reason; the statement variant is the one to avoid if that bothers you.
+- Sources are 3000×1000 and 1000×1000, so the exports stay sharp on retina displays.

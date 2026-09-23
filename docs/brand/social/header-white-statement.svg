@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3000 1000" width="3000" height="1000">
+  <rect width="3000" height="1000" fill="#ffffff"/>
+  
+  
+  <g transform="translate(210 150) scale(1.875)">
+    <rect width="64" height="64" rx="16" fill="#14181a"/>
+    <path d="M14 50.5h36v-8l-36 4.5z" fill="#1f6f55" stroke="#1f6f55" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M13.7 37.7L25.1 27.4l8 5.7L50.3 17.1" fill="none" stroke="#ffffff" stroke-width="5"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="210" y="470" font-family="Iowan Old Style, Palatino, Georgia, serif" font-size="140" fill="#14181a">The floor ships</text>
+  <text x="210" y="620" font-family="Iowan Old Style, Palatino, Georgia, serif" font-size="140" fill="#14181a">on day one.</text>
+  <text x="212" y="710" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="44" fill="#6b736f">Solana · Meteora Dynamic Bonding Curve</text>
+  
+  <path d="M0 856 L1150 791" fill="none" stroke="#6b736f" stroke-width="7"
+        stroke-linecap="round" stroke-dasharray="2 34"/>
+  <path d="M1150 906 C1500 896, 1900 878, 2300 856 C2560 842, 2800 831, 3000 820 L3000 1000 L1150 1000 Z" fill="#1f6f55" fill-opacity="0.16"/>
+  <path d="M1150 906 C1500 896, 1900 878, 2300 856 C2560 842, 2800 831, 3000 820" fill="none" stroke="#1f6f55" stroke-width="9" stroke-linecap="round"/>
+  <path d="M1150 784 C1230 676, 1290 662, 1350 748 C1410 842, 1440 899, 1500 899 C1590 899, 1620 726, 1710 719 C1800 712, 1820 820, 1900 820 C1990 820, 2000 698, 2090 698 C2180 698, 2170 863, 2270 863 C2380 863, 2400 712, 2520 698 C2680 676, 2820 640, 3000 590" fill="none" stroke="#14181a" stroke-width="9" stroke-linecap="round"
+        stroke-linejoin="round"/>
+  <circle cx="1500" cy="899" r="14" fill="#1f6f55"/>
+  <circle cx="2270" cy="863" r="14" fill="#1f6f55"/>
+</svg>

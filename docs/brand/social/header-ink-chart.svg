@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3000 1000" width="3000" height="1000">
+  <rect width="3000" height="1000" fill="#14181a"/>
+  
+  
+  <g transform="translate(210 150) scale(2.03125)">
+    <rect width="64" height="64" rx="16" fill="#ffffff"/>
+    <path d="M14 50.5h36v-8l-36 4.5z" fill="#7fc3a4" stroke="#7fc3a4" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M13.7 37.7L25.1 27.4l8 5.7L50.3 17.1" fill="none" stroke="#14181a" stroke-width="5"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="380" y="255" font-family="Iowan Old Style, Palatino, Georgia, serif" font-size="110" fill="#ffffff">plinto</text>
+  <text x="384" y="325" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="44" fill="#98a19c">Part of every raise stays redeemable, forever</text>
+  
+  <path d="M0 768 L1150 664" fill="none" stroke="#98a19c" stroke-width="10"
+        stroke-linecap="round" stroke-dasharray="2 34"/>
+  <path d="M1150 849 C1500 832, 1900 803, 2300 768 C2560 745, 2800 727, 3000 710 L3000 1000 L1150 1000 Z" fill="#7fc3a4" fill-opacity="0.16"/>
+  <path d="M1150 849 C1500 832, 1900 803, 2300 768 C2560 745, 2800 727, 3000 710" fill="none" stroke="#7fc3a4" stroke-width="12" stroke-linecap="round"/>
+  <path d="M1150 652 C1230 478, 1290 455, 1350 594 C1410 745, 1440 838, 1500 838 C1590 838, 1620 559, 1710 548 C1800 536, 1820 710, 1900 710 C1990 710, 2000 513, 2090 513 C2180 513, 2170 780, 2270 780 C2380 780, 2400 536, 2520 513 C2680 478, 2820 420, 3000 339" fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round"
+        stroke-linejoin="round"/>
+  <circle cx="1500" cy="838" r="19" fill="#7fc3a4"/>
+  <circle cx="2270" cy="780" r="19" fill="#7fc3a4"/>
+</svg>
