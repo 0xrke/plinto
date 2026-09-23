@@ -22,7 +22,7 @@ export default function HomePage() {
       <section className="grid gap-8 py-10 sm:py-14 lg:grid-cols-[1.15fr_1fr] lg:items-center">
         <div>
           <p className="eyebrow">Launchpad on Meteora DBC</p>
-          <h1 className="mt-3 text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-4xl lg:text-[2.75rem]">
+          <h1 className="display mt-3 text-[2rem] leading-[1.05] text-ink sm:text-[2.5rem] lg:text-[3rem]">
             Token launches with a floor in tokenized S&amp;P&nbsp;500
           </h1>
           <p className="mt-4 max-w-xl text-base leading-relaxed text-ink-2 sm:text-lg">

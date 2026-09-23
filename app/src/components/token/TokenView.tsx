@@ -96,7 +96,7 @@ function TokenHeader({ launch }: { launch: LaunchSummary }) {
         <TokenAvatar symbol={launch.symbol} imageUrl={launch.imageUrl} size={56} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">{launch.name}</h1>
+            <h1 className="display text-[1.75rem] text-ink sm:text-[2.125rem]">{launch.name}</h1>
             <PhaseBadge phase={launch.phase} />
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-3">
