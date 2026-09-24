@@ -62,3 +62,24 @@ Notes for X specifically:
 - **Headers are cropped on narrow screens**, most on the left and right. The wordmark sits near the
   middle for that reason; the statement variant is the one to avoid if that bothers you.
 - Sources are 3000×1000 and 1000×1000, so the exports stay sharp on retina displays.
+
+## Social images, Pastel direction (`social/pastel/`)
+
+The same set redrawn in the Pastel style direction: a pink-to-lavender-to-sky wash, midnight `#0b0b24`, the
+mint floor `#7fe0bf` (`#16735c` on light grounds), butter `#f3e46f` for the one live accent, and Outfit for the
+wordmark with Plus Jakarta Sans for the tagline. Text is converted to outlines, so the SVGs render the same
+everywhere without the fonts installed. The mark is the wedge floor from the waitlist page, with a butter dot at
+the end of the price line on midnight grounds.
+
+| File | Size | Use |
+|---|---|---|
+| `avatar-pastel-midnight.png` | 400×400 | Profile picture: midnight, mint floor, butter dot |
+| `avatar-pastel-wash.png` | 400×400 | Profile picture on the pastel wash |
+| `avatar-pastel-butter.png` | 400×400 | Profile picture on butter, the loudest of the three |
+| `header-pastel-wordmark.png` | 1500×500 | Header: mark, wordmark and tagline over the price-and-floor line, on the wash |
+| `header-pastel-midnight.png` | 1500×500 | The same on midnight, iris price line, butter dot at the latest price |
+| `header-pastel-card.png` | 1500×500 | Header: the midnight card with "The floor ships on day one.", a floor meter and a butter tab |
+
+`gen.py` regenerates the SVGs. It needs `fonttools` and the variable fonts `Outfit[wght].ttf` and
+`PlusJakartaSans[wght].ttf` from Google Fonts saved next to it as `Outfit.ttf` and `Jakarta.ttf`; rasterise with
+`rsvg-convert -w 1500` (headers) and `-w 400` (avatars).
