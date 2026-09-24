@@ -97,15 +97,19 @@ def write(name, content):
 # ---------- Avatars (1000×1000, full bleed: X crops them to a circle) ----------
 AV_FLOOR = "M215 792h570v-130l-570 74z"
 AV_LINE = "M214 588L392 426l125 89L786 265"
+AV_SCALE = 0.72
 
 
 def avatar(bg_svg, floor, line, dot, defs=""):
     dot_svg = f'<circle cx="786" cy="265" r="66" fill="{dot}"/>' if dot else ""
+    # The drawing spans about x 174–852, y 199–823; shrink it about its centre so the ground has room to crop.
     body = (
         bg_svg
+        + f'<g transform="translate(500 500) scale({AV_SCALE}) translate(-513 -511)">'
         + f'<path d="{AV_FLOOR}" fill="{floor}" stroke="{floor}" stroke-width="62" stroke-linejoin="round"/>'
         + f'<path d="{AV_LINE}" fill="none" stroke="{line}" stroke-width="80" stroke-linecap="round" stroke-linejoin="round"/>'
         + dot_svg
+        + "</g>"
     )
     return svg(1000, 1000, body, defs)
 
