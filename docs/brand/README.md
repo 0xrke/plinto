@@ -83,3 +83,17 @@ the end of the price line on midnight grounds.
 `gen.py` regenerates the SVGs. It needs `fonttools` and the variable fonts `Outfit[wght].ttf` and
 `PlusJakartaSans[wght].ttf` from Google Fonts saved next to it as `Outfit.ttf` and `Jakarta.ttf`; rasterise with
 `rsvg-convert -w 1500` (headers) and `-w 400` (avatars).
+
+### Cover drafts (`social/pastel/cover-*`)
+
+X headers built from the launch's three phases (presale, market opens, trading) with a slogan and "floor" underlined
+by a heavy bar: a wedge whose top edge rises like the mark's floor, or three steps in draft D. `covers.py`
+regenerates them (it imports `gen.py`).
+
+| File | Idea |
+|---|---|
+| `cover-a-wash-slogan.png` | "Token launches with a floor" over the labelled phase chart, on the wash |
+| `cover-b-midnight-memes.png` | "Memes, with a floor." on midnight, iris price, butter at the latest price |
+| `cover-c-wash-card.png` | "Up without limit. With a floor under it." beside a white "How a launch runs" card |
+| `cover-d-card-steps.png` | The midnight card: "Every launch ships a floor." with a stepped underline and the chart |
+| `cover-e-midnight-type.png` | Type-led: a huge "floor" on a mint wedge, the chart faint behind |
