@@ -104,3 +104,4 @@ regenerates them (it imports `gen.py`).
 | File | Size | Use |
 |---|---|---|
 | `post-01-floor-vs-zero.png` (`@2x` for 3200×1800) | 1600×900 | First post: "Most go to zero. Yours gets a floor." Two cards: a launchpad token selling off to $0, and the same launch stopping at a rising floor. `post1.py` regenerates it |
+| `post-01-floor-vs-zero-wash.png` (`@2x`) | 1600×900 | The same post in the light style of `cover-a`: wash ground, white cards, midnight price, green floor, coral sell-off |

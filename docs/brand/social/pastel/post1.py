@@ -79,3 +79,56 @@ glow = (
 )
 write("post-01-floor-vs-zero.svg", svg(W, H, body, glow))
 print("post ok")
+
+
+# ---- Wash version, in the style of cover-a: light wash, midnight type, white cards, green floor ----
+from gen import wash_defs, FLOOR, SLATE
+
+CORAL = "#c2345f"  # the Pastel risk colour, readable on white
+parts = [("Most go to zero. ", SLATE), ("Yours gets a ", MIDNIGHT), ("floor.", MIDNIGHT)]
+head_w, spans_w, _ = words(parts, hx, 150, size)
+fx, fw = spans_w["floor."]
+ul_w = wedge(fx + 3, fw - 22, 150 + size * 0.34, size * 0.07, size * 0.17, FLOOR)
+
+
+def card_light(x, eyebrow, eyebrow_fill, chart_svg, caption_lines):
+    ey, _ = label(eyebrow, x + PAD, CY + 70, 20, eyebrow_fill, wght=700, tracking=0.16)
+    cap = ""
+    for i, t in enumerate(caption_lines):
+        d, _ = text_path(t, x + PAD, CY + CARD_H - 70 + i * 34, 24, JAK, 500)
+        cap += f'<path d="{d}" fill="{SLATE}"/>'
+    return (
+        f'<rect x="{x}" y="{CY + 16}" width="{CARD_W}" height="{CARD_H}" rx="36" fill="#5b45d6" fill-opacity="0.10" filter="url(#b)"/>'
+        f'<rect x="{x}" y="{CY}" width="{CARD_W}" height="{CARD_H}" rx="36" fill="#ffffff"/>'
+        + ey
+        + f'<g transform="translate({x + PAD} {CY + CH_Y - 40})">{chart_svg}</g>'
+        + cap
+    )
+
+
+left_w = (
+    f'<line x1="0" y1="300" x2="{CH_W}" y2="300" stroke="#c9c3e3" stroke-width="3" stroke-dasharray="8 10"/>'
+    f'<path d="{LEFT}" fill="none" stroke="{CORAL}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>'
+    f'<circle cx="592" cy="300" r="11" fill="{CORAL}"/>'
+    f'<path d="{zero}" fill="{SLATE}" transform="translate(-30 0)"/>'
+)
+fl_label_w, _ = label("FLOOR", 470, 262, 18, FLOOR, wght=700, tracking=0.16)
+right_w = (
+    f'<line x1="0" y1="300" x2="{CH_W}" y2="300" stroke="#c9c3e3" stroke-width="3" stroke-dasharray="8 10"/>'
+    f'<path d="{FLOOR_EDGE} L592 300 L150 300 Z" fill="{MINT_DARK}" fill-opacity="0.45"/>'
+    f'<path d="{FLOOR_EDGE}" fill="none" stroke="{FLOOR}" stroke-width="6" stroke-linecap="round"/>'
+    f'<path d="{RIGHT}" fill="none" stroke="{MIDNIGHT}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>'
+    f'<circle cx="420" cy="224" r="10" fill="{FLOOR}"/>'
+    f'<circle cx="592" cy="84" r="12" fill="{MIDNIGHT}"/>'
+    + fl_label_w
+)
+body = (
+    f'<rect width="{W}" height="{H}" fill="url(#w)"/>'
+    + ul_w + head_w
+    + card_light(LX, "MOST LAUNCHPAD TOKENS", SLATE, left_w, ["Nothing underneath. The sell-off", "runs all the way to zero."])
+    + card_light(RX, "WITH A FLOOR", FLOOR, right_w, ["A redeemable vault in tokenized stocks", "underneath. The floor only moves up."])
+    + mark(W - LX - 44, CY + CARD_H + 24, 44, bg=TILE)
+)
+defs = wash_defs("w", W, H) + '<filter id="b" x="-10%" y="-20%" width="120%" height="140%"><feGaussianBlur stdDeviation="24"/></filter>'
+write("post-01-floor-vs-zero-wash.svg", svg(W, H, body, defs))
+print("wash post ok")
