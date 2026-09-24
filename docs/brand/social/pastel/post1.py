@@ -24,7 +24,7 @@ CH_W, CH_H = CARD_W - 2 * PAD, 300  # chart box inside each card
 CH_Y = 150  # chart top, card-local
 
 # Same launch shape on both sides: presale, a pump at the open, then the sell-off.
-LEFT = "M0 300 C70 300, 128 283, 150 236 C190 150, 215 40, 250 44 C290 48, 300 170, 340 160 C380 150, 390 230, 430 236 C480 244, 520 290, 592 300"
+LEFT = "M0 300 C110 300, 128 300, 150 236 C185 136, 215 40, 250 44 C290 48, 300 170, 340 160 C380 150, 390 230, 430 236 C480 244, 520 290, 592 300"
 # Right: the sell-off stops at the floor, bounces, and trades on above it.
 FLOOR_EDGE = "M150 232 C300 228, 450 222, 592 212"
 RIGHT = (
