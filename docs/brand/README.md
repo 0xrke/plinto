@@ -98,3 +98,9 @@ regenerates them (it imports `gen.py`).
 | `cover-c-wash-card.png` | "Up without limit. With a floor under it." beside a white "How a launch runs" card |
 | `cover-d-card-steps.png` | The midnight card: "Every launch ships a floor." with a stepped underline and the chart |
 | `cover-e-midnight-type.png` | Type-led: a huge "floor" on a mint wedge, the chart faint behind |
+
+### Post images (`social/pastel/post-*`)
+
+| File | Size | Use |
+|---|---|---|
+| `post-01-floor-vs-zero.png` (`@2x` for 3200×1800) | 1600×900 | First post: "Most go to zero. Yours gets a floor." Two cards: a launchpad token selling off to $0, and the same launch stopping at a rising floor. `post1.py` regenerates it |
