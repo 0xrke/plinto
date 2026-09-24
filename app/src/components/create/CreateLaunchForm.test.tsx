@@ -12,6 +12,7 @@ import { MockDataSource, mockQuoteMarket } from "@/lib/data/mock";
 import type { LaunchActions, LaunchResume } from "@/lib/data/types";
 import { formatUsd } from "@/lib/format";
 import { CreateLaunchForm } from "./CreateLaunchForm";
+import { formatPriceUsd } from "./format";
 
 afterEach(() => {
   cleanup();
@@ -111,15 +112,15 @@ describe("<CreateLaunchForm />", () => {
   it("shows the live preview from previewLaunch and updates it with the vault share", async () => {
     renderForm(false);
     const initial = expectedFloor("SPYx", 50);
-    expect(await screen.findByText(formatUsd(initial.floorAtGraduationUsd))).toBeTruthy();
-    expect(screen.getByText(formatUsd(initial.startPriceUsd))).toBeTruthy();
-    expect(screen.getByText(formatUsd(initial.graduationPriceUsd))).toBeTruthy();
+    expect(await screen.findByText(formatPriceUsd(initial.floorAtGraduationUsd))).toBeTruthy();
+    expect(screen.getByText(formatPriceUsd(initial.startPriceUsd))).toBeTruthy();
+    expect(screen.getByText(formatPriceUsd(initial.graduationPriceUsd))).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Share of the raise locked in the floor vault"), {
       target: { value: "70" },
     });
     const higher = expectedFloor("SPYx", 70);
-    expect(screen.getByText(formatUsd(higher.floorAtGraduationUsd))).toBeTruthy();
+    expect(screen.getByText(formatPriceUsd(higher.floorAtGraduationUsd))).toBeTruthy();
     expect(higher.floorAtGraduationUsd).toBeGreaterThan(initial.floorAtGraduationUsd);
   });
 
@@ -144,7 +145,7 @@ describe("<CreateLaunchForm />", () => {
     unmount();
 
     renderForm(true);
-    await screen.findByText(formatUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
+    await screen.findByText(formatPriceUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Harbor Coffee Co-op" } });
     fireEvent.change(screen.getByLabelText("Symbol"), { target: { value: "hrbr" } });
     fireEvent.change(screen.getByLabelText(/Token metadata JSON URL/), { target: { value: "http://insecure.example/token.json" } });
@@ -164,7 +165,7 @@ describe("<CreateLaunchForm />", () => {
     const withSpyx = new MockDataSource(0);
     withSpyx.getTokenBalance = async () => 10n ** 9n;
     renderForm(true, withSpyx);
-    await screen.findByText(formatUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
+    await screen.findByText(formatPriceUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Harbor Coffee Co-op" } });
     fireEvent.change(screen.getByLabelText("Symbol"), { target: { value: "HRBR" } });
     await screen.findByText(/Balance: [\d.]+ SPYx\./);
@@ -183,14 +184,14 @@ describe("<CreateLaunchForm />", () => {
   it("sets the graduation threshold from a preset or a custom value, and the preview follows", async () => {
     renderForm(false);
     const atDefault = expectedFloor("SPYx", 50, "gentle", 1000);
-    expect(await screen.findByText(formatUsd(atDefault.floorAtGraduationUsd))).toBeTruthy();
+    expect(await screen.findByText(formatPriceUsd(atDefault.floorAtGraduationUsd))).toBeTruthy();
     expect(screen.getByText(`≈ ${formatUsd(1000)}`)).toBeTruthy();
     expect(screen.getByRole("button", { name: /^\$1,000/ }).getAttribute("aria-pressed")).toBe("true");
 
     // The $50 preset: the C2 demo threshold. Floor, vault and threshold all follow it.
     fireEvent.click(screen.getByRole("button", { name: "$50" }));
     const at50 = expectedFloor("SPYx", 50, "gentle", 50);
-    expect(screen.getByText(formatUsd(at50.floorAtGraduationUsd))).toBeTruthy();
+    expect(screen.getByText(formatPriceUsd(at50.floorAtGraduationUsd))).toBeTruthy();
     expect(screen.getByText(`≈ ${formatUsd(50)}`)).toBeTruthy();
     expect(at50.floorAtGraduationUsd).toBeLessThan(atDefault.floorAtGraduationUsd);
     expect((screen.getByLabelText("Custom amount in USD") as HTMLInputElement).value).toBe("50");
@@ -200,7 +201,7 @@ describe("<CreateLaunchForm />", () => {
     // A custom value the presets do not offer.
     fireEvent.change(screen.getByLabelText("Custom amount in USD"), { target: { value: "2,500" } });
     const at2500 = expectedFloor("SPYx", 50, "gentle", 2500);
-    expect(screen.getByText(formatUsd(at2500.floorAtGraduationUsd))).toBeTruthy();
+    expect(screen.getByText(formatPriceUsd(at2500.floorAtGraduationUsd))).toBeTruthy();
     expect(screen.getByText(`≈ ${formatUsd(2500)}`)).toBeTruthy();
     expect(screen.queryByText(/Meteora's keeper does not migrate the pool for you/)).toBeNull();
   });
@@ -213,7 +214,7 @@ describe("<CreateLaunchForm />", () => {
       return { ok: false, error: "recorded", signatures: [] };
     };
     const { container } = renderForm(true, new MockDataSource(0), actions);
-    await screen.findByText(formatUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
+    await screen.findByText(formatPriceUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Harbor Coffee Co-op" } });
     fireEvent.change(screen.getByLabelText("Symbol"), { target: { value: "HRBR" } });
     // The field wallets and explorers read: a JSON document, not an image.
@@ -236,7 +237,7 @@ describe("<CreateLaunchForm />", () => {
   it("refuses a threshold below the SDK minimum or above the maximum, and sends the chosen one", async () => {
     const { actions, calls } = recordingActions({ ok: true });
     renderForm(true, new MockDataSource(0), actions);
-    await screen.findByText(formatUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
+    await screen.findByText(formatPriceUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Harbor Coffee Co-op" } });
     fireEvent.change(screen.getByLabelText("Symbol"), { target: { value: "HRBR" } });
     const button = screen.getByRole("button", { name: "Launch token" }) as HTMLButtonElement;
@@ -263,7 +264,7 @@ describe("<CreateLaunchForm />", () => {
   it("freezes the parameters after a launch and while a retry is pending", async () => {
     const created = recordingActions({ ok: true });
     renderForm(true, new MockDataSource(0), created.actions);
-    await screen.findByText(formatUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
+    await screen.findByText(formatPriceUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Harbor Coffee Co-op" } });
     fireEvent.change(screen.getByLabelText("Symbol"), { target: { value: "HRBR" } });
     fireEvent.change(screen.getByLabelText("Custom amount in USD"), { target: { value: "50" } });
@@ -281,7 +282,7 @@ describe("<CreateLaunchForm />", () => {
     // form stays frozen there too.
     const retry = recordingActions({ ok: false, resume: { config: "cfg", mint: "mint" } as LaunchResume });
     renderForm(true, new MockDataSource(0), retry.actions);
-    await screen.findByText(formatUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
+    await screen.findByText(formatPriceUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Harbor Coffee Co-op" } });
     fireEvent.change(screen.getByLabelText("Symbol"), { target: { value: "HRBR" } });
     fireEvent.change(screen.getByLabelText("Custom amount in USD"), { target: { value: "100" } });

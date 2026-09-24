@@ -1,20 +1,15 @@
 /**
- * The word "floor" set on the brand's underline: a bar whose top edge rises to the right, like the
- * floor in the logo. Used once per headline.
+ * The word "floor" in floor green on a soft mint bar, as in the Pastel headline. Used once per
+ * headline at most.
  */
 export function FloorWord({ children = "floor" }: { children?: string }) {
   return (
-    <span className="relative inline-block whitespace-nowrap">
-      {children}
-      <svg
+    <em className="relative inline-block whitespace-nowrap not-italic text-floor">
+      <span
         aria-hidden
-        focusable="false"
-        viewBox="0 0 100 12"
-        preserveAspectRatio="none"
-        className="absolute -bottom-[0.14em] left-[3%] h-[0.17em] w-[94%]"
-      >
-        <path d="M3 10.5H97V2.5L3 7.5Z" fill="var(--color-floor)" stroke="var(--color-floor)" strokeWidth="3" strokeLinejoin="round" />
-      </svg>
-    </span>
+        className="absolute inset-x-[0.03em] -bottom-[0.05em] h-[0.13em] rounded-full bg-[#bfeedb]"
+      />
+      <span className="relative">{children}</span>
+    </em>
   );
 }

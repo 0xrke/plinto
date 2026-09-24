@@ -15,11 +15,20 @@ describe("<LaunchCard />", () => {
 
     const link = screen.getByRole("link", { name: "Harbor Coffee Co-op" });
     expect(link.getAttribute("href")).toBe(`/t/${harbor.mint}`);
-    expect(screen.getByText("Graduated")).toBeTruthy();
+    expect(screen.getByText("Floor live")).toBeTruthy();
     expect(screen.getByText("$0.00000633")).toBeTruthy();
     expect(screen.getByText("$0.000000528")).toBeTruthy();
     expect(screen.getByText(`${MINUS}91.7%`)).toBeTruthy();
     expect(within(screen.getByRole("article")).getByText("SPYx")).toBeTruthy();
+  });
+
+  it("keeps a graduated launch labelled Graduated until the migration fee reaches the vault", async () => {
+    const launches = await new MockDataSource(0).listLaunches();
+    const pending = { ...launches.find((l) => l.symbol === "HRBR")!, migrationFeeHarvested: false, vaultRaw: 0n };
+    render(<LaunchCard launch={pending} />);
+    expect(screen.getByText("Graduated")).toBeTruthy();
+    expect(screen.queryByText("Floor live")).toBeNull();
+    expect(screen.getByText(/No floor until the migration fee reaches the vault/)).toBeTruthy();
   });
 
   it("renders a presale launch with progress toward graduation", async () => {

@@ -1,69 +1,116 @@
 import Link from "next/link";
+import { PageColumns } from "@/components/layout/PageColumns";
+import { FeaturedFloorSlot } from "@/components/home/FeaturedFloorSlot";
+import { FloorsNow } from "@/components/home/FloorsNow";
+import { PhaseTiles } from "@/components/home/PhaseTiles";
 import { LaunchList } from "@/components/launch/LaunchList";
-import { FloorWord } from "@/components/ui/FloorWord";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { IconTile } from "@/components/ui/Tiles";
+import { ChevronRightIcon, PlusCircleIcon } from "@/components/ui/icons";
 
 const STEPS = [
   {
     title: "Presale on a bonding curve",
-    body: "Buyers pay in a tokenized stock such as SPYx, straight into the curve. The flat or gently rising curve fills toward the graduation threshold the creator set. While it is filling you can sell back into it at close to what you paid, and nobody — not the creator, not us — can take that money out. On mainnet, USDC and SOL can be routed into that asset through Jupiter first.",
+    tone: "presale",
+    summary: "Pay in a tokenized stock. While the curve fills, you can sell back at close to what you paid.",
+    details:
+      "Buyers pay in a tokenized stock such as SPYx, straight into the curve. The flat or gently rising curve fills toward the graduation threshold the creator set. Nobody, not the creator and not us, can take that money out while it fills. On mainnet, USDC and SOL can be routed into that asset through Jupiter first.",
   },
   {
     title: "Graduation",
-    body: "A fixed share of the raise (30 to 70%, default 50%) moves into the token's vault. The rest seeds a Meteora DAMM v2 pool with permanently locked liquidity. Your cover changes here in one transaction, from close to what you paid down to the floor, and anyone can complete the curve at any time.",
+    tone: "graduating",
+    summary: "A fixed share of the raise moves into the vault, the rest seeds a locked Meteora DAMM v2 pool.",
+    details:
+      "The vault share is 30 to 70% (default 50%), and the pool's liquidity is locked permanently. Your cover changes here in one transaction, from close to what you paid down to the floor. Anyone can complete the curve at any time.",
   },
   {
     title: "Free market with a floor",
-    body: "Any holder can burn tokens for a pro-rata share of the vault at any time, minus a 2% exit fee that stays in the vault. The floor only rises from there: trading fees from the locked pool and every retained exit fee go to the vault. The program has no admin withdraw; the quote issuer's controls and program upgradeability are disclosed on every token page.",
+    tone: "floor",
+    summary: "Redeem any time for a pro-rata share of the vault. The 2% exit fee stays in the vault; the floor only rises.",
+    details:
+      "Redeeming burns your tokens. Trading fees from the locked pool also go to the vault. The program has no admin withdraw; the quote issuer's controls and program upgradeability are disclosed on every token page.",
   },
-];
+] as const;
+
+function Hero() {
+  return (
+    <section aria-labelledby="home-title">
+      <p className="eyebrow">Launchpad on Meteora DBC</p>
+      <h1
+        id="home-title"
+        className="display mt-2 max-w-[620px] text-[38px] leading-[1.04] text-ink sm:text-[44px] xl:text-[50px] xl:leading-[1.02]"
+      >
+        Token launches with a floor in tokenized S&amp;P&nbsp;500
+      </h1>
+      <p className="mt-[18px] max-w-[610px] text-base leading-[1.6] text-ink-2 sm:text-[17px]">
+        A large share of every raise becomes a redeemable vault in stocks the moment the market opens. The token
+        can go up without limit, and while the vault holds its stock token, it cannot fall to zero.
+      </p>
+      <div className="mt-[26px] flex flex-wrap gap-3">
+        <Link href="#launches" className="btn btn-primary px-[26px]">
+          Explore launches
+          <ChevronRightIcon size={16} strokeWidth={2} />
+        </Link>
+        <Link href="/create" className="btn btn-secondary px-6">
+          <PlusCircleIcon size={18} className="text-violet" />
+          Launch a token
+        </Link>
+      </div>
+      <p className="mt-[18px] max-w-[640px] text-[13px] leading-[1.55] text-ink-3 [text-wrap:pretty]">
+        The floor protects from zero, not from loss. It is a fixed amount per token, so buying far above it can
+        lose most of the purchase. Every token page shows the maximum loss before you buy.
+      </p>
+    </section>
+  );
+}
+
+function HowItWorks() {
+  return (
+    <section id="how-it-works" aria-labelledby="how-heading" className="rail-section below-header mt-8">
+      <SectionHeader id="how-heading" title="How it works" />
+      <ol aria-label="How it works" className="mt-3 flex flex-col gap-[18px]">
+        {STEPS.map((step, i) => (
+          <li key={step.title} className="flex gap-3.5">
+            <IconTile tone={step.tone} size={44}>
+              {i + 1}
+            </IconTile>
+            <div className="min-w-0">
+              <h3 className="text-[15px] font-bold leading-snug text-ink">{step.title}</h3>
+              <p className="mt-[3px] text-[13.5px] leading-normal text-ink-2 [text-wrap:pretty]">{step.summary}</p>
+              <details className="group mt-1.5 text-[13px] leading-normal text-ink-3">
+                <summary className="inline-flex min-h-6 cursor-pointer list-none items-center gap-1 text-[13px] font-semibold text-violet hover:text-violet-hover [&::-webkit-details-marker]:hidden">
+                  Full details
+                  <ChevronRightIcon size={13} strokeWidth={2} className="transition-transform group-open:rotate-90" />
+                </summary>
+                <p className="mt-1 [text-wrap:pretty]">{step.details}</p>
+              </details>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
 
 export default function HomePage() {
   return (
-    <div className="mx-auto max-w-6xl px-4 sm:px-6">
-      <section className="grid gap-8 py-10 sm:py-14 lg:grid-cols-[1.15fr_1fr] lg:items-center">
-        <div>
-          <p className="eyebrow">Launchpad on Meteora DBC</p>
-          <h1 className="display mt-3 text-[2rem] leading-[1.05] text-ink sm:text-[2.5rem] lg:text-[3rem]">
-            Token launches with a <FloorWord /> in tokenized S&amp;P&nbsp;500
-          </h1>
-          <p className="mt-4 max-w-xl text-base leading-relaxed text-ink-2 sm:text-lg">
-            A large share of every raise becomes a redeemable vault in stocks the moment the market opens. The
-            token can go up without limit, and while the vault holds its stock token, it cannot fall to zero.
-          </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link href="#launches" className="btn btn-primary">
-              Explore launches
-            </Link>
-            <Link href="/create" className="btn btn-secondary">
-              Launch a token
-            </Link>
-          </div>
-          <p className="mt-4 max-w-xl text-sm text-ink-3">
-            The floor protects from zero, not from loss. It is a fixed amount per token, not a share of what
-            you paid, so buying far above it can still lose most of the purchase. Every token page shows the
-            maximum loss before you buy.
-          </p>
-        </div>
-        <ol className="card divide-y divide-line" aria-label="How it works">
-          {STEPS.map((step, i) => (
-            <li key={step.title} className="flex gap-4 p-5">
-              <span
-                aria-hidden
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
-                  i === 2 ? "bg-floor text-white" : "bg-brand-soft text-brand"
-                }`}
-              >
-                {i + 1}
-              </span>
-              <div>
-                <h2 className="font-semibold text-ink">{step.title}</h2>
-                <p className="mt-1 text-sm leading-relaxed text-ink-2">{step.body}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </section>
-      <LaunchList />
-    </div>
+    <PageColumns
+      railLabel="Floors and how it works"
+      main={
+        <>
+          <Hero />
+          <FeaturedFloorSlot slot="main" />
+          <PhaseTiles />
+          <LaunchList />
+        </>
+      }
+      rail={
+        <>
+          <FeaturedFloorSlot slot="rail" />
+          <FloorsNow />
+          <HowItWorks />
+        </>
+      }
+    />
   );
 }

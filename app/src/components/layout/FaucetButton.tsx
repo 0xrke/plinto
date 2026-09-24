@@ -12,7 +12,15 @@ type FaucetState = { status: "idle" } | { status: "pending" } | { status: "done"
  * Local fork faucet: asks the app's /api/faucet route (localhost RPC only, Surfpool cheatcodes) for
  * 10 SOL and 5×10^8 raw SPYx (≈5.03 SPYx at the current multiplier). Rendered only for the chain data source with a loopback RPC and a connected wallet.
  */
-export function FaucetButton() {
+export function FaucetButton({
+  placement = "down-end",
+  block = false,
+}: {
+  /** Where the result bubble opens: below the button (top bar) or above it (sidebar bottom). */
+  placement?: "down-end" | "up-start";
+  /** Full width, for the sidebar. */
+  block?: boolean;
+} = {}) {
   const { dataSource } = useData();
   const { publicKey, connected } = useWallet();
   const refresh = useRefreshChainData();
@@ -48,10 +56,10 @@ export function FaucetButton() {
   }
 
   return (
-    <div className="relative">
+    <div className={`relative ${block ? "w-full" : ""}`}>
       <button
         type="button"
-        className="btn btn-secondary whitespace-nowrap px-3 text-sm"
+        className={`btn btn-secondary btn-sm h-11 whitespace-nowrap ${block ? "w-full" : ""}`}
         onClick={onClick}
         disabled={state.status === "pending"}
         aria-busy={state.status === "pending"}
@@ -62,7 +70,9 @@ export function FaucetButton() {
       {state.status === "done" || state.status === "error" ? (
         <p
           role="status"
-          className={`card absolute right-0 z-40 mt-2 w-64 max-w-[calc(100vw-2rem)] p-3 text-sm shadow-lg ${
+          className={`absolute z-40 w-64 max-w-[calc(100vw-2rem)] rounded-[20px] border border-line bg-surface p-3 text-sm shadow-pop ${
+            placement === "up-start" ? "bottom-full left-0 mb-2" : "right-0 top-full mt-2"
+          } ${
             state.status === "done" ? "text-floor-strong" : "text-risk"
           }`}
         >

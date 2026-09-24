@@ -1,67 +1,138 @@
 @import "tailwindcss";
 
+/*
+ * Pastel design system. One bright rounded window on a pink → lavender → sky wash; inside it a white
+ * sidebar, a faint lavender "cloud" main column and a white right rail. Outfit for titles, Plus
+ * Jakarta Sans for UI copy and (tabular) numbers. The floor is teal-green, the risk band coral on
+ * a rose hatch, and one midnight card per screen carries the number that matters.
+ */
 @theme {
-  /* Plus Jakarta Sans for UI and numbers, Outfit for display; both self-hosted (see layout.tsx). */
+  /* Both faces are self-hosted variable fonts (see layout.tsx). */
   --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
     Arial, "Noto Sans", sans-serif;
-  --font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  /* Display face for page titles and card headings. Kept under the `serif` name the pages already use. */
+  --font-display: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  /* Legacy alias: some pages still say font-serif for the display face. */
   --font-serif: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
-  /* Neutrals (Pastel direction): white cards and windows over a pink-lavender-sky wash. */
-  --color-canvas: #f4f1fb;
+  /* Wash behind the window */
+  --color-dawn: #fbdde8;
+  --color-wash-sky: #d9ebfb;
+  --color-wash-lilac: #e3dafb;
+  --color-wash: #efeafb;
+
+  /* Surfaces */
+  --color-canvas: #efeafb;
   --color-surface: #ffffff;
-  --color-sunken: #f5f3fd;
-  --color-line: #e6e2f3;
-  --color-line-strong: #d3cee8;
+  --color-cloud: #f7f6fe; /* main column, soft fields, soft stat tiles */
+  --color-sunken: #f7f6fe;
+  --color-lilac: #f3f1fd; /* active nav pill, segmented track, notched tab */
+  --color-track: #f0eef9; /* empty meter track */
+  --color-line: #efecf9;
+  --color-line-strong: #e3def5;
+
+  /* Text. Haze (ink-3) is 5.2:1 on white and 5.0:1 on cloud. */
   --color-ink: #14142b;
   --color-ink-2: #4a4a66;
-  --color-ink-3: #5f5f7a;
+  --color-ink-3: #6b6b85;
+  --color-haze: #6b6b85;
 
-  /* Brand: midnight for structure; the mark's tile is the lighter indigo */
+  /* Midnight: the feature card, the mark, the network pill */
+  --color-midnight: #0b0b24;
+  --color-tile: #1c1c3d;
+  --color-midnight-line: #2a2a52; /* gauge track on midnight */
+  --color-midnight-chip: #26264c; /* "i" badge on midnight */
+  --color-on-dark: #c9c8e3; /* body copy on midnight, 10:1 */
+  --color-on-dark-2: #d6d3f5; /* links and captions on midnight */
+  --color-on-dark-3: #b9b8d6; /* subtitles on midnight */
   --color-brand: #0b0b24;
   --color-brand-hover: #1c1c3d;
   --color-brand-soft: #ece8fd;
-  --color-brand-tile: #1c1c3d;
+  --color-brand-tile: #0b0b24;
+
+  /* Violet: links, categories, the gauge */
   --color-violet: #5b45d6;
+  --color-violet-hover: #4632b8;
+  --color-violet-strong: #4b36c4; /* text on violet-soft */
+  --color-violet-soft: #ece8fd;
+  --color-iris: #8b7cf6; /* gauge arc on midnight */
+
+  /* Butter: the one feature-card CTA */
   --color-butter: #f3e46f;
+  --color-butter-hover: #ecd94a;
 
   /* The floor: teal-green on light grounds, mint on dark ones */
   --color-floor: #16735c;
   --color-floor-strong: #0f5a48;
-  --color-floor-soft: #d8f5ea;
-  --color-mint: #7fe0bf;
+  --color-floor-bar: #1f9e7a; /* meter segment, dots */
+  --color-floor-bar-hi: #34b58f;
+  --color-floor-soft: #d8f5ea; /* pills, icon tiles */
+  --color-floor-wash: #eefaf5; /* stat tile */
+  --color-floor-ring: #9fdcc4; /* current-step outline */
+  --color-mint: #7fe0bf; /* floor on midnight */
 
-  /* Risk (distance between price and floor): coral and a rose hatch, not alarm red */
+  /* Risk: the distance between price and floor. Coral on a rose hatch, not alarm red. */
   --color-risk: #b8325a;
+  --color-risk-strong: #b02a57;
   --color-risk-soft: #ffe4ec;
+  --color-risk-wash: #fff1f5;
   --color-risk-line: #e46a8c;
+  --color-risk-on-dark: #ff9fbd;
 
-  /* Phases */
+  /* Phases: presale sky, graduating cream/butter, floor live mint */
   --color-presale: #1f5fae;
   --color-presale-soft: #dcebff;
+  --color-presale-track: #eef3fd;
+  --color-presale-ring: #b9d6f7;
   --color-graduating: #6e5400;
   --color-graduating-soft: #fbf1b8;
+  --color-graduating-track: #fbf6d8;
+  --color-graduating-ring: #efe08a;
 
   --color-focus: #5b45d6;
+
+  /* Radii */
+  --radius-window: 40px;
+  --radius-feature: 32px; /* midnight card */
+  --radius-card: 28px;
+  --radius-tile: 24px;
+  --radius-field: 22px;
+  --radius-soft: 20px; /* stat tile inside a card */
+  --radius-btn: 18px;
+  --radius-icon: 15px;
+
+  /* Shadows: soft, violet-tinted, never grey */
+  --shadow-window: 0 2px 6px rgba(60, 50, 120, 0.04), 0 40px 90px -30px rgba(80, 60, 160, 0.24);
+  --shadow-card: 0 1px 2px rgba(40, 30, 110, 0.04), 0 14px 34px -22px rgba(60, 40, 150, 0.3);
+  --shadow-tile: 0 10px 26px -20px rgba(60, 40, 150, 0.35);
+  --shadow-chip: 0 8px 18px -12px rgba(60, 40, 150, 0.3);
+  --shadow-cta: 0 12px 24px -14px rgba(22, 115, 92, 0.7);
+  --shadow-seg: 0 4px 12px -6px rgba(60, 40, 150, 0.35);
+  --shadow-pop: 0 2px 6px rgba(40, 30, 110, 0.06), 0 24px 48px -18px rgba(60, 40, 150, 0.35);
 }
 
 @layer base {
   :root {
     /*
-     * Height of the sticky site header. SiteHeader measures itself and overwrites this, because the
-     * header grows by a row when the demo-data or local-fork strip is shown and by another line when
-     * that strip wraps on a phone. The value here is the bare header, so an in-page jump clears it
-     * even before hydration.
+     * Height of the sticky top bar on small screens. SiteHeader measures itself and overwrites this.
+     * On lg+ there is no sticky bar, so the offset drops to the window's top margin.
      */
-    --app-header-height: 3.25rem;
+    --app-header-height: 4rem;
+  }
+  @media (min-width: 64rem) {
+    :root {
+      --app-header-height: 0.5rem !important;
+    }
   }
   html {
     color-scheme: light;
     -webkit-text-size-adjust: 100%;
   }
   body {
-    background: var(--color-canvas) linear-gradient(135deg, #fbdde8 0%, #e8defb 50%, #d9ebfb 100%);
+    background-color: var(--color-wash);
+    background-image: radial-gradient(60% 40% at 0% 0%, #fbdde8 0%, rgba(251, 221, 232, 0) 72%),
+      radial-gradient(60% 45% at 100% 8%, #d9ebfb 0%, rgba(217, 235, 251, 0) 72%),
+      radial-gradient(70% 45% at 90% 100%, #e3dafb 0%, rgba(227, 218, 251, 0) 72%);
     color: var(--color-ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -72,51 +143,176 @@
     outline-offset: 2px;
   }
   input[type="range"] {
-    accent-color: var(--color-brand);
+    accent-color: var(--color-floor);
   }
 }
 
+/* The white app window (the shell applies it as lg:window). A utility, so it takes variants. */
+@utility window {
+  background: var(--color-surface);
+  border-radius: var(--radius-window);
+  box-shadow: var(--shadow-window);
+  overflow: clip;
+}
+
 @layer components {
-  /* An in-page anchor target that must land below the sticky header, whatever its height is. */
+  /* An in-page anchor target that must land below the sticky top bar, whatever its height is. */
   .below-header {
     scroll-margin-top: calc(var(--app-header-height) + 1rem);
   }
-  /* Display face for page titles and card headings; the body stays on the sans. */
+
+  /* ---------- Type ---------- */
+  /* Page titles: Outfit 800, tight. Size with text-* utilities. */
   .display {
-    font-family: var(--font-serif);
-    font-weight: 700;
-    letter-spacing: -0.02em;
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.02;
   }
+  /* Section titles ("Launches", "Price and floor"): Outfit 600, 22px. */
+  .heading {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.375rem;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
+  /* Card names ("Harbor Roasters" on a launch card): Outfit 700. */
+  .card-title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+  }
+  /* Kicker above a title: "Launchpad on Meteora DBC". */
+  .eyebrow {
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: var(--color-ink-3);
+  }
+  /* Tracked uppercase micro label: "FLOOR LIVE" under a gauge, "PRESALE". */
+  .caps {
+    font-size: 0.65625rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  /* Violet meta line under a card title: "$HRBR · SPYx · Floor live". */
+  .meta-violet {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color-violet);
+  }
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- Surfaces ---------- */
+  /* White card on the cloud column: radius 28, no border. Pad with p-6/p-7. */
   .card {
     background: var(--color-surface);
-    border: 1px solid var(--color-line);
-    border-radius: 1.5rem;
-    box-shadow: 0 1px 2px rgba(20, 20, 43, 0.04), 0 12px 32px rgba(91, 69, 214, 0.08);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
   }
+  /* Smaller white tile (phase tiles, count tiles, stat tiles on the wash). */
+  .tile {
+    background: var(--color-surface);
+    border-radius: var(--radius-tile);
+    box-shadow: var(--shadow-tile);
+  }
+  /* Soft tinted tiles that sit inside a white card or on the white rail. */
+  .tile-soft {
+    background: var(--color-cloud);
+    border-radius: var(--radius-soft);
+  }
+  .tile-floor {
+    background: var(--color-floor-wash);
+    border-radius: var(--radius-soft);
+  }
+  .tile-risk {
+    background: var(--color-risk-wash);
+    border-radius: var(--radius-soft);
+  }
+  .tile-presale {
+    background: var(--color-presale-track);
+    border-radius: var(--radius-soft);
+  }
+  .tile-cream {
+    background: var(--color-graduating-track);
+    border-radius: var(--radius-soft);
+  }
+  .tile-lilac {
+    background: var(--color-lilac);
+    border-radius: var(--radius-soft);
+  }
+  /* The midnight feature card (MidnightCard renders this). */
+  .card-midnight {
+    background: var(--color-midnight);
+    color: #ffffff;
+    border-radius: var(--radius-feature);
+  }
+  /*
+   * A section on the right rail: bare on the white rail at lg+, a white card when the rail stacks
+   * under the main column on small screens.
+   */
+  .rail-section {
+    background: var(--color-surface);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+    padding: 1.25rem 1.125rem 1.125rem;
+  }
+  @media (min-width: 64rem) {
+    .rail-section {
+      background: transparent;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 0;
+    }
+  }
+
+  /* ---------- Buttons ---------- */
+  /* Base: 52px tall at the default padding, radius 18, bold 15px. Utilities may shrink it. */
   .btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    border-radius: 999px;
-    padding: 0.625rem 1.25rem;
-    font-weight: 500;
+    border-radius: var(--radius-btn);
+    padding: 1rem 1.5rem;
+    font-weight: 700;
     font-size: 0.9375rem;
     line-height: 1.25rem;
-    box-shadow: 0 1px 2px rgba(19, 32, 45, 0.05);
-    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+    white-space: nowrap;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
     cursor: pointer;
   }
-  .btn:disabled {
+  .btn:disabled,
+  .btn[aria-disabled="true"] {
     cursor: not-allowed;
     opacity: 0.55;
   }
-  /* The floor is the product, so the primary action carries its green; navy stays structural. */
-  .btn-primary {
+  /* 56px, for the one action on a panel ("Buy $HRBR"). */
+  .btn-lg {
+    padding-top: 1.125rem;
+    padding-bottom: 1.125rem;
+    font-size: 1rem;
+  }
+  /* 40px, for inline actions ("Dismiss", "Retry"). */
+  .btn-sm {
+    padding: 0.625rem 0.875rem;
+    border-radius: 14px;
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+  }
+  /* Primary: floor green. The floor is the product, so the main action carries its colour. */
+  .btn-primary,
+  .btn-floor {
     background: var(--color-floor);
     color: #ffffff;
+    box-shadow: var(--shadow-cta);
   }
-  .btn-primary:not(:disabled):hover {
+  .btn-primary:not(:disabled):hover,
+  .btn-floor:not(:disabled):hover {
     background: var(--color-floor-strong);
   }
   .btn-secondary {
@@ -125,15 +321,169 @@
     border: 1px solid var(--color-line-strong);
   }
   .btn-secondary:not(:disabled):hover {
-    background: var(--color-sunken);
+    background: var(--color-cloud);
   }
-  .btn-floor {
-    background: var(--color-floor);
+  .btn-butter {
+    background: var(--color-butter);
+    color: var(--color-ink);
+  }
+  .btn-butter:not(:disabled):hover {
+    background: var(--color-butter-hover);
+  }
+  .btn-dark {
+    background: var(--color-midnight);
     color: #ffffff;
   }
-  .btn-floor:not(:disabled):hover {
-    background: var(--color-floor-strong);
+  .btn-dark:not(:disabled):hover {
+    background: var(--color-tile);
   }
+  /* Soft violet-on-lilac button for secondary actions inside a card ("Max", "Copy"). */
+  .btn-soft {
+    background: var(--color-lilac);
+    color: var(--color-violet-strong);
+  }
+  .btn-soft:not(:disabled):hover {
+    background: var(--color-violet-soft);
+  }
+
+  /* Violet text link with a trailing chevron (render <ChevronRight /> inside). */
+  .link-violet {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-height: 2.75rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--color-violet);
+  }
+  .link-violet:hover {
+    color: var(--color-violet-hover);
+  }
+  /* Inline violet link inside running text. */
+  .link {
+    font-weight: 600;
+    color: var(--color-violet);
+    text-underline-offset: 2px;
+  }
+  .link:hover {
+    color: var(--color-violet-hover);
+    text-decoration: underline;
+  }
+
+  /* ---------- Chips and pills ---------- */
+  /* White bordered chip: "Quote SPYx CALM", "Mint BSaS5…LvN1W". */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    height: 1.875rem;
+    padding: 0 0.75rem;
+    border-radius: 999px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-line-strong);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-ink-2);
+    white-space: nowrap;
+  }
+  .chip b,
+  .chip strong {
+    color: var(--color-ink);
+    font-weight: 700;
+  }
+  /* Tinted status pill: 28px, bold 12.5px. Pair with a tone class below. */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    height: 1.75rem;
+    padding: 0 0.75rem;
+    border-radius: 999px;
+    font-size: 0.78125rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  /* Small pill: 22px ("Now", "50% of the raise", "QQQx" in a count tile). */
+  .pill-sm {
+    height: 1.375rem;
+    padding: 0 0.5625rem;
+    font-size: 0.71875rem;
+    gap: 0.25rem;
+  }
+  .pill-presale {
+    background: var(--color-presale-soft);
+    color: var(--color-presale);
+  }
+  .pill-graduating {
+    background: var(--color-graduating-soft);
+    color: var(--color-graduating);
+  }
+  .pill-floor {
+    background: var(--color-floor-soft);
+    color: var(--color-floor);
+  }
+  .pill-violet {
+    background: var(--color-violet-soft);
+    color: var(--color-violet-strong);
+  }
+  .pill-risk {
+    background: var(--color-risk-soft);
+    color: var(--color-risk-strong);
+  }
+  .pill-neutral {
+    background: var(--color-lilac);
+    color: var(--color-ink-2);
+  }
+  .pill-dark {
+    background: var(--color-midnight);
+    color: #ffffff;
+  }
+  /* The 6px status dot inside a pill. */
+  .pill-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: currentColor;
+    flex: none;
+  }
+
+  /* ---------- Controls ---------- */
+  /* Buy/Sell pill tabs: a lilac track, the pressed/selected option lifts to white. */
+  .segmented {
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    padding: 4px;
+    border-radius: var(--radius-btn);
+    background: var(--color-lilac);
+  }
+  .segmented > button,
+  .segmented > a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.75rem;
+    border-radius: 14px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color-ink-2);
+    cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+  .segmented > [aria-pressed="true"],
+  .segmented > [aria-selected="true"],
+  .segmented > [aria-current="page"],
+  .segmented > [data-active="true"] {
+    background: var(--color-surface);
+    color: var(--color-ink);
+    font-weight: 700;
+    box-shadow: var(--shadow-seg);
+  }
+  .segmented > button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
   .field-label {
     display: block;
     font-size: 0.875rem;
@@ -144,17 +494,18 @@
     font-size: 0.8125rem;
     color: var(--color-ink-3);
   }
+  /* Bordered white text input (forms on /create). */
   .input {
     width: 100%;
-    border-radius: 0.75rem;
+    border-radius: 16px;
     border: 1px solid var(--color-line-strong);
     background: var(--color-surface);
-    padding: 0.625rem 0.75rem;
+    padding: 0.75rem 0.875rem;
     font-size: 1rem;
     color: var(--color-ink);
   }
   .input::placeholder {
-    color: #8a929b;
+    color: #8a8aa3;
   }
   .input:focus {
     outline: 2px solid var(--color-focus);
@@ -164,23 +515,16 @@
   .input[aria-invalid="true"] {
     border-color: var(--color-risk);
   }
-  .eyebrow {
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--color-ink-3);
+  /* Soft amount field box: "You pay 0.02". AmountField renders this. */
+  .field-soft {
+    background: var(--color-cloud);
+    border-radius: var(--radius-field);
+    padding: 0.875rem 1rem;
   }
-  .tnum {
-    font-variant-numeric: tabular-nums;
-  }
+
   /* Diagonal hatch for the "at risk" band between floor and price. */
   .hatch-risk {
     background-color: var(--color-risk-soft);
-    background-image: repeating-linear-gradient(
-      135deg,
-      rgba(228, 106, 140, 0.55) 0 2px,
-      transparent 2px 7px
-    );
+    background-image: repeating-linear-gradient(135deg, #e46a8c 0 2px, #ffe4ec 2px 7px);
   }
 }

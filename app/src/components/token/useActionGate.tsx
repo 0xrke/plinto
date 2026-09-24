@@ -21,7 +21,7 @@ export function useActionGate(options: { requireAttestation?: boolean } = {}): {
       reason: (
         <>
           Confirm your eligibility in the{" "}
-          <a href="#disclosures" className="font-semibold text-brand underline">
+          <a href="#disclosures" className="link font-semibold">
             disclosures
           </a>{" "}
           first.

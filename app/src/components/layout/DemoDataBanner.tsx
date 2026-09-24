@@ -15,22 +15,22 @@ export function DemoDataBanner() {
   if (dataSource.kind !== "mock" || dismissed) return null;
 
   return (
-    <div role="status" className="mb-6 flex flex-wrap items-start gap-3 rounded-xl border border-graduating/40 bg-graduating-soft px-4 py-3 text-sm text-ink-2">
+    <div role="status" className="mb-6 flex flex-wrap items-center gap-3 rounded-[20px] bg-graduating-soft px-4 py-3 text-[13px] leading-relaxed text-ink-2 sm:px-5">
       <p className="min-w-0 flex-1">
-        <span className="font-semibold text-ink">Preview with example launches.</span> The tokens below are made up and
+        <span className="font-bold text-ink">Preview with example launches.</span> The tokens below are made up and
         this build is not connected to a chain, so buying, redeeming and the crank are switched off.
         {LIVE_APP_URL ? (
           <>
             {" "}
             The live app is at{" "}
-            <a href={LIVE_APP_URL} className="font-medium text-brand underline underline-offset-2">
+            <a href={LIVE_APP_URL} className="link underline">
               {LIVE_APP_URL.replace(/^https?:\/\//, "")}
             </a>
             .
           </>
         ) : null}
       </p>
-      <button type="button" className="btn btn-secondary shrink-0 px-3 py-1 text-xs" onClick={() => setDismissed(true)}>
+      <button type="button" className="btn btn-secondary btn-sm shrink-0" onClick={() => setDismissed(true)}>
         Dismiss
       </button>
     </div>

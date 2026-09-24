@@ -9,9 +9,14 @@ import { useAttestation } from "@/lib/attestation";
 export function AttestationCheckbox({ className = "" }: { className?: string }) {
   const { attested, setAttested } = useAttestation();
   return (
-    <label className={`flex cursor-pointer items-start gap-3 rounded-lg border border-line bg-sunken/60 p-3 text-sm ${className}`}>
-      <input type="checkbox" className="mt-0.5 h-4 w-4 accent-brand" checked={attested} onChange={(e) => setAttested(e.target.checked)} />
-      <span className="text-ink">
+    <label className={`flex cursor-pointer items-start gap-3 rounded-[18px] bg-cloud p-3.5 text-[13px] leading-relaxed ${className}`}>
+      <input
+        type="checkbox"
+        className="mt-0.5 h-[18px] w-[18px] shrink-0 cursor-pointer accent-floor"
+        checked={attested}
+        onChange={(e) => setAttested(e.target.checked)}
+      />
+      <span className="text-ink-2">
         I confirm that I am not a US person, and that I am not located in or a resident of a jurisdiction where xStocks
         or this product are restricted.
       </span>

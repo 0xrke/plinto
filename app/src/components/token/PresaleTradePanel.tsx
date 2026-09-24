@@ -12,6 +12,8 @@ import { formatMaxLoss, formatNumber, formatTokenAmount, formatUsd, parseTokenIn
 import { buyAveragePriceUsd, presaleBuyButtonLabel, projectedFloorUsd } from "@/lib/metrics";
 import { isQuoteError, quoteLaunchTrade } from "@/lib/tradeQuote";
 import { AmountField } from "@/components/ui/AmountField";
+import { SwapIcon } from "@/components/ui/icons";
+import { BaseChip, BuyButtonLabel, DetailRow, FinePrint, ReceiveTile, RiskRow, SwapArrow, TokenPicker } from "./TradeBits";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { useActionGate } from "./useActionGate";
 
@@ -31,7 +33,7 @@ export function useJupiterRouting(): { available: boolean; localFork: boolean } 
 export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
   const id = useId();
   const wallet = useWallet();
-  const { actions, dataSource } = useData();
+  const { actions } = useData();
   const prices = usePayTokenPrices();
   const baseBalance = useTokenBalance(launch.mint);
   const quoteBalance = useTokenBalance(launch.quote.asset.mint);
@@ -40,7 +42,7 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
   const refresh = useRefreshChainData();
   const [flow, dispatch] = useTxFlow();
   const [side, setSide] = useState<Side>("buy");
-  const [pay, setPay] = useState<PayToken>(dataSource.kind === "mock" ? "USDC" : "QUOTE");
+  const [pay, setPay] = useState<PayToken>("QUOTE");
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -52,7 +54,6 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
 
   const quote = launch.quote.asset;
   const curveOpen = launch.phase === "presale" && !launch.quotePaused;
-  const payLabel = (p: PayToken) => (p === "QUOTE" ? quote.symbol : p);
   const estFloor = projectedFloorUsd(launch);
 
   const amount = parseUiNumber(input);
@@ -142,7 +143,7 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
   const quoteAmount = (raw: bigint) => `${formatTokenAmount(raw, quote.decimals, { multiplier: launch.quote.multiplier, maxFractionDigits: 8 })} ${quote.symbol}`;
   const baseAmount = (raw: bigint) => `${formatTokenAmount(raw, launch.baseDecimals)} $${launch.symbol}`;
 
-  let receiveText = "—";
+  let receiveText = side === "buy" ? `0 $${launch.symbol}` : `0 ${quote.symbol}`;
   let minText: string | null = null;
   if (exactQuote) {
     receiveText = side === "buy" ? baseAmount(exactQuote.amountOut) : quoteAmount(exactQuote.amountOut);
@@ -150,186 +151,162 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
   } else if (side === "buy" && tokensOut > 0) receiveText = `≈ ${formatNumber(tokensOut)} $${launch.symbol}`;
   else if (side === "sell" && sellUsd > 0) receiveText = `≈ ${formatNumber(sellQuoteUi, 6)} ${quote.symbol} (≈ ${formatUsd(sellUsd)})`;
 
-  const payOptions: PayToken[] = ["QUOTE", "USDC", "SOL"];
-
   return (
-    <section aria-labelledby={`${id}-heading`} className="card p-5">
-      <div className="flex items-center justify-between gap-3">
-        <h2 id={`${id}-heading`} className="text-lg font-semibold text-ink">
-          Trade on the curve
-        </h2>
-        <div role="group" aria-label="Trade side" className="flex rounded-lg border border-line p-0.5">
-          {(["buy", "sell"] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              aria-pressed={side === s}
-              onClick={() => switchSide(s)}
-              className={`rounded-md px-3 py-1 text-sm font-medium capitalize ${
-                side === s ? "bg-brand text-white" : "text-ink-2 hover:text-ink"
-              }`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      </div>
+    <section aria-labelledby={`${id}-heading`} className="rail-section">
+      <h2 id={`${id}-heading`} className="heading text-[21px] text-ink lg:text-[22px]">
+        Trade on the curve
+      </h2>
 
       {launch.quotePaused ? (
-        <p className="mt-4 rounded-lg bg-risk-soft px-3 py-2 text-sm text-risk">
+        <p className="tile-risk mt-4 px-4 py-3 text-sm text-risk">
           {quote.symbol} is paused by its issuer. Trading on the curve resumes when it is unpaused.
         </p>
       ) : launch.phase !== "presale" ? (
-        <p className="mt-4 rounded-lg bg-graduating-soft px-3 py-2 text-sm text-graduating">
+        <p className="tile-cream mt-4 px-4 py-3 text-sm leading-relaxed text-graduating">
           The curve is complete. Trading resumes on DAMM v2 once the pool migrates, and redemption opens after the
           vault harvest. Anyone can run the crank below to move it forward.
         </p>
       ) : (
-        <div className="mt-4 space-y-4">
-          <p className="rounded-lg bg-presale-soft px-3 py-2 text-sm text-presale">
-            No floor during the presale. The floor is funded at graduation
-            {estFloor !== null ? ` (estimated ${formatUsd(estFloor)} per token)` : ""}. Until then you can sell back to
-            the curve.
+        <>
+          <div role="group" aria-label="Trade side" className="segmented mt-4">
+            {(["buy", "sell"] as const).map((s) => (
+              <button key={s} type="button" aria-pressed={side === s} onClick={() => switchSide(s)} className="capitalize">
+                {s}
+              </button>
+            ))}
+          </div>
+          <div className="mt-3.5">
+            <AmountField
+              id={`${id}-${side}`}
+              label={side === "buy" ? "You pay" : "You sell"}
+              value={input}
+              onChange={(v) => {
+                setInput(v);
+                setMessage(null);
+              }}
+              error={inputError ?? quoteError}
+              suffix={
+                side === "buy" ? (
+                  <TokenPicker
+                    ariaLabel="Pay with"
+                    value={pay}
+                    onChange={(p) => {
+                      setPay(p);
+                      setInput("");
+                    }}
+                    quoteSymbol={quote.symbol}
+                    routingAvailable={routing.available}
+                  />
+                ) : (
+                  <BaseChip symbol={launch.symbol} />
+                )
+              }
+              hint={
+                side === "buy"
+                  ? pay === "QUOTE" && wallet.connected && quoteBalance.data !== undefined
+                    ? `Balance: ${quoteAmount(quoteBalance.data)}${payUsd > 0 ? ` · ≈ ${formatUsd(payUsd)}` : ""}`
+                    : `≈ ${formatUsd(payUsd)}`
+                  : wallet.connected && baseBalance.data !== undefined
+                    ? `Balance: ${baseAmount(baseBalance.data)}`
+                    : undefined
+              }
+              onMax={
+                side === "sell"
+                  ? wallet.connected && baseBalance.data !== undefined && baseBalance.data > 0n
+                    ? () => setInput(rawToDecimal(baseBalance.data, launch.baseDecimals).toFixed())
+                    : undefined
+                  : pay === "QUOTE" && wallet.connected && quoteBalance.data !== undefined && quoteBalance.data > 0n
+                    ? () =>
+                        setInput(
+                          rawToDecimal(quoteBalance.data, quote.decimals, launch.quote.multiplier)
+                            .toDecimalPlaces(quote.decimals, Decimal.ROUND_DOWN)
+                            .toFixed(),
+                        )
+                    : undefined
+              }
+            />
+            <SwapArrow />
+            <ReceiveTile
+              label={exactQuote ? "You receive" : "You receive (est.)"}
+              text={receiveText}
+              unit={side === "buy" ? `$${launch.symbol}` : quote.symbol}
+            />
+          </div>
+
+          <p className="mt-3 flex gap-2.5 text-[13px] leading-normal text-ink-2">
+            <SwapIcon className="mt-0.5 shrink-0 text-presale" />
+            <span>
+              No floor during the presale. The floor is funded at graduation
+              {estFloor !== null ? ` (estimated ${formatUsd(estFloor)} per token)` : ""}. Until then you can sell back to
+              the curve.
+            </span>
           </p>
 
-          <AmountField
-            id={`${id}-${side}`}
-            label={side === "buy" ? "You pay" : "You sell"}
-            value={input}
-            onChange={(v) => {
-              setInput(v);
-              setMessage(null);
-            }}
-            error={inputError ?? quoteError}
-            suffix={
-              side === "buy" ? (
-                <select
-                  aria-label="Pay with"
-                  value={pay}
-                  onChange={(e) => {
-                    setPay(e.target.value as PayToken);
-                    setInput("");
-                  }}
-                  className="rounded-md border border-line bg-sunken px-2 py-1 text-sm font-semibold text-ink"
-                >
-                  {payOptions.map((p) => (
-                    <option key={p} value={p} disabled={p !== "QUOTE" && !routing.available}>
-                      {payLabel(p)}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                `$${launch.symbol}`
-              )
-            }
-            hint={
-              side === "buy"
-                ? pay === "QUOTE" && wallet.connected && quoteBalance.data !== undefined
-                  ? `Balance: ${quoteAmount(quoteBalance.data)}${payUsd > 0 ? ` · ≈ ${formatUsd(payUsd)}` : ""}`
-                  : payUsd > 0
-                    ? `≈ ${formatUsd(payUsd)}`
-                    : undefined
-                : wallet.connected && baseBalance.data !== undefined
-                  ? `Balance: ${baseAmount(baseBalance.data)}`
-                  : undefined
-            }
-            onMax={
-              side === "sell"
-                ? wallet.connected && baseBalance.data !== undefined && baseBalance.data > 0n
-                  ? () => setInput(rawToDecimal(baseBalance.data, launch.baseDecimals).toFixed())
-                  : undefined
-                : pay === "QUOTE" && wallet.connected && quoteBalance.data !== undefined && quoteBalance.data > 0n
-                  ? () =>
-                      setInput(
-                        rawToDecimal(quoteBalance.data, quote.decimals, launch.quote.multiplier)
-                          .toDecimalPlaces(quote.decimals, Decimal.ROUND_DOWN)
-                          .toFixed(),
-                      )
-                  : undefined
-            }
-          />
-
           {!routing.available && side === "buy" ? (
-            <p className="field-hint">
+            <p className="field-hint mt-2">
               Paying with USDC or SOL routes through Jupiter, which works on mainnet only.
               {routing.localFork ? ` On this local fork, pay with ${quote.symbol} directly (the faucet in the header has some).` : ""}
             </p>
           ) : null}
 
-          <dl className="space-y-2 rounded-lg bg-sunken/70 p-3 text-sm" aria-live="polite">
-            <div className="flex justify-between gap-3">
-              <dt className="text-ink-2">{exactQuote ? "You receive" : "You receive (est.)"}</dt>
-              <dd className="tnum text-right font-semibold text-ink">{receiveText}</dd>
-            </div>
-            {minText ? (
-              <div className="flex justify-between gap-3">
-                <dt className="text-ink-2">Minimum after 1% slippage</dt>
-                <dd className="tnum text-right text-ink">{minText}</dd>
-              </div>
-            ) : null}
+          <dl className="mt-4 flex flex-col gap-2.5 text-[13.5px]" aria-live="polite">
+            <DetailRow label="Minimum after 1% slippage">{minText ?? "—"}</DetailRow>
             {exactQuote?.partialFill ? (
               <p className="text-xs text-graduating">
                 This buy completes the curve: it uses {quoteAmount(exactQuote.amountIn)} and the rest stays in your wallet.
               </p>
             ) : null}
-            <div className="flex justify-between gap-3">
-              <dt className="text-ink-2">Curve price</dt>
-              <dd className="tnum text-ink">{formatUsd(launch.priceUsd)}</dd>
-            </div>
-            {side === "buy" && avgPriceUsd !== null ? (
-              <div className="flex justify-between gap-3">
-                <dt className="text-ink-2">Average price for this buy</dt>
-                <dd className="tnum text-ink">{formatUsd(avgPriceUsd)}</dd>
-              </div>
-            ) : null}
+            <DetailRow label="Curve price">{formatUsd(launch.priceUsd)}</DetailRow>
             {side === "buy" ? (
-              <div className="flex justify-between gap-3">
-                <dt className="text-ink-2">Max loss for this buy if it graduates (est.)</dt>
-                <dd className="tnum font-semibold text-risk">{estMaxLoss !== null ? formatMaxLoss(estMaxLoss) : "—"}</dd>
-              </div>
+              <DetailRow label="Average price for this buy">{avgPriceUsd !== null ? formatUsd(avgPriceUsd) : "—"}</DetailRow>
             ) : null}
-            <div className="flex justify-between gap-3">
-              <dt className="text-ink-2">Curve fee</dt>
-              <dd className="tnum text-ink">1%</dd>
-            </div>
+            <DetailRow label="Curve fee">1%</DetailRow>
+            {side === "buy" ? (
+              <RiskRow label="Max loss for this buy if it graduates (est.)">
+                {estMaxLoss !== null ? formatMaxLoss(estMaxLoss) : "—"}
+              </RiskRow>
+            ) : null}
           </dl>
-
-          <p className="field-hint">Route: {route}</p>
 
           {side === "buy" ? (
             <button
               type="button"
-              className="btn btn-primary h-auto w-full py-3 text-left leading-snug whitespace-normal"
+              className="btn btn-primary btn-lg mt-4 h-auto min-h-[58px] w-full whitespace-normal py-2.5 text-center disabled:opacity-90 disabled:shadow-none"
               disabled={!canSubmit}
               onClick={onSubmit}
               aria-busy={pending}
             >
-              {presaleBuyButtonLabel(buyPriceUsd, estFloor)}
+              <BuyButtonLabel label={presaleBuyButtonLabel(buyPriceUsd, estFloor)} />
             </button>
           ) : (
-            <button type="button" className="btn btn-primary w-full" disabled={!canSubmit} onClick={onSubmit} aria-busy={pending}>
+            <button type="button" className="btn btn-primary btn-lg mt-4 w-full disabled:opacity-90 disabled:shadow-none" disabled={!canSubmit} onClick={onSubmit} aria-busy={pending}>
               {pending ? "Sending…" : `Sell $${launch.symbol} to the curve`}
             </button>
           )}
-          {side === "buy" ? (
-            <p className="field-hint">
-              There is no floor until graduation. If the curve never completes, the only exit is selling back to the
-              curve at its price, so the loss is not bounded by a floor.
-            </p>
-          ) : null}
-          {!gate.ready ? <p className="field-hint">{gate.reason}</p> : null}
-          <p className="field-hint">
-            {exactQuote
-              ? "Quoted with the exact curve math at the latest on-chain state. You never receive less than the minimum shown: if the price moved past it before you sign, nothing is sent and you review the new quote."
-              : "Estimates use the current curve price; the price rises as the curve fills. Max slippage 1%."}
-          </p>
-          <TxProgress flow={flow} />
-          {flow.status === "idle" && message ? (
-            <p role="status" className="rounded-lg bg-sunken px-3 py-2 text-sm text-ink-2">
-              {message}
-            </p>
-          ) : null}
-        </div>
+          <div className="mt-3 space-y-2">
+            {!gate.ready ? <p className="field-hint">{gate.reason}</p> : null}
+            <FinePrint summary={exactQuote ? "Exact curve quote, max slippage 1%" : "Curve-price estimate, max slippage 1%"}>
+              {side === "buy" ? (
+                <p>
+                  There is no floor until graduation. If the curve never completes, the only exit is selling back to the
+                  curve at its price, so the loss is not bounded by a floor.
+                </p>
+              ) : null}
+              <p>Route: {route}</p>
+              <p>
+                {exactQuote
+                  ? "Quoted with the exact curve math at the latest on-chain state. You never receive less than the minimum shown: if the price moved past it before you sign, nothing is sent and you review the new quote."
+                  : "Estimates use the current curve price; the price rises as the curve fills. Max slippage 1%."}
+              </p>
+            </FinePrint>
+            <TxProgress flow={flow} />
+            {flow.status === "idle" && message ? (
+              <p role="status" className="tile-soft px-3.5 py-2.5 text-sm text-ink-2">
+                {message}
+              </p>
+            ) : null}
+          </div>
+        </>
       )}
     </section>
   );

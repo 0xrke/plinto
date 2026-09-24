@@ -2,18 +2,20 @@ import type { LaunchPhase } from "@/lib/data/types";
 import { phaseLabel } from "@/lib/phase";
 
 const STYLES: Record<LaunchPhase, string> = {
-  presale: "bg-presale-soft text-presale",
-  graduating: "bg-graduating-soft text-graduating",
-  graduated: "bg-floor-soft text-floor-strong",
+  presale: "pill-presale",
+  graduating: "pill-graduating",
+  graduated: "pill-floor",
 };
 
-export function PhaseBadge({ phase }: { phase: LaunchPhase }) {
+/**
+ * Phase pill with a status dot: presale sky, graduating cream, graduated mint. `label` overrides
+ * the text (e.g. "Floor live" once the migration fee is in the vault; keep "Graduated" before).
+ */
+export function PhaseBadge({ phase, label, size = "md" }: { phase: LaunchPhase; label?: string; size?: "md" | "sm" }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${STYLES[phase]}`}
-    >
-      <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-current" />
-      {phaseLabel(phase)}
+    <span className={`pill ${size === "sm" ? "pill-sm" : ""} ${STYLES[phase]}`}>
+      <span aria-hidden className="pill-dot" />
+      {label ?? phaseLabel(phase)}
     </span>
   );
 }

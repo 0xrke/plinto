@@ -5,13 +5,14 @@ export interface FloorMeterProps {
   floorUsd: number;
   /** Max loss at the price shown, Z = 1 − floor/price, computed by the caller with the SDK. */
   maxLoss: number;
-  /** Compact variant for list cards: thinner bar, no labels. */
+  /** Compact variant for list cards: a 12px track, no labels. */
   compact?: boolean;
 }
 
 /**
- * The hero visual: price sits above a solid floor. The floor segment is backed by the
- * vault; the hatched band between floor and price is what a buyer can lose.
+ * The hero visual: a rounded track from $0. The solid green segment is the floor the vault backs;
+ * the rose hatch between floor and price is what a buyer at today's price can lose; a dark tick marks
+ * the price. The scale runs to 110% of the larger of the two, so the tick never sits on the edge.
  */
 export function FloorMeter({ priceUsd, floorUsd, maxLoss, compact = false }: FloorMeterProps) {
   const safePrice = Number.isFinite(priceUsd) && priceUsd > 0 ? priceUsd : 0;
@@ -27,64 +28,97 @@ export function FloorMeter({ priceUsd, floorUsd, maxLoss, compact = false }: Flo
 
   if (compact) {
     return (
-      <div role="img" aria-label={summary} className="relative h-2 w-full overflow-hidden rounded-full bg-sunken">
-        <div className="absolute inset-y-0 left-0 bg-floor" style={{ width: `${floorPct}%` }} />
+      <div role="img" aria-label={summary} className="relative h-3 w-full rounded-full bg-track">
+        <div className="absolute inset-y-0 left-0 rounded-l-full bg-floor-bar" style={{ width: `${floorPct}%` }} />
         <div className="hatch-risk absolute inset-y-0" style={{ left: `${floorPct}%`, width: `${riskPct}%` }} />
-        <div
-          className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-ink"
-          style={{ left: `${pricePct}%` }}
-        />
+        {safePrice > 0 ? (
+          <div
+            className="absolute -top-[5px] h-[22px] w-1 -translate-x-1/2 rounded-sm bg-ink"
+            style={{ left: `${pricePct}%` }}
+          />
+        ) : null}
       </div>
     );
   }
 
-  // Keep the price label inside the meter near either edge.
-  const labelShift = pricePct > 75 ? "-translate-x-full" : pricePct < 25 ? "translate-x-0" : "-translate-x-1/2";
+  // The label of whichever mark is further right hangs off that mark, right-aligned; the other sits
+  // at the start of the track. They never overlap, including when the price is below the floor.
+  const floorLabel = (
+    <span className="flex flex-col">
+      <span className="text-xs text-ink-3">Floor</span>
+      <span className="tnum text-[15px] font-extrabold text-floor">{formatUsd(floorUsd)}</span>
+    </span>
+  );
+  const priceLabel = (
+    <span className="flex flex-col">
+      <span className="text-xs text-ink-3">Price</span>
+      <span className="tnum text-[15px] font-extrabold text-ink">{formatUsd(priceUsd)}</span>
+    </span>
+  );
+  const rightMark = belowFloor ? floorPct : pricePct;
+  // Centre the loss pill under the hatch, but keep it inside the track and clear of the "$0".
+  const bandCentre = floorPct + riskPct / 2;
+  const pillStyle =
+    bandCentre > 70
+      ? { right: `${100 - Math.max(pricePct, floorPct)}%` }
+      : bandCentre < 30
+        ? { left: `max(2.75rem, ${floorPct}%)` }
+        : { left: `${bandCentre}%`, transform: "translateX(-50%)" };
 
   return (
     <figure className="w-full" aria-label="Floor meter">
-      <div role="img" aria-label={summary} className="relative pt-9">
-        <div
-          className={`absolute top-0 whitespace-nowrap text-sm ${labelShift}`}
-          style={{ left: `${pricePct}%` }}
-        >
-          <span className="text-ink-3">Price </span>
-          <span className="font-semibold text-ink">{formatUsd(priceUsd)}</span>
-        </div>
-        <div className="relative h-11 w-full overflow-hidden rounded-lg bg-sunken">
+      <div role="img" aria-label={summary} className="relative">
+        {/* Value labels above the track */}
+        <div className="relative h-[42px]">
+          <div className="absolute left-0 top-0 text-left">{belowFloor ? priceLabel : floorLabel}</div>
           <div
-            className="absolute inset-y-0 left-0 flex items-center bg-floor"
-            style={{ width: `${floorPct}%` }}
-          />
-          <div
-            className="hatch-risk absolute inset-y-0 border-l-2 border-surface"
-            style={{ left: `${floorPct}%`, width: `${riskPct}%` }}
-          />
+            className="absolute top-0 -translate-x-full whitespace-nowrap pr-3 text-right"
+            style={{ left: `${rightMark}%` }}
+          >
+            {belowFloor ? floorLabel : priceLabel}
+          </div>
         </div>
-        <div
-          aria-hidden
-          className="absolute bottom-0 top-6 w-0.5 -translate-x-1/2 rounded bg-ink"
-          style={{ left: `${pricePct}%` }}
-        />
+
+        {/* Track */}
+        <div className="relative mt-2 h-[30px] rounded-full bg-track">
+          <div
+            className="absolute inset-y-0 left-0 rounded-l-full rounded-r-lg"
+            style={{ width: `${floorPct}%`, backgroundImage: "linear-gradient(180deg, #34b58f, #1f9e7a)" }}
+          />
+          {riskPct > 0 ? (
+            <div
+              className="hatch-risk absolute inset-y-0 rounded-lg"
+              style={{ left: `calc(${floorPct}% + 4px)`, width: `max(0px, calc(${riskPct}% - 4px))` }}
+            />
+          ) : null}
+          {safePrice > 0 ? (
+            <div
+              aria-hidden
+              className="absolute -top-2.5 h-[50px] w-1.5 -translate-x-1/2 rounded-[3px] bg-ink"
+              style={{ left: `${pricePct}%` }}
+            />
+          ) : null}
+        </div>
+
+        {/* $0 at the start and the loss pill under the hatch */}
+        <div className="relative mt-3 h-[26px]">
+          <span className="absolute left-0 top-1 text-xs text-ink-3">$0</span>
+          <span
+            className={`pill pill-sm absolute top-0 h-[26px] whitespace-nowrap px-3 text-[12.5px] ${
+              maxLoss > 0 ? "pill-risk" : "pill-floor"
+            }`}
+            style={pillStyle}
+          >
+            <span className="tnum">{formatMaxLoss(maxLoss)}</span> at risk above the floor
+          </span>
+        </div>
       </div>
-      <figcaption className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-        <span className="inline-flex items-center gap-2">
-          <span aria-hidden className="h-3 w-3 rounded-sm bg-floor" />
-          <span className="text-ink-2">Floor</span>
-          <span className="font-semibold text-floor-strong">{formatUsd(floorUsd)}</span>
-        </span>
-        <span className="inline-flex items-center gap-2">
-          <span aria-hidden className="hatch-risk h-3 w-3 rounded-sm border border-risk-line" />
-          <span className="text-ink-2">At risk above the floor</span>
-          <span className="font-semibold text-risk">{formatMaxLoss(maxLoss)}</span>
-        </span>
-        <span className="text-ink-3">
-          {belowFloor
-            ? "Price is below the floor: redeeming pays more than selling."
-            : Number.isFinite(multiple)
-              ? `Price is ${formatMultiple(multiple)} the floor`
-              : "No floor yet"}
-        </span>
+      <figcaption className="mt-3 text-sm text-ink-2">
+        {belowFloor
+          ? "Price is below the floor: redeeming pays more than selling."
+          : Number.isFinite(multiple)
+            ? `Price is ${formatMultiple(multiple)} the floor`
+            : "No floor yet"}
       </figcaption>
     </figure>
   );

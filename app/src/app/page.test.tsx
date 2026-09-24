@@ -40,8 +40,39 @@ describe("home page", () => {
     expect(steps.textContent).toMatch(/graduation threshold the creator set/);
   });
 
+  it("features the graduated launch with the largest vault and counts launches by phase", async () => {
+    renderHome();
+    const featured = await screen.findByRole("region", { name: "Featured floor" });
+    const launches = await new MockDataSource(0).listLaunches();
+    const live = launches.filter((l) => l.phase === "graduated" && l.migrationFeeHarvested);
+    const biggest = live.reduce((a, b) =>
+      a.quote.priceUsd * Number(a.vaultRaw) / 10 ** a.quote.asset.decimals >=
+      b.quote.priceUsd * Number(b.vaultRaw) / 10 ** b.quote.asset.decimals
+        ? a
+        : b,
+    );
+    expect(await within(featured).findByText(biggest.name)).toBeTruthy();
+    expect(within(featured).getByText(`$${biggest.symbol} vault · Floor live`)).toBeTruthy();
+    expect(within(featured).getByRole("link", { name: `Buy $${biggest.symbol} on its token page` }).getAttribute("href")).toBe(
+      `/t/${biggest.mint}`,
+    );
+    const phases = screen.getByRole("region", { name: "Launches by phase" });
+    expect(within(phases).getByText("Floor live").previousElementSibling?.textContent).toContain(String(live.length));
+  });
+
   it("keeps the honest headline qualifier", () => {
     renderHome();
-    expect(screen.getByText(/The floor protects from zero, not from loss/)).toBeTruthy();
+    expect(screen.getByText(/The floor protects from zero, not from loss/).textContent).toMatch(
+      /fixed amount per token, so buying far above it can\s+lose most of the purchase/,
+    );
+  });
+
+  it("orders the launch grid with live floors first", async () => {
+    renderHome();
+    const grid = await screen.findByRole("region", { name: "Launches" });
+    const titles = (await within(grid).findAllByRole("heading", { level: 3 })).map((h) => h.textContent?.trim());
+    const launches = await new MockDataSource(0).listLaunches();
+    const live = launches.filter((l) => l.phase === "graduated" && l.migrationFeeHarvested).map((l) => l.name);
+    expect(new Set(titles.slice(0, live.length))).toEqual(new Set(live));
   });
 });

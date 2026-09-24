@@ -168,86 +168,108 @@ export function PhaseChart() {
   }, []);
 
   return (
-    <svg
-      ref={svgRef}
-      viewBox="0 0 420 150"
-      className="block h-[148px] w-full"
-      fill="none"
-      role="img"
-      aria-label="A price that moves above a floor which appears when the market opens and then only rises"
-    >
-      <defs>
-        <linearGradient id="priceFade" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="var(--color-ink)" stopOpacity="0.12" />
-          <stop offset="1" stopColor="var(--color-ink)" stopOpacity="0" />
-        </linearGradient>
-        <linearGradient id="floorFade" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="var(--color-floor)" stopOpacity="0.2" />
-          <stop offset="1" stopColor="var(--color-floor)" stopOpacity="0.04" />
-        </linearGradient>
-      </defs>
-
-      <g fill="var(--color-ink-3)" fontSize="9" letterSpacing="1.2" fontFamily="var(--font-mono)">
-        <text x="14" y="16">
-          PRESALE
-        </text>
-        <text id="labelMarket" x="140" y="16">
-          MARKET
-        </text>
-      </g>
-      <line
-        id="split"
-        x1="130"
-        y1="20"
-        x2="130"
-        y2={H}
-        stroke="var(--color-line)"
-        strokeWidth="1.5"
-        strokeDasharray="3 4"
-      />
-
-      <path id="floorArea" fill="url(#floorFade)" />
-      <path
-        id="floorLine"
-        stroke="var(--color-floor)"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+    <div className="relative overflow-hidden rounded-tile bg-midnight">
+      {/* Legend: HTML so it stays pinned to the right edge at any width. The SVG label covers both lines. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute bottom-2.5 right-4 min-[360px]:bottom-auto min-[360px]:top-[13px] sm:right-[58px] sm:top-[10px] flex items-center gap-3.5 text-[11px] font-semibold text-on-dark-2"
+      >
+        <span className="flex items-center gap-1.5">
+          <i className="inline-block h-[2.5px] w-4 rounded-full bg-white" />
+          Price
+        </span>
+        <span className="flex items-center gap-1.5">
+          <i className="inline-block h-[3.5px] w-4 rounded-full bg-mint" />
+          Floor
+        </span>
+      </div>
+      <svg
+        ref={svgRef}
+        viewBox="0 0 476 150"
+        className="block h-[150px] w-full"
         fill="none"
-      />
+        role="img"
+        aria-label="A price that moves above a floor which appears when the market opens and then only rises"
+      >
+        <defs>
+          <linearGradient id="priceFade" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="var(--color-iris)" stopOpacity="0.32" />
+            <stop offset="1" stopColor="var(--color-iris)" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id="floorFade" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="var(--color-mint)" stopOpacity="0.38" />
+            <stop offset="1" stopColor="var(--color-mint)" stopOpacity="0.08" />
+          </linearGradient>
+        </defs>
 
-      <path id="priceArea" fill="url(#priceFade)" />
-      <path
-        id="presaleLine"
-        stroke="var(--color-ink)"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity="0.45"
-        strokeDasharray="1 7"
-      />
-      <path
-        id="priceLine"
-        stroke="var(--color-ink)"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+        <g
+          fill="var(--color-on-dark-3)"
+          fontSize="10"
+          fontWeight="700"
+          letterSpacing="1.4"
+          fontFamily="var(--font-sans)"
+        >
+          <text x="16" y="22">
+            PRESALE
+          </text>
+          <text id="labelMarket" x="156" y="22">
+            MARKET
+          </text>
+        </g>
+        <line
+          id="split"
+          x1="146"
+          y1="30"
+          x2="146"
+          y2={H}
+          stroke="#3a3a66"
+          strokeWidth="1.5"
+          strokeDasharray="3 4"
+        />
 
-      <g>
-        {TOUCH_F.map((f) => (
-          <circle
-            key={f}
-            data-touch=""
-            cx={f * 420}
-            cy={110}
-            r="5.5"
-            fill="var(--color-floor)"
-            stroke="var(--color-surface)"
-            strokeWidth="2.5"
-          />
-        ))}
-      </g>
-    </svg>
+        <path id="floorArea" fill="url(#floorFade)" />
+        <path
+          id="floorLine"
+          stroke="var(--color-mint)"
+          strokeWidth="3.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+
+        <path id="priceArea" fill="url(#priceFade)" />
+        <path
+          id="presaleLine"
+          stroke="#ffffff"
+          strokeOpacity="0.55"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeDasharray="1 6"
+        />
+        <path
+          id="priceLine"
+          stroke="#ffffff"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        <g>
+          {TOUCH_F.map((f) => (
+            <circle
+              key={f}
+              data-touch=""
+              cx={f * 476}
+              cy={110}
+              r="4.5"
+              fill="var(--color-midnight)"
+              stroke="var(--color-mint)"
+              strokeWidth="2.5"
+            />
+          ))}
+        </g>
+      </svg>
+    </div>
   );
 }

@@ -12,6 +12,7 @@ import { formatMaxLoss, formatNumber, formatTokenAmount, formatUsd, parseTokenIn
 import { buyAveragePriceUsd, buyButtonLabel, launchFloorUsd } from "@/lib/metrics";
 import { isQuoteError, quoteLaunchTrade } from "@/lib/tradeQuote";
 import { AmountField } from "@/components/ui/AmountField";
+import { BaseChip, BuyButtonLabel, DetailRow, FinePrint, ReceiveTile, RiskRow, SwapArrow, TokenPicker } from "./TradeBits";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { useJupiterRouting } from "./PresaleTradePanel";
 import { useActionGate } from "./useActionGate";
@@ -24,7 +25,7 @@ type Side = "buy" | "sell";
 export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
   const id = useId();
   const wallet = useWallet();
-  const { actions, dataSource } = useData();
+  const { actions } = useData();
   const prices = usePayTokenPrices();
   const gate = useActionGate();
   const routing = useJupiterRouting();
@@ -33,7 +34,7 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
   const quoteBalance = useTokenBalance(launch.quote.asset.mint);
   const [flow, dispatch] = useTxFlow();
   const [side, setSide] = useState<Side>("buy");
-  const [token, setToken] = useState<PayToken>(dataSource.kind === "mock" ? "USDC" : "QUOTE");
+  const [token, setToken] = useState<PayToken>("QUOTE");
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -127,29 +128,33 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
       ? `Trades ${quote.symbol} directly against the Meteora DAMM v2 pool.`
       : `Routed through Jupiter to the Meteora DAMM v2 pool.`;
 
-  return (
-    <section aria-labelledby={`${id}-heading`} className="card p-5">
-      <div className="flex items-center justify-between gap-3">
-        <h2 id={`${id}-heading`} className="text-lg font-semibold text-ink">
-          {side === "buy" ? "Buy on the market" : "Sell on the market"}
-        </h2>
-        <div role="group" aria-label="Trade side" className="flex rounded-lg border border-line p-0.5">
-          {(["buy", "sell"] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              aria-pressed={side === s}
-              onClick={() => switchSide(s)}
-              className={`rounded-md px-3 py-1 text-sm font-medium capitalize ${side === s ? "bg-brand text-white" : "text-ink-2 hover:text-ink"}`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      </div>
-      <p className="mt-1 text-sm text-ink-2">{venueText}</p>
+  const receiveText =
+    side === "buy"
+      ? exactQuote
+        ? baseAmount(exactQuote.amountOut)
+        : tokensOut > 0
+          ? `≈ ${formatNumber(tokensOut)} $${launch.symbol}`
+          : `0 $${launch.symbol}`
+      : exactQuote
+        ? quoteAmount(exactQuote.amountOut)
+        : sellUsdEst > 0
+          ? `≈ ${formatUsd(sellUsdEst)} in ${tokenLabel(token)}`
+          : `0 ${quote.symbol}`;
 
-      <div className="mt-4 space-y-4">
+  return (
+    <section aria-labelledby={`${id}-heading`} className="rail-section">
+      <h2 id={`${id}-heading`} className="heading text-[21px] text-ink lg:text-[22px]">
+        {side === "buy" ? "Buy on the market" : "Sell on the market"}
+      </h2>
+      <div role="group" aria-label="Trade side" className="segmented mt-4">
+        {(["buy", "sell"] as const).map((s) => (
+          <button key={s} type="button" aria-pressed={side === s} onClick={() => switchSide(s)} className="capitalize">
+            {s}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-3.5">
         <AmountField
           id={`${id}-${side}`}
           label={side === "buy" ? "You pay" : "You sell"}
@@ -161,32 +166,25 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
           error={inputError ?? quoteError}
           suffix={
             side === "buy" ? (
-              <select
-                aria-label="Pay with"
+              <TokenPicker
+                ariaLabel="Pay with"
                 value={token}
-                onChange={(e) => {
-                  setToken(e.target.value as PayToken);
+                onChange={(t) => {
+                  setToken(t);
                   setInput("");
                 }}
-                className="rounded-md border border-line bg-sunken px-2 py-1 text-sm font-semibold text-ink"
-              >
-                {(["QUOTE", "USDC", "SOL"] as const).map((t) => (
-                  <option key={t} value={t} disabled={t !== "QUOTE" && !routing.available}>
-                    {tokenLabel(t)}
-                  </option>
-                ))}
-              </select>
+                quoteSymbol={quote.symbol}
+                routingAvailable={routing.available}
+              />
             ) : (
-              `$${launch.symbol}`
+              <BaseChip symbol={launch.symbol} />
             )
           }
           hint={
             side === "buy"
               ? token === "QUOTE" && wallet.connected && quoteBalance.data !== undefined
                 ? `Balance: ${quoteAmount(quoteBalance.data)}${payUsd > 0 ? ` · ≈ ${formatUsd(payUsd)}` : ""}`
-                : payUsd > 0
-                  ? `≈ ${formatUsd(payUsd)}`
-                  : undefined
+                : `≈ ${formatUsd(payUsd)}`
               : wallet.connected && baseBalance.data !== undefined
                 ? `Balance: ${baseAmount(baseBalance.data)}`
                 : undefined
@@ -206,122 +204,96 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
                 : undefined
           }
         />
+        <SwapArrow />
+        <ReceiveTile
+          label={exactQuote ? "You receive" : "You receive (est.)"}
+          text={receiveText}
+          unit={side === "buy" ? `$${launch.symbol}` : quote.symbol}
+          action={
+            side === "sell" ? (
+              <TokenPicker
+                id={`${id}-receive`}
+                ariaLabel="Receive"
+                value={token}
+                onChange={setToken}
+                quoteSymbol={quote.symbol}
+                routingAvailable={routing.available}
+              />
+            ) : undefined
+          }
+        />
+      </div>
 
-        {side === "sell" ? (
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <label htmlFor={`${id}-receive`} className="text-ink-2">
-              Receive
-            </label>
-            <select
-              id={`${id}-receive`}
-              value={token}
-              onChange={(e) => setToken(e.target.value as PayToken)}
-              className="rounded-md border border-line bg-sunken px-2 py-1 text-sm font-semibold text-ink"
-            >
-              {(["QUOTE", "USDC", "SOL"] as const).map((t) => (
-                <option key={t} value={t} disabled={t !== "QUOTE" && !routing.available}>
-                  {tokenLabel(t)}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
+      {!routing.available ? (
+        <p className="field-hint mt-3">
+          USDC and SOL route through Jupiter, which works on mainnet only.
+          {routing.localFork ? ` On this local fork, trade with ${quote.symbol} directly.` : ""}
+        </p>
+      ) : null}
 
-        {!routing.available ? (
-          <p className="field-hint">
-            USDC and SOL route through Jupiter, which works on mainnet only.
-            {routing.localFork ? ` On this local fork, trade with ${quote.symbol} directly.` : ""}
-          </p>
-        ) : null}
+      {launch.quotePaused ? (
+        <p className="tile-risk mt-3 px-3.5 py-2.5 text-sm text-risk">
+          {quote.symbol} is paused by its issuer. Pool trades resume when it is unpaused.
+        </p>
+      ) : null}
 
-        {launch.quotePaused ? (
-          <p className="rounded-lg bg-risk-soft px-3 py-2 text-sm text-risk">
-            {quote.symbol} is paused by its issuer. Pool trades resume when it is unpaused.
-          </p>
-        ) : null}
-
-        <dl className="space-y-2 rounded-lg bg-sunken/70 p-3 text-sm" aria-live="polite">
-          <div className="flex justify-between gap-3">
-            <dt className="text-ink-2">{exactQuote ? "You receive" : "You receive (est.)"}</dt>
-            <dd className="tnum text-right font-semibold text-ink">
-              {side === "buy"
-                ? exactQuote
-                  ? baseAmount(exactQuote.amountOut)
-                  : tokensOut > 0
-                    ? `≈ ${formatNumber(tokensOut)} $${launch.symbol}`
-                    : "—"
-                : exactQuote
-                  ? quoteAmount(exactQuote.amountOut)
-                  : sellUsdEst > 0
-                    ? `≈ ${formatUsd(sellUsdEst)} in ${tokenLabel(token)}`
-                    : "—"}
-            </dd>
-          </div>
-          {exactQuote ? (
-            <div className="flex justify-between gap-3">
-              <dt className="text-ink-2">Minimum after 1% slippage</dt>
-              <dd className="tnum text-right text-ink">{side === "buy" ? baseAmount(exactQuote.minOut) : quoteAmount(exactQuote.minOut)}</dd>
-            </div>
-          ) : null}
-          {side === "buy" ? (
-            <>
-              {avgPriceUsd !== null ? (
-                <div className="flex justify-between gap-3">
-                  <dt className="text-ink-2">Average price for this buy</dt>
-                  <dd className="tnum text-ink">{formatUsd(avgPriceUsd)}</dd>
-                </div>
-              ) : null}
-              <div className="flex justify-between gap-3">
-                <dt className="text-ink-2">Worth at the floor</dt>
-                <dd className="tnum text-floor-strong">{tokensOut > 0 ? `≈ ${formatUsd(atFloorUsd)}` : "—"}</dd>
-              </div>
-              {/*
-                The button below must keep the mandated "… Max loss if you buy now: −Z%" sentence, and
-                the "Price and floor" card states the same measure at the spot price. This row is the
-                one that moves with the amount typed, so it says so.
-              */}
-              <div className="flex justify-between gap-3">
-                <dt className="text-ink-2">Max loss for this buy</dt>
-                <dd className="tnum font-semibold text-risk">{formatMaxLoss(maxLoss)}</dd>
-              </div>
-            </>
-          ) : (
-            <div className="flex justify-between gap-3">
-              <dt className="text-ink-2">Floor (redeem instead)</dt>
-              <dd className="tnum text-floor-strong">{formatUsd(floorUsd)} per token</dd>
-            </div>
-          )}
-        </dl>
-
+      <dl className="mt-4 flex flex-col gap-2.5 text-[13.5px]" aria-live="polite">
         {side === "buy" ? (
-          <button
-            type="button"
-            className="btn btn-primary h-auto w-full py-3 text-left leading-snug whitespace-normal"
-            disabled={!canSubmit}
-            aria-busy={pending}
-            onClick={onSubmit}
-          >
-            {buyButtonLabel(buyPriceUsd, floorUsd)}
-          </button>
+          <>
+            <DetailRow label="Minimum after 1% slippage">{exactQuote ? baseAmount(exactQuote.minOut) : "—"}</DetailRow>
+            <DetailRow label="Average price for this buy">{avgPriceUsd !== null ? formatUsd(avgPriceUsd) : "—"}</DetailRow>
+            <DetailRow label="Worth at the floor" valueClassName="!text-floor">
+              {tokensOut > 0 ? `≈ ${formatUsd(atFloorUsd)}` : "—"}
+            </DetailRow>
+            {/*
+              The button below must keep the mandated "… Max loss if you buy now: −Z%" sentence, and
+              the "Price and floor" card states the same measure at the spot price. This row is the
+              one that moves with the amount typed, so it says so.
+            */}
+            <RiskRow label="Max loss for this buy">{formatMaxLoss(maxLoss)}</RiskRow>
+          </>
         ) : (
-          <button type="button" className="btn btn-primary w-full" disabled={!canSubmit} aria-busy={pending} onClick={onSubmit}>
-            {pending ? "Sending…" : `Sell $${launch.symbol}`}
-          </button>
+          <>
+            {exactQuote ? <DetailRow label="Minimum after 1% slippage">{quoteAmount(exactQuote.minOut)}</DetailRow> : null}
+            <DetailRow label="Floor (redeem instead)" valueClassName="!text-floor">
+              {formatUsd(floorUsd)} per token
+            </DetailRow>
+          </>
         )}
+      </dl>
+
+      {side === "buy" ? (
+        <button
+          type="button"
+          className="btn btn-primary btn-lg mt-4 h-auto min-h-[58px] w-full whitespace-normal py-2.5 text-center disabled:opacity-90 disabled:shadow-none"
+          disabled={!canSubmit}
+          aria-busy={pending}
+          onClick={onSubmit}
+        >
+          <BuyButtonLabel label={buyButtonLabel(buyPriceUsd, floorUsd)} />
+        </button>
+      ) : (
+        <button type="button" className="btn btn-primary btn-lg mt-4 w-full disabled:opacity-90 disabled:shadow-none" disabled={!canSubmit} aria-busy={pending} onClick={onSubmit}>
+          {pending ? "Sending…" : `Sell $${launch.symbol}`}
+        </button>
+      )}
+      <div className="mt-3 space-y-2">
         {!gate.ready ? <p className="field-hint">{gate.reason}</p> : null}
-        {side === "buy" ? (
-          <p className="field-hint">
-            {exactQuote
-              ? "Exact DAMM v2 quote at the latest on-chain state; price and max loss are this buy's average price, pool fee and price impact included"
-              : "Estimate at the spot price, before price impact, slippage and route fees"}{" "}
-            (max slippage 1%). If
-            the price falls to the floor, redeeming these tokens returns about{" "}
-            {tokensOut > 0 ? formatUsd(atFloorUsd) : "the floor value"} after the exit fee.
-          </p>
-        ) : null}
+        <FinePrint summary={side === "buy" ? (exactQuote ? "Exact pool quote, max slippage 1%" : "Estimates at spot, max slippage 1%") : "Max slippage 1%"}>
+          {side === "buy" ? (
+            <p>
+              {exactQuote
+                ? "Exact DAMM v2 quote at the latest on-chain state; price and max loss are this buy's average price, pool fee and price impact included"
+                : "Estimate at the spot price, before price impact, slippage and route fees"}{" "}
+              (max slippage 1%). If the price falls to the floor, redeeming these tokens returns about{" "}
+              {tokensOut > 0 ? formatUsd(atFloorUsd) : "the floor value"} after the exit fee.
+            </p>
+          ) : null}
+          <p>{venueText}</p>
+        </FinePrint>
         <TxProgress flow={flow} />
         {flow.status === "idle" && message ? (
-          <p role="status" className="rounded-lg bg-sunken px-3 py-2 text-sm text-ink-2">
+          <p role="status" className="tile-soft px-3.5 py-2.5 text-sm text-ink-2">
             {message}
           </p>
         ) : null}

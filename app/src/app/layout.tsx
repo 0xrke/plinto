@@ -4,9 +4,8 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { SITE_URL } from "@/lib/config";
 import { AppProviders } from "@/components/providers/AppProviders";
-import { SiteHeader } from "@/components/layout/SiteHeader";
+import { AppShell } from "@/components/layout/AppShell";
 import { SiteFooter } from "@/components/layout/SiteFooter";
-import { Chrome } from "@/components/layout/Chrome";
 
 // Self-hosted variable fonts, so a build never waits on a font host.
 const display = localFont({
@@ -39,7 +38,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#efe9fb",
+  themeColor: "#efeafb",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -49,19 +48,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <AppProviders>
           <a
             href="#main"
-            className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-surface focus:px-3 focus:py-2"
+            className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-xl focus:bg-surface focus:px-4 focus:py-2.5 focus:font-semibold focus:shadow-pop"
           >
             Skip to content
           </a>
-          <Chrome>
-            <SiteHeader />
-          </Chrome>
-          <main id="main" className="flex-1">
-            {children}
-          </main>
-          <Chrome>
-            <SiteFooter />
-          </Chrome>
+          <AppShell footer={<SiteFooter />}>{children}</AppShell>
         </AppProviders>
       </body>
     </html>
