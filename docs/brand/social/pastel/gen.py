@@ -59,21 +59,13 @@ MARK_FLOOR = "M14 50.5h36v-8l-36 4.5z"
 MARK_LINE = "M13.7 37.7L25.1 27.4l8 5.7L50.3 17.1"
 
 
-TILE = "#1c1c3d"  # the mark's tile: lighter than midnight, lifted by a violet glow
-_mark_n = [0]
+TILE = "#1c1c3d"  # the mark's tile: a lighter indigo than the midnight ground
 
 
 def mark(x, y, size, bg=TILE, floor=MINT_DARK, line="#ffffff", dot=BUTTER, rx=18):
     s = size / 64
-    _mark_n[0] += 1
-    gid = f"mg{_mark_n[0]}"
     dot_svg = f'<circle cx="50.3" cy="17.1" r="4.2" fill="{dot}"/>' if dot else ""
-    bg_svg = (
-        f'<radialGradient id="{gid}" cx="0.78" cy="0.12" r="0.9"><stop offset="0" stop-color="#5b45d6" stop-opacity="0.55"/>'
-        f'<stop offset="1" stop-color="#5b45d6" stop-opacity="0"/></radialGradient>'
-        f'<rect width="64" height="64" rx="{rx}" fill="{bg}"/><rect width="64" height="64" rx="{rx}" fill="url(#{gid})"/>'
-        if bg else ""
-    )
+    bg_svg = f'<rect width="64" height="64" rx="{rx}" fill="{bg}"/>' if bg else ""
     return (
         f'<g transform="translate({x} {y}) scale({s:.5f})">{bg_svg}'
         f'<path d="{MARK_FLOOR}" fill="{floor}" stroke="{floor}" stroke-width="4" stroke-linejoin="round"/>'
@@ -118,13 +110,9 @@ def avatar(bg_svg, floor, line, dot, defs=""):
     return svg(1000, 1000, body, defs)
 
 
-AV_GLOW = (
-    '<radialGradient id="avg" cx="0.78" cy="0.12" r="0.9"><stop offset="0" stop-color="#5b45d6" stop-opacity="0.55"/>'
-    '<stop offset="1" stop-color="#5b45d6" stop-opacity="0"/></radialGradient>'
-)
 write(
     "avatar-pastel-midnight.svg",
-    avatar(f'<rect width="1000" height="1000" fill="{TILE}"/><rect width="1000" height="1000" fill="url(#avg)"/>', MINT_DARK, "#ffffff", BUTTER, AV_GLOW),
+    avatar(f'<rect width="1000" height="1000" fill="{TILE}"/>', MINT_DARK, "#ffffff", BUTTER),
 )
 write(
     "avatar-pastel-wash.svg",
