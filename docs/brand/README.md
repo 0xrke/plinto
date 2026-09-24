@@ -73,7 +73,7 @@ the end of the price line on midnight grounds.
 
 | File | Size | Use |
 |---|---|---|
-| `avatar-pastel-midnight.png` | 400×400 | Profile picture: midnight, mint floor, butter dot |
+| `avatar-pastel-midnight.png` | 400×400 | Profile picture: indigo `#1c1c3d` with a violet glow, mint floor, butter dot |
 | `avatar-pastel-wash.png` | 400×400 | Profile picture on the pastel wash |
 | `avatar-pastel-butter.png` | 400×400 | Profile picture on butter, the loudest of the three |
 | `header-pastel-wordmark.png` | 1500×500 | Header: mark, wordmark and tagline over the price-and-floor line, on the wash |

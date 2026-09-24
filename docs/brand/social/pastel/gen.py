@@ -59,10 +59,21 @@ MARK_FLOOR = "M14 50.5h36v-8l-36 4.5z"
 MARK_LINE = "M13.7 37.7L25.1 27.4l8 5.7L50.3 17.1"
 
 
-def mark(x, y, size, bg=MIDNIGHT, floor=MINT_DARK, line="#ffffff", dot=BUTTER, rx=18):
+TILE = "#1c1c3d"  # the mark's tile: lighter than midnight, lifted by a violet glow
+_mark_n = [0]
+
+
+def mark(x, y, size, bg=TILE, floor=MINT_DARK, line="#ffffff", dot=BUTTER, rx=18):
     s = size / 64
+    _mark_n[0] += 1
+    gid = f"mg{_mark_n[0]}"
     dot_svg = f'<circle cx="50.3" cy="17.1" r="4.2" fill="{dot}"/>' if dot else ""
-    bg_svg = f'<rect width="64" height="64" rx="{rx}" fill="{bg}"/>' if bg else ""
+    bg_svg = (
+        f'<radialGradient id="{gid}" cx="0.78" cy="0.12" r="0.9"><stop offset="0" stop-color="#5b45d6" stop-opacity="0.55"/>'
+        f'<stop offset="1" stop-color="#5b45d6" stop-opacity="0"/></radialGradient>'
+        f'<rect width="64" height="64" rx="{rx}" fill="{bg}"/><rect width="64" height="64" rx="{rx}" fill="url(#{gid})"/>'
+        if bg else ""
+    )
     return (
         f'<g transform="translate({x} {y}) scale({s:.5f})">{bg_svg}'
         f'<path d="{MARK_FLOOR}" fill="{floor}" stroke="{floor}" stroke-width="4" stroke-linejoin="round"/>'
@@ -107,7 +118,14 @@ def avatar(bg_svg, floor, line, dot, defs=""):
     return svg(1000, 1000, body, defs)
 
 
-write("avatar-pastel-midnight.svg", avatar(f'<rect width="1000" height="1000" fill="{MIDNIGHT}"/>', MINT_DARK, "#ffffff", BUTTER))
+AV_GLOW = (
+    '<radialGradient id="avg" cx="0.78" cy="0.12" r="0.9"><stop offset="0" stop-color="#5b45d6" stop-opacity="0.55"/>'
+    '<stop offset="1" stop-color="#5b45d6" stop-opacity="0"/></radialGradient>'
+)
+write(
+    "avatar-pastel-midnight.svg",
+    avatar(f'<rect width="1000" height="1000" fill="{TILE}"/><rect width="1000" height="1000" fill="url(#avg)"/>', MINT_DARK, "#ffffff", BUTTER, AV_GLOW),
+)
 write(
     "avatar-pastel-wash.svg",
     avatar('<rect width="1000" height="1000" fill="url(#aw)"/>', FLOOR, MIDNIGHT, None, wash_defs("aw", 1000, 1000)),
@@ -167,7 +185,7 @@ body = (
     f'<rect width="3000" height="1000" fill="{MIDNIGHT}"/>'
     '<ellipse cx="2300" cy="120" rx="1100" ry="420" fill="url(#glow)"/>'
     + chart(IRIS, MINT_DARK, MINT_DARK, "#6b6b85", MINT_DARK, BUTTER, floor_opacity=0.16)
-    + lockup(1500, 190, 250, 210, 58, "#ffffff", "#b9b9d0", {"bg": "#1c1c3d"})
+    + lockup(1500, 190, 250, 210, 58, "#ffffff", "#b9b9d0", {})
 )
 glow = (
     '<radialGradient id="glow"><stop offset="0" stop-color="#5b45d6" stop-opacity="0.38"/>'
