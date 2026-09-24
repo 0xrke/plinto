@@ -24,12 +24,16 @@ CH_W, CH_H = CARD_W - 2 * PAD, 300  # chart box inside each card
 CH_Y = 150  # chart top, card-local
 
 # Same launch shape on both sides: presale, a pump at the open, then the sell-off.
-LEFT = "M0 250 L150 236 C190 150, 215 40, 250 44 C290 48, 300 170, 340 160 C380 150, 390 230, 430 236 C480 244, 520 290, 592 300"
-# Right: the sell-off stops at the floor, bounces, and trades on above it.
-FLOOR_EDGE = "M150 232 C300 228, 450 222, 592 212"
+# A launchpad curve: it starts near zero, climbs slowly, goes vertical, and dumps.
+LEFT = (
+    "M0 297 C140 296, 210 288, 245 250 C268 222, 278 90, 292 44 C300 22, 312 30, 320 90 "
+    "C330 170, 350 230, 380 240 C420 252, 440 280, 480 290 C520 298, 560 300, 592 300"
+)
+# Right: the same climb; the curve graduates at the top, the floor appears, the dump stops on it.
+FLOOR_EDGE = "M292 236 C390 232, 490 222, 592 212"
 RIGHT = (
-    "M0 250 L150 236 C190 150, 215 40, 250 44 C290 48, 300 170, 340 160 C380 150, 390 222, 420 224 "
-    "C450 226, 470 150, 505 140 C540 130, 560 100, 592 84"
+    "M0 297 C140 296, 210 288, 245 250 C268 222, 278 90, 292 44 C300 22, 312 30, 320 90 "
+    "C330 160, 360 222, 400 229 C440 232, 460 160, 500 146 C540 132, 565 104, 592 84"
 )
 
 
@@ -57,10 +61,10 @@ left_chart = (
 fl_label, _ = label("FLOOR", 470, 262, 18, MINT_DARK, wght=700, tracking=0.16)
 right_chart = (
     f'<line x1="0" y1="300" x2="{CH_W}" y2="300" stroke="#3a3a63" stroke-width="3" stroke-dasharray="8 10"/>'
-    f'<path d="{FLOOR_EDGE} L592 300 L150 300 Z" fill="{MINT_DARK}" fill-opacity="0.22"/>'
+    f'<path d="{FLOOR_EDGE} L592 300 L292 300 Z" fill="{MINT_DARK}" fill-opacity="0.22"/>'
     f'<path d="{FLOOR_EDGE}" fill="none" stroke="{MINT_DARK}" stroke-width="6" stroke-linecap="round"/>'
     f'<path d="{RIGHT}" fill="none" stroke="{IRIS}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>'
-    f'<circle cx="420" cy="224" r="10" fill="{MINT_DARK}"/>'
+    f'<circle cx="400" cy="229" r="10" fill="{MINT_DARK}"/>'
     f'<circle cx="592" cy="84" r="12" fill="{BUTTER}"/>'
     + fl_label
 )
