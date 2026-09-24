@@ -17,6 +17,7 @@ import { PhaseBadge } from "@/components/ui/PhaseBadge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { QuoteChip } from "@/components/ui/QuoteChip";
 import { TokenAvatar } from "@/components/ui/TokenAvatar";
+import { TokenCover } from "@/components/ui/TokenCover";
 import { CrankPanel } from "./CrankPanel";
 import { Disclosures } from "./Disclosures";
 import { FloorMeter } from "./FloorMeter";
@@ -92,27 +93,32 @@ function TokenHeader({ launch }: { launch: LaunchSummary }) {
   }
   return (
     <header className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-start gap-4">
-        <TokenAvatar symbol={launch.symbol} imageUrl={launch.imageUrl} size={56} />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="display text-[1.75rem] text-ink sm:text-[2.125rem]">{launch.name}</h1>
-            <PhaseBadge phase={launch.phase} />
+      <div className="card overflow-hidden">
+        <TokenCover symbol={launch.symbol} imageUrl={launch.imageUrl} className="h-28 sm:h-44" />
+        <div className="flex flex-col gap-3 px-5 pb-5 sm:flex-row sm:items-end sm:gap-5 sm:px-6 sm:pb-6">
+          <div className="relative -mt-11 sm:-mt-12">
+            <TokenAvatar symbol={launch.symbol} imageUrl={launch.imageUrl} size={88} ring />
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-3">
-            <span className="font-semibold text-ink-2">${launch.symbol}</span>
-            <button
-              type="button"
-              onClick={copyMint}
-              className="font-mono text-xs hover:text-ink"
-              title={launch.mint}
-              aria-label={`Copy mint address ${launch.mint}`}
-            >
-              {copied ? "Copied" : truncateAddress(launch.mint, 5)}
-            </button>
-            <span className="inline-flex items-center gap-1.5">
-              Quote <QuoteChip symbol={launch.quote.asset.symbol} volatility={launch.quote.asset.volatility} />
-            </span>
+          <div className="min-w-0 flex-1 sm:pt-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="display text-[1.75rem] text-ink sm:text-[2.125rem]">{launch.name}</h1>
+              <PhaseBadge phase={launch.phase} />
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-3">
+              <span className="font-semibold text-ink-2">${launch.symbol}</span>
+              <button
+                type="button"
+                onClick={copyMint}
+                className="font-mono text-xs hover:text-ink"
+                title={launch.mint}
+                aria-label={`Copy mint address ${launch.mint}`}
+              >
+                {copied ? "Copied" : truncateAddress(launch.mint, 5)}
+              </button>
+              <span className="inline-flex items-center gap-1.5">
+                Quote <QuoteChip symbol={launch.quote.asset.symbol} volatility={launch.quote.asset.volatility} />
+              </span>
+            </div>
           </div>
         </div>
       </div>

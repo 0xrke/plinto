@@ -7,6 +7,7 @@ import { PhaseBadge } from "@/components/ui/PhaseBadge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { QuoteChip } from "@/components/ui/QuoteChip";
 import { TokenAvatar } from "@/components/ui/TokenAvatar";
+import { TokenCover } from "@/components/ui/TokenCover";
 import { FloorMeter } from "@/components/token/FloorMeter";
 
 export function LaunchCard({ launch }: { launch: LaunchSummary }) {
@@ -18,18 +19,19 @@ export function LaunchCard({ launch }: { launch: LaunchSummary }) {
   const maxLoss = maxLossFraction(launch.priceUsd, floorUsd);
 
   return (
-    <article className="card group relative flex min-w-0 flex-col gap-4 p-4 transition-shadow hover:shadow-md sm:p-5">
-      <header className="flex items-start gap-3">
-        <TokenAvatar symbol={launch.symbol} imageUrl={launch.imageUrl} size={44} />
-        <div className="min-w-0 flex-1">
-          <h3 className="truncate text-base font-semibold text-ink">
-            <Link href={`/t/${launch.mint}`} className="after:absolute after:inset-0 after:content-['']">
-              {launch.name}
-            </Link>
-          </h3>
-          <p className="text-sm text-ink-3">${launch.symbol}</p>
-        </div>
+    <article className="card group relative flex min-w-0 flex-col gap-4 overflow-hidden p-4 transition-shadow hover:shadow-md sm:p-5">
+      <TokenCover symbol={launch.symbol} imageUrl={launch.imageUrl} className="-mx-4 -mt-4 h-20 sm:-mx-5 sm:-mt-5 sm:h-24" />
+      <div className="relative -mt-12 flex items-end justify-between gap-3">
+        <TokenAvatar symbol={launch.symbol} imageUrl={launch.imageUrl} size={56} ring />
         <PhaseBadge phase={launch.phase} />
+      </div>
+      <header className="-mt-2 min-w-0">
+        <h3 className="display truncate text-lg text-ink">
+          <Link href={`/t/${launch.mint}`} className="after:absolute after:inset-0 after:content-['']">
+            {launch.name}
+          </Link>
+        </h3>
+        <p className="text-sm text-ink-3">${launch.symbol}</p>
       </header>
 
       {graduated ? (

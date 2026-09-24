@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LaunchList } from "@/components/launch/LaunchList";
+import { FloorWord } from "@/components/ui/FloorWord";
 
 const STEPS = [
   {
@@ -23,7 +24,7 @@ export default function HomePage() {
         <div>
           <p className="eyebrow">Launchpad on Meteora DBC</p>
           <h1 className="display mt-3 text-[2rem] leading-[1.05] text-ink sm:text-[2.5rem] lg:text-[3rem]">
-            Token launches with a floor in tokenized S&amp;P&nbsp;500
+            Token launches with a <FloorWord /> in tokenized S&amp;P&nbsp;500
           </h1>
           <p className="mt-4 max-w-xl text-base leading-relaxed text-ink-2 sm:text-lg">
             A large share of every raise becomes a redeemable vault in stocks the moment the market opens. The

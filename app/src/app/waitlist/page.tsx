@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { PhaseChart } from "@/components/waitlist/PhaseChart";
 import { WaitlistForm } from "@/components/waitlist/WaitlistForm";
+import { FloorWord } from "@/components/ui/FloorWord";
 
 export const metadata: Metadata = {
   // Absolute: this page stands on its own, without the app's title template behind it.
@@ -32,7 +33,7 @@ const PHASES = [
 
 export default function WaitlistPage() {
   return (
-    <div className="relative flex min-h-dvh flex-col bg-surface px-4 sm:px-6">
+    <div className="relative flex min-h-dvh flex-col px-4 sm:px-6">
       <div
         aria-hidden
         className="pointer-events-none fixed inset-x-0 bottom-0 -z-10 h-[55%]"
@@ -45,10 +46,10 @@ export default function WaitlistPage() {
       <nav className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 pt-6">
         <span className="flex items-center gap-2.5">
           <svg viewBox="0 0 64 64" className="h-8 w-8" aria-hidden>
-            <rect width="64" height="64" rx="16" fill="var(--color-ink)" />
+            <rect width="64" height="64" rx="16" fill="var(--color-brand-tile)" />
             <path
-              fill="var(--color-floor)"
-              stroke="var(--color-floor)"
+              fill="var(--color-mint)"
+              stroke="var(--color-mint)"
               strokeWidth="4"
               strokeLinejoin="round"
               d="M14 50.5h36v-8l-36 4.5z"
@@ -61,6 +62,7 @@ export default function WaitlistPage() {
               strokeLinecap="round"
               strokeLinejoin="round"
             />
+            <circle cx="50.3" cy="17.1" r="4.2" fill="var(--color-butter)" />
           </svg>
           <span className="font-serif text-2xl tracking-tight">plinto</span>
         </span>
@@ -69,8 +71,8 @@ export default function WaitlistPage() {
 
       <main className="mx-auto grid w-full max-w-5xl flex-1 items-center gap-10 py-8 lg:grid-cols-[1.02fr_0.98fr] lg:gap-14">
         <section>
-          <h1 className="max-w-[13ch] font-serif text-[clamp(2.4rem,5.4vw,3.6rem)] leading-[1.03] tracking-tight">
-            Token launches with a <em className="italic">floor</em>
+          <h1 className="max-w-[13ch] font-serif text-[clamp(2.4rem,5.4vw,3.6rem)] font-bold leading-[1.08] tracking-tight">
+            Token launches with a <FloorWord />
           </h1>
           <p className="mt-4 max-w-[44ch] text-ink-2">
             Part of every raise is locked in tokenized stocks the moment the market opens, and any holder can

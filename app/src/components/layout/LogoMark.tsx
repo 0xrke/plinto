@@ -1,17 +1,24 @@
-/** Logo: a rising price line resting on a solid floor. */
+/** Logo: a rising price line over a floor that thickens to the right, on the indigo tile. */
 export function LogoMark({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 28 28" className={className} aria-hidden focusable="false">
-      <rect x="0" y="0" width="28" height="28" rx="7" fill="var(--color-brand)" />
+    <svg viewBox="0 0 64 64" className={className} aria-hidden focusable="false">
+      <rect width="64" height="64" rx="16" fill="var(--color-brand-tile)" />
       <path
-        d="M6 16.5 L11 12 L14.5 14.5 L22 7.5"
+        d="M14 50.5h36v-8l-36 4.5z"
+        fill="var(--color-mint)"
+        stroke="var(--color-mint)"
+        strokeWidth="4"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M13.7 37.7L25.1 27.4l8 5.7L50.3 17.1"
         fill="none"
         stroke="#ffffff"
-        strokeWidth="2.2"
+        strokeWidth="5"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <rect x="5" y="19.5" width="18" height="3.5" rx="1.2" fill="#7fd1ad" />
+      <circle cx="50.3" cy="17.1" r="4.2" fill="var(--color-butter)" />
     </svg>
   );
 }

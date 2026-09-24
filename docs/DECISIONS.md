@@ -203,3 +203,17 @@ Format: date — decision · alternatives · reason.
   the failure mode, and it costs only the retry window when something is genuinely wrong.
 - **The preflight must model a resumed run,** not just a fresh one: a wallet whose spending step already landed no
   longer needs its balance (`--spyx-spent`, `--spent-roles`).
+
+## 2026-09-24 — Visual style: the Pastel direction
+
+- **The app takes the Pastel direction** chosen on the style canvas: a pink-lavender-sky wash, white cards,
+  midnight `#0b0b24`, a teal-green floor `#16735c` (mint `#7fe0bf` on dark), a coral risk band, Outfit for display
+  and Plus Jakarta Sans for UI. · The editorial and broadsheet directions · The founder found them too stiff for an
+  audience that includes memecoin launchers; Pastel reads as friendly without being a casino.
+- **Fonts are self-hosted** (`app/src/fonts`, OFL) through `next/font/local`. · Google Fonts via `next/font/google`
+  · A build must never wait on a font host.
+- **Token covers are built from the token's own logo:** the logo scaled up and blurred over a pastel tone picked
+  from the symbol; a token without a logo gets the tone alone. · A second, creator-uploaded cover image · That needs
+  a new metadata field, form input and storage a day before the deadline; the automatic cover works for every
+  token, including ones already launched. An uploaded cover can replace it later.
+- **"floor" in headlines sits on the brand underline** (a bar whose top edge rises to the right, like the mark).

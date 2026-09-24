@@ -1,44 +1,49 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
-    "Noto Sans", sans-serif;
+  /* Plus Jakarta Sans for UI and numbers, Outfit for display; both self-hosted (see layout.tsx). */
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  /* Display face for landing pages; system serifs only, so a build never waits on a font host. */
-  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, ui-serif, serif;
+  /* Display face for page titles and card headings. Kept under the `serif` name the pages already use. */
+  --font-serif: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
 
-  /* Neutrals: a white page, cards lifted off it by a hairline and a soft shadow. */
-  --color-canvas: #ffffff;
+  /* Neutrals (Pastel direction): white cards and windows over a pink-lavender-sky wash. */
+  --color-canvas: #f4f1fb;
   --color-surface: #ffffff;
-  --color-sunken: #f5f8f5;
-  --color-line: #e7eae7;
-  --color-line-strong: #d2d8d2;
-  --color-ink: #13202d;
-  --color-ink-2: #455260;
-  --color-ink-3: #5c6570;
+  --color-sunken: #f5f3fd;
+  --color-line: #e6e2f3;
+  --color-line-strong: #d3cee8;
+  --color-ink: #14142b;
+  --color-ink-2: #4a4a66;
+  --color-ink-3: #5f5f7a;
 
-  /* Brand: deep navy for structure and primary actions */
-  --color-brand: #16324f;
-  --color-brand-hover: #0e243b;
-  --color-brand-soft: #e7edf4;
+  /* Brand: midnight for structure; the mark's tile is the lighter indigo */
+  --color-brand: #0b0b24;
+  --color-brand-hover: #1c1c3d;
+  --color-brand-soft: #ece8fd;
+  --color-brand-tile: #1c1c3d;
+  --color-violet: #5b45d6;
+  --color-butter: #f3e46f;
 
-  /* The floor: a solid, calm green */
-  --color-floor: #1f6f55;
-  --color-floor-strong: #155240;
-  --color-floor-soft: #dcede5;
+  /* The floor: teal-green on light grounds, mint on dark ones */
+  --color-floor: #16735c;
+  --color-floor-strong: #0f5a48;
+  --color-floor-soft: #d8f5ea;
+  --color-mint: #7fe0bf;
 
-  /* Risk (distance between price and floor): rust, not alarm red */
-  --color-risk: #9a3d14;
-  --color-risk-soft: #fbece2;
-  --color-risk-line: #e3a47f;
+  /* Risk (distance between price and floor): coral and a rose hatch, not alarm red */
+  --color-risk: #b8325a;
+  --color-risk-soft: #ffe4ec;
+  --color-risk-line: #e46a8c;
 
   /* Phases */
-  --color-presale: #1f4f94;
-  --color-presale-soft: #e4ecf8;
-  --color-graduating: #6a4a9c;
-  --color-graduating-soft: #efe9f7;
+  --color-presale: #1f5fae;
+  --color-presale-soft: #dcebff;
+  --color-graduating: #6e5400;
+  --color-graduating-soft: #fbf1b8;
 
-  --color-focus: #2a78d6;
+  --color-focus: #5b45d6;
 }
 
 @layer base {
@@ -56,7 +61,7 @@
     -webkit-text-size-adjust: 100%;
   }
   body {
-    background: var(--color-canvas);
+    background: var(--color-canvas) linear-gradient(135deg, #fbdde8 0%, #e8defb 50%, #d9ebfb 100%);
     color: var(--color-ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -79,14 +84,14 @@
   /* Display face for page titles and card headings; the body stays on the sans. */
   .display {
     font-family: var(--font-serif);
-    font-weight: 400;
-    letter-spacing: -0.015em;
+    font-weight: 700;
+    letter-spacing: -0.02em;
   }
   .card {
     background: var(--color-surface);
     border: 1px solid var(--color-line);
-    border-radius: 1rem;
-    box-shadow: 0 1px 2px rgba(19, 32, 45, 0.04), 0 8px 24px rgba(19, 32, 45, 0.04);
+    border-radius: 1.5rem;
+    box-shadow: 0 1px 2px rgba(20, 20, 43, 0.04), 0 12px 32px rgba(91, 69, 214, 0.08);
   }
   .btn {
     display: inline-flex;
@@ -174,7 +179,7 @@
     background-color: var(--color-risk-soft);
     background-image: repeating-linear-gradient(
       135deg,
-      rgba(154, 61, 20, 0.22) 0 2px,
+      rgba(228, 106, 140, 0.55) 0 2px,
       transparent 2px 7px
     );
   }

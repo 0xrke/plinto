@@ -1,11 +1,26 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import localFont from "next/font/local";
 import "./globals.css";
 import { SITE_URL } from "@/lib/config";
 import { AppProviders } from "@/components/providers/AppProviders";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { Chrome } from "@/components/layout/Chrome";
+
+// Self-hosted variable fonts, so a build never waits on a font host.
+const display = localFont({
+  src: "../fonts/Outfit-Variable.woff2",
+  weight: "100 900",
+  variable: "--font-outfit",
+  display: "swap",
+});
+const sans = localFont({
+  src: "../fonts/PlusJakartaSans-Variable.woff2",
+  weight: "200 800",
+  variable: "--font-jakarta",
+  display: "swap",
+});
 
 const TITLE = "StockFloor · Launches with a floor in tokenized stocks";
 const DESCRIPTION =
@@ -24,12 +39,12 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#f5f6f3",
+  themeColor: "#efe9fb",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${display.variable} ${sans.variable}`}>
       <body className="min-h-dvh flex flex-col">
         <AppProviders>
           <a

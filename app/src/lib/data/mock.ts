@@ -50,7 +50,8 @@ function buildMockLaunches(): LaunchSummary[] {
       vault: "EBuvn9BMBJZToJEn3BDUT9U5mQiR5mdFxk1mTu7g73AA",
       name: "Harbor Coffee Co-op",
       symbol: "HRBR",
-      imageUrl: null,
+      // A real logo, so demo data shows the cover built from it; the other launches show the fallback.
+      imageUrl: "/token/harbor-roasters.png",
       creator: "24KdQtAt1oMCSwVexyNvzfeMbeSmEEdk1sU8jbv5BrBq",
       createdAt: Date.UTC(2026, 8, 12, 16, 20),
       baseDecimals: 6,

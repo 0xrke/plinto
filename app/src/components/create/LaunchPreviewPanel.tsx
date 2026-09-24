@@ -4,6 +4,7 @@ import { BASE_DECIMALS } from "@/lib/config";
 import { EMPTY, formatMaxLoss, formatPercent, formatTokenAmount, formatUsd } from "@/lib/format";
 import { quoteRawToUsd } from "@/lib/metrics";
 import { TokenAvatar } from "@/components/ui/TokenAvatar";
+import { TokenCover } from "@/components/ui/TokenCover";
 import { CurveSketch } from "./CurveSketch";
 
 export function LaunchPreviewPanel({
@@ -36,8 +37,11 @@ export function LaunchPreviewPanel({
 
   return (
     <section aria-labelledby="preview-heading" className="card overflow-hidden" aria-live="polite">
-      <header className="flex items-center gap-3 border-b border-line bg-sunken/60 px-5 py-4">
-        <TokenAvatar symbol={displaySymbol} imageUrl={imageUrl} size={40} />
+      <TokenCover symbol={displaySymbol} imageUrl={imageUrl} className="h-20" />
+      <header className="flex items-end gap-3 border-b border-line px-5 pb-4">
+        <div className="relative -mt-7 shrink-0">
+          <TokenAvatar symbol={displaySymbol} imageUrl={imageUrl} size={56} ring />
+        </div>
         <div className="min-w-0">
           <h2 id="preview-heading" className="truncate font-semibold text-ink">
             {name.trim() || "Your token"}
