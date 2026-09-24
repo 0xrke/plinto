@@ -79,6 +79,7 @@ the end of the price line on midnight grounds.
 | `header-pastel-wordmark.png` | 1500×500 | Header: mark, wordmark and tagline over the price-and-floor line, on the wash |
 | `header-pastel-midnight.png` | 1500×500 | The same on midnight, iris price line, butter dot at the latest price |
 | `header-pastel-card.png` | 1500×500 | Header: the midnight card with "The floor ships on day one.", a floor meter and a butter tab |
+| `header-pastel-cover.png` | 1500×500 | **Chosen header.** Midnight, "Token launches with a floor" with a mint wedge under "floor", the labelled phase chart. Pairs with `avatar-pastel-midnight.png` |
 
 `gen.py` regenerates the SVGs. It needs `fonttools` and the variable fonts `Outfit[wght].ttf` and
 `PlusJakartaSans[wght].ttf` from Google Fonts saved next to it as `Outfit.ttf` and `Jakarta.ttf`; rasterise with

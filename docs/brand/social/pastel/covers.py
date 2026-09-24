@@ -174,3 +174,13 @@ body = (
 )
 write("cover-e-midnight-type.svg", svg(W, H, body, glow))
 print("covers ok")
+
+# Chosen: B's midnight look with A's slogan.
+body = (
+    f'<rect width="3000" height="1000" fill="{MIDNIGHT}"/>'
+    '<ellipse cx="2300" cy="120" rx="1100" ry="420" fill="url(#g)"/>'
+    + phase_chart(IRIS, MINT_DARK, MINT_DARK, 0.16, "#6b6b85", MINT_DARK, "#a9a9c6", "#34345c", BUTTER)
+    + centred_headline([("Token launches with a ", "#ffffff"), ("floor", "#ffffff")], 1500, 330, 190, "floor", MINT_DARK)
+)
+write("header-pastel-cover.svg", svg(W, H, body, glow))
+print("final cover ok")
