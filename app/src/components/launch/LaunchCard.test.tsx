@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { MockDataSource } from "@/lib/data/mock";
+import { formatUsd } from "@/lib/format";
 import { LaunchCard } from "./LaunchCard";
 
 afterEach(cleanup);
@@ -42,6 +43,10 @@ describe("<LaunchCard />", () => {
     expect(screen.getByText("62%")).toBeTruthy();
     expect(screen.getByText("Floor at graduation (est.)")).toBeTruthy();
     expect(screen.queryByText(/Max loss/)).toBeNull();
+    // The floor per $100 at listing sits next to the vault share.
+    expect(screen.getByRole("article").textContent).toContain(
+      `Vault share 50% (floor ${formatUsd(tide.floorPer100AtListingUsd!)} per $100 at listing).`,
+    );
   });
 
   it("never shows an incomplete curve as 100% complete", () => {

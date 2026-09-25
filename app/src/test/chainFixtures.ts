@@ -18,6 +18,7 @@ import {
   DAMM_V2_MIGRATION_CONFIGS,
   floorQ64,
   freshDbcState,
+  LAUNCH_VERSION_FEE_SPLIT,
   type AccountData,
   type ChainReader,
   type DammV2Pool,
@@ -69,10 +70,11 @@ export type FixturePhase = "presale" | "graduating" | "graduated" | "redeemable"
 
 /**
  * A LaunchState in the given phase. Presale: the fresh pool with `quoteReserve` added. Later phases
- * move the reserve to the threshold and set the migration flags; the vault holds the partner fee
- * once "redeemable".
+ * move the reserve to the threshold and set the migration flags; once "redeemable" the vault holds
+ * its part of the partner migration fee (launch v3, the default: the fee minus the platform and
+ * creator 5% cuts; `version: 2`: the whole fee, the legacy model).
  */
-export function launchState(opts: { phase?: FixturePhase; input?: Partial<LaunchInput>; quoteReserve?: bigint; createdAt?: bigint; creator?: PublicKey } = {}) {
+export function launchState(opts: { phase?: FixturePhase; input?: Partial<LaunchInput>; quoteReserve?: bigint; createdAt?: bigint; creator?: PublicKey; version?: number } = {}) {
   const phase = opts.phase ?? "presale";
   const creator = opts.creator ?? Keypair.generate().publicKey;
   const input = launchInput(opts.input);
@@ -96,12 +98,15 @@ export function launchState(opts: { phase?: FixturePhase; input?: Partial<Launch
     migrationProgress: migrated ? 3 : curveComplete ? 2 : 0,
   };
   const baseSupply = built.curve.baseSupplyAtGraduationRaw;
-  const vaultBalance = phase === "redeemable" ? built.curve.partnerMigrationFee : 0n;
+  const version = opts.version ?? 3;
+  const feeSplitEnabled = version >= LAUNCH_VERSION_FEE_SPLIT;
+  const vaultAtGraduation = feeSplitEnabled ? built.curve.vaultAtGraduation : built.curve.partnerMigrationFee;
+  const vaultBalance = phase === "redeemable" ? vaultAtGraduation : 0n;
   const dammConfig = DAMM_V2_MIGRATION_CONFIGS[fresh.config.migrationFeeOption]!;
   const state: LaunchState = {
     address: a.launch,
     launch: {
-      version: 2,
+      version,
       bump: 255,
       claimerBump: 255,
       vaultAuthorityBump: 255,
@@ -123,9 +128,9 @@ export function launchState(opts: { phase?: FixturePhase; input?: Partial<Launch
       totalRedeemedBase: 0n,
       totalRedeemedQuote: 0n,
       totalExitFees: 0n,
-      totalPlatformQuote: 0n,
-      totalCreatorQuote: 0n,
-      feeSplitEnabled: false,
+      totalPlatformQuote: phase === "redeemable" && feeSplitEnabled ? built.curve.platformGraduationFee : 0n,
+      totalCreatorQuote: phase === "redeemable" && feeSplitEnabled ? built.curve.creatorGraduationBonus : 0n,
+      feeSplitEnabled,
     },
     keys: { config: a.config, pool: a.pool, baseMint: a.baseMint, quoteMint: a.quoteMint, quoteTokenProgram: a.quoteTokenProgram },
     claimer: a.claimer,
@@ -152,7 +157,7 @@ export function launchState(opts: { phase?: FixturePhase; input?: Partial<Launch
     floor: { vaultRaw: vaultBalance, supply: baseSupply, exitFeeBps: built.exitFeeBps, floorQ64: floorQ64(vaultBalance, baseSupply) },
     sqrtPriceX64: pool.sqrtPrice,
   };
-  return { state, built, input, creator };
+  return { state, built, input, creator, vaultAtGraduation };
 }
 
 /**
@@ -265,6 +270,8 @@ export function encodeLaunch(launch: LaunchAccount): Uint8Array {
   u64(view, o.totalRedeemedBase, launch.totalRedeemedBase);
   u64(view, o.totalRedeemedQuote, launch.totalRedeemedQuote);
   u64(view, o.totalExitFees, launch.totalExitFees);
+  u64(view, o.totalPlatformQuote, launch.totalPlatformQuote);
+  u64(view, o.totalCreatorQuote, launch.totalCreatorQuote);
   return data;
 }
 

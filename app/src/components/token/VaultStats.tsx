@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { LaunchSummary } from "@/lib/data/types";
 import { formatPercent, formatSignificantDown, formatTokenAmount, formatUsd, truncateAddress } from "@/lib/format";
-import { floorQuotePerToken, launchFloorUsd, quoteRawToUsd } from "@/lib/metrics";
+import { floorPer100NowUsd, floorQuotePerToken, launchFloorUsd, quoteRawToUsd } from "@/lib/metrics";
 import { IconTile, type Tone } from "@/components/ui/Tiles";
 import { LockIcon, PercentIcon, PieIcon, StepIcon, SupplyIcon, TrendIcon, VaultIcon } from "@/components/ui/icons";
 
@@ -58,6 +58,11 @@ export function VaultStats({ launch }: { launch: LaunchSummary }) {
   const symbol = quote.asset.symbol;
   const vaultUsd = quoteRawToUsd(launch.vaultRaw, quote);
   const floorQuote = floorQuotePerToken(launch.vaultRaw, launch.supplyRaw, launch.baseDecimals, quote);
+  const per100Now = floorPer100NowUsd(launch);
+  const per100 = [
+    launch.floorPer100AtListingUsd !== null ? `${formatUsd(launch.floorPer100AtListingUsd)} per $100 at listing` : null,
+    per100Now !== null ? `${formatUsd(per100Now)} per $100 at today's price` : null,
+  ].filter(Boolean);
 
   return (
     <section aria-labelledby="vault-heading" className="card p-5 sm:p-7">
@@ -119,6 +124,13 @@ export function VaultStats({ launch }: { launch: LaunchSummary }) {
               {launch.vaultSharePct}% <span className="text-[13px] font-medium text-ink-2">of the raise</span>
             </>
           }
+          sub={
+            per100.length > 0 ? (
+              <>
+                Floor back: <b className="font-bold text-floor">{per100.join(" · ")}</b>
+              </>
+            ) : undefined
+          }
         />
         <Item
           icon={<TrendIcon />}
@@ -140,8 +152,9 @@ export function VaultStats({ launch }: { launch: LaunchSummary }) {
             ).
           </p>
           <p className="text-[12.5px] text-ink-3">
-            In {symbol}, the floor per token only rises: through the vault share of trading fees, retained exit fees,
-            burned fees and dividends paid through the {symbol} multiplier. In USD it also moves with{" "}
+            In {symbol}, the floor per token only rises: through the vault&apos;s share of pool trading fees
+            {launch.feeSplit ? " (30% after Meteora's share)" : ""}, retained exit fees, burned fees and dividends paid
+            through the {symbol} multiplier. In USD it also moves with{" "}
             {quote.asset.underlying}.
           </p>
         </div>

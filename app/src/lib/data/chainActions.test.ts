@@ -575,7 +575,7 @@ describe("ChainLaunchActions.crank", () => {
       ["migrate", "done"],
     ]);
     expect(flow.steps.map((s) => s.label)).toEqual([
-      "Harvest the migration fee into the vault",
+      "Harvest the migration fee",
       "Harvest the curve surplus into the vault",
       "Migrate the pool to Meteora DAMM v2",
     ]);

@@ -59,6 +59,18 @@ export function projectedFloorUsd(launch: LaunchSummary): number | null {
   return floorUsdPerToken(p.vaultQuoteRaw, p.baseSupplyRaw, launch.baseDecimals, launch.quote);
 }
 
+/**
+ * Floor per $100 at today's price: USD that $100 of tokens bought at the current price redeems for at
+ * the floor, after the exit fee. Null until the floor is live (graduated and the migration fee in the
+ * vault) or without a price.
+ */
+export function floorPer100NowUsd(launch: LaunchSummary): number | null {
+  if (launch.phase !== "graduated" || !launch.migrationFeeHarvested || !(launch.priceUsd > 0)) return null;
+  const floor = launchFloorUsd(launch);
+  if (!(floor > 0)) return null;
+  return ((100 * floor) / launch.priceUsd) * (1 - launch.exitFeeBps / 10_000);
+}
+
 /** Presale progress toward the migration threshold, clamped to [0, 1]. */
 export function presaleProgress(launch: Pick<LaunchSummary, "quoteReserveRaw" | "thresholdQuoteRaw">): number {
   if (launch.thresholdQuoteRaw <= 0n) return 0;

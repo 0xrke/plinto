@@ -8,6 +8,7 @@ import { quoteLaunchTrade, quoteMarketSellUsd } from "./tradeQuote";
 import {
   buyAveragePriceUsd,
   buyButtonLabel,
+  floorPer100NowUsd,
   floorQuotePerToken,
   floorUsdPerToken,
   launchFloorUsd,
@@ -40,6 +41,9 @@ function launch(overrides: Partial<LaunchSummary> = {}): LaunchSummary {
     quote: market,
     preset: "gentle",
     vaultSharePct: 50,
+    feeSplit: true,
+    curveFeeBps: 25,
+    floorPer100AtListingUsd: 32.77,
     exitFeeBps: 200,
     phase: "graduated",
     thresholdQuoteRaw: 132_664_237n,
@@ -171,3 +175,20 @@ describe("buy labels with the buyer's own price impact", () => {
   });
 });
 
+
+describe("floorPer100NowUsd", () => {
+  it("is what $100 bought at today's price redeems for at the floor, after the exit fee", () => {
+    const l = launch();
+    const floor = launchFloorUsd(l);
+    expect(floorPer100NowUsd(l)).toBeCloseTo(((100 * floor) / l.priceUsd) * 0.98, 10);
+    // Price at the floor: $98 back per $100.
+    expect(floorPer100NowUsd(launch({ priceUsd: floor }))).toBeCloseTo(98, 10);
+  });
+
+  it("is null without a live floor or a price", () => {
+    expect(floorPer100NowUsd(launch({ phase: "presale" }))).toBeNull();
+    expect(floorPer100NowUsd(launch({ migrationFeeHarvested: false }))).toBeNull();
+    expect(floorPer100NowUsd(launch({ priceUsd: 0 }))).toBeNull();
+    expect(floorPer100NowUsd(launch({ vaultRaw: 0n }))).toBeNull();
+  });
+});

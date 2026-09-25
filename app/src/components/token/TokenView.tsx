@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { maxLossFraction } from "@stockfloor/sdk";
+import { CREATOR_GRADUATION_BONUS_PCT, LP_FEE_SPLIT_PCT, PLATFORM_GRADUATION_FEE_PCT } from "@/lib/config";
 import { useLaunch } from "@/lib/data/context";
 import type { LaunchSummary } from "@/lib/data/types";
 import { formatMaxLoss, formatMultiple, formatPercent, formatProgress, formatTokenAmount, formatUsd } from "@/lib/format";
@@ -246,6 +247,19 @@ function PresaleView({ launch }: { launch: LaunchSummary }) {
         </>
       ),
     },
+    ...(launch.feeSplit
+      ? [
+          {
+            tone: "graduating" as const,
+            body: (
+              <>
+                The platform {PLATFORM_GRADUATION_FEE_PCT}% and the creator {CREATOR_GRADUATION_BONUS_PCT}% of the threshold
+                are paid out: a one-off success bonus for the creator, who took no presale fees.
+              </>
+            ),
+          },
+        ]
+      : []),
     {
       tone: "graduating",
       body: (
@@ -264,8 +278,18 @@ function PresaleView({ launch }: { launch: LaunchSummary }) {
       tone: "violet",
       body: (
         <>
-          The rest seeds a Meteora DAMM v2 pool. Its liquidity is locked permanently; only fees can be claimed, and they
-          flow to the vault.
+          {launch.feeSplit ? (
+            <>
+              The rest seeds a Meteora DAMM v2 pool. Its liquidity is locked permanently; only fees can be claimed.
+              After Meteora&apos;s share, the pool&apos;s fees go to the creator {LP_FEE_SPLIT_PCT.creator}%, the vault{" "}
+              {LP_FEE_SPLIT_PCT.floor}% and the platform {LP_FEE_SPLIT_PCT.platform}%.
+            </>
+          ) : (
+            <>
+              The rest seeds a Meteora DAMM v2 pool. Its liquidity is locked permanently; only fees can be claimed, and
+              they flow to the vault.
+            </>
+          )}
         </>
       ),
     },
@@ -357,6 +381,24 @@ function PresaleView({ launch }: { launch: LaunchSummary }) {
                 size="md"
               />
             </dl>
+            {launch.floorPer100AtListingUsd !== null ? (
+              <section
+                role="note"
+                aria-label="Floor per $100 at listing"
+                className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-tile bg-floor-wash px-5 py-4"
+              >
+                <p className="min-w-0 flex-1 basis-60 text-[13.5px] leading-relaxed text-ink-2">
+                  <span className="block text-sm font-bold text-floor-strong">Floor per $100 at listing</span>
+                  What $100 of ${launch.symbol} bought at the listing price redeems for at the floor right after
+                  graduation, after the {formatPercent(launch.exitFeeBps / 10_000)} exit fee. Vault share{" "}
+                  <b className="tnum text-ink">{launch.vaultSharePct}% of the raise</b>. Not a guarantee of profit: the
+                  floor moves with {quote.asset.underlying} in USD.
+                </p>
+                <p className="tnum shrink-0 text-[28px] font-extrabold leading-none tracking-[-0.02em] text-floor">
+                  {formatUsd(launch.floorPer100AtListingUsd)}
+                </p>
+              </section>
+            ) : null}
           </div>
         </>
       }

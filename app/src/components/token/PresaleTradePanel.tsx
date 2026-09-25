@@ -4,11 +4,11 @@ import { useEffect, useId, useState } from "react";
 import Decimal from "decimal.js";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { maxLossFraction, uiToRaw } from "@stockfloor/sdk";
-import { CURVE_TRADING_FEE_BPS, DEFAULT_SLIPPAGE_BPS } from "@/lib/config";
+import { DEFAULT_SLIPPAGE_BPS } from "@/lib/config";
 import type { LaunchSummary, PayToken } from "@/lib/data/types";
 import { useCluster, useData, usePayTokenPrices, useRefreshChainData, useTokenBalance, useTxFlow } from "@/lib/data/context";
 import { PAY_TOKEN_DECIMALS, estimateSellUsd, estimateTokensOut, parseUiNumber } from "@/lib/estimates";
-import { formatMaxLoss, formatNumber, formatTokenAmount, formatUsd, parseTokenInput, rawToDecimal } from "@/lib/format";
+import { formatMaxLoss, formatNumber, formatPercent, formatTokenAmount, formatUsd, parseTokenInput, rawToDecimal } from "@/lib/format";
 import { buyAveragePriceUsd, presaleBuyButtonLabel, projectedFloorUsd } from "@/lib/metrics";
 import { isQuoteError, quoteLaunchTrade } from "@/lib/tradeQuote";
 import { AmountField } from "@/components/ui/AmountField";
@@ -88,8 +88,8 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
     if (pay === "QUOTE") payUsd = amount * launch.quote.priceUsd;
     else if (prices.data) payUsd = amount * prices.data[pay];
   }
-  const tokensOut = side === "buy" ? estimateTokensOut(payUsd, launch.priceUsd, CURVE_TRADING_FEE_BPS) : 0;
-  const sellUsd = side === "sell" && amount !== null ? estimateSellUsd(amount, launch.priceUsd, CURVE_TRADING_FEE_BPS) : 0;
+  const tokensOut = side === "buy" ? estimateTokensOut(payUsd, launch.priceUsd, launch.curveFeeBps) : 0;
+  const sellUsd = side === "sell" && amount !== null ? estimateSellUsd(amount, launch.priceUsd, launch.curveFeeBps) : 0;
   const sellQuoteUi = launch.quote.priceUsd > 0 ? sellUsd / launch.quote.priceUsd : 0;
 
   // Presale buys have no floor yet: the label bounds the loss against the estimated floor at graduation,
@@ -260,7 +260,10 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
             {side === "buy" ? (
               <DetailRow label="Average price for this buy">{avgPriceUsd !== null ? formatUsd(avgPriceUsd) : "—"}</DetailRow>
             ) : null}
-            <DetailRow label="Curve fee">1%</DetailRow>
+            <DetailRow label="Curve fee">
+              {formatPercent(launch.curveFeeBps / 10_000, { digits: 2 })}
+              {launch.feeSplit ? ", to the platform" : ""}
+            </DetailRow>
             {side === "buy" ? (
               <RiskRow label="Max loss for this buy if it graduates (est.)">
                 {estMaxLoss !== null ? formatMaxLoss(estMaxLoss) : "—"}

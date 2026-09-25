@@ -1,4 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
+import Decimal from "decimal.js";
 import {
   AmbiguousLaunchError,
   CURVE_PRESETS,
@@ -16,9 +17,11 @@ import {
   fetchLaunchState,
   findQuoteAsset,
   getMigrationFeeDistribution,
+  graduationSplit,
   listLaunches,
   resolveLaunchByBaseMint,
   sqrtPriceX64ToUsd,
+  vaultSharePctFromMigrationFeePct,
   type ChainReader,
   type CurvePreset,
   type LaunchState,
@@ -67,6 +70,27 @@ export function detectPreset(sqrtStartPrice: bigint, migrationSqrtPrice: bigint)
   return best;
 }
 
+/** DBC fee numerators are out of 1e9; 1 bps = 1e5. */
+const FEE_NUMERATOR_PER_BPS = 100_000n;
+
+/**
+ * Floor per $100 at listing from raw amounts: `100 * floor / listing price * (1 - exit fee)`, where
+ * floor = vault raw / supply raw and the listing price is the migration sqrt price (Q64.64, raw quote
+ * per raw base). Both are in the same unit, so the quote price and multiplier cancel out. Null when a
+ * term is zero.
+ */
+export function floorPer100FromRaw(vaultRaw: bigint, supplyRaw: bigint, sqrtPriceX64: bigint, exitFeeBps: number): number | null {
+  if (vaultRaw <= 0n || supplyRaw <= 0n || sqrtPriceX64 <= 0n) return null;
+  const q64 = new Decimal(2).pow(64);
+  const price = new Decimal(sqrtPriceX64.toString()).div(q64).pow(2);
+  return new Decimal(vaultRaw.toString())
+    .div(supplyRaw.toString())
+    .div(price)
+    .mul(100)
+    .mul(1 - exitFeeBps / 10_000)
+    .toNumber();
+}
+
 /**
  * Map one on-chain launch to the UI summary. Returns null for launches the UI does not show: a quote
  * mint outside the allowlist (the allowlist is UI-level) or a DBC pool that does not exist yet.
@@ -91,17 +115,24 @@ export function toLaunchSummary(state: LaunchState, meta: TokenMetadata | null, 
   const mint = state.launch.baseMint.toBase58();
   const cfg = state.dbcConfig;
 
+  // Launch v3 splits the partner migration fee: platform 5% and creator 5% of the threshold, the
+  // rest into the vault. A v2 launch put the whole fee into the vault.
+  const feeSplit = state.launch.feeSplitEnabled;
+  const { partnerMigrationFee } = getMigrationFeeDistribution(cfg.migrationQuoteThreshold, cfg.migrationFeePercentage, cfg.creatorMigrationFeePercentage);
+  const vaultAtGraduation = feeSplit ? graduationSplit(cfg.migrationQuoteThreshold, partnerMigrationFee).vault : partnerMigrationFee;
+  const supplyAtGraduation = cfg.swapBaseAmount + cfg.migrationBaseThreshold;
+
   let projectedAtGraduation: LaunchSummary["projectedAtGraduation"] = null;
   if (phase !== "graduated") {
-    const { partnerMigrationFee } = getMigrationFeeDistribution(cfg.migrationQuoteThreshold, cfg.migrationFeePercentage, cfg.creatorMigrationFeePercentage);
     // harvest_migration_fee only needs a complete curve, so it can land before migration. Once the
     // Launch flag or the DBC partner withdraw bit is set, the vault balance already holds the fee.
     const feeStillInDbc =
       !state.launch.migrationFeeHarvested && (state.dbcPool.migrationFeeWithdrawStatus & PARTNER_MIGRATION_FEE_MASK) === 0;
     projectedAtGraduation = {
-      // Harvested curve fees already sit in the vault; the partner migration fee joins them.
-      vaultQuoteRaw: state.vaultBalance + (feeStillInDbc ? partnerMigrationFee : 0n),
-      baseSupplyRaw: cfg.swapBaseAmount + cfg.migrationBaseThreshold,
+      // Curve fees harvested by a v2 launch already sit in the vault; the vault part of the partner
+      // migration fee joins them.
+      vaultQuoteRaw: state.vaultBalance + (feeStillInDbc ? vaultAtGraduation : 0n),
+      baseSupplyRaw: supplyAtGraduation,
     };
   }
 
@@ -127,7 +158,10 @@ export function toLaunchSummary(state: LaunchState, meta: TokenMetadata | null, 
     baseDecimals,
     quote,
     preset: detectPreset(cfg.sqrtStartPrice, cfg.migrationSqrtPrice),
-    vaultSharePct: cfg.migrationFeePercentage,
+    vaultSharePct: vaultSharePctFromMigrationFeePct(cfg.migrationFeePercentage, state.launch.version),
+    feeSplit,
+    curveFeeBps: Number(cfg.poolFees.baseFee.cliffFeeNumerator / FEE_NUMERATOR_PER_BPS),
+    floorPer100AtListingUsd: floorPer100FromRaw(vaultAtGraduation, supplyAtGraduation, cfg.migrationSqrtPrice, state.launch.exitFeeBps),
     exitFeeBps: state.launch.exitFeeBps,
     phase,
     thresholdQuoteRaw: cfg.migrationQuoteThreshold,

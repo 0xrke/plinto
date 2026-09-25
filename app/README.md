@@ -143,9 +143,17 @@ answers with the same sentence instead of a developer message.
   become the UI's `graduated` (redeem opens only with `migrationFeeHarvested`). Price from the DBC curve
   sqrt price before migration and the DAMM v2 pool after; floor = vault ÷ supply; ScaledUiAmount
   multiplier from the quote mint at the cluster clock; preset from the config's price ratio; vault share =
-  the DBC migration fee percentage; the graduation projection = vault now + partner migration fee (added only while the fee is still in
-  DBC: the Launch flag and the DBC partner withdraw bit are both unset) over
-  `swap_base_amount + migration_base_threshold` (equals the launch composer preview). Name, symbol and the
+  `vaultSharePctFromMigrationFeePct` (the DBC migration fee percentage minus 10 for a launch v3, whose
+  platform and creator take 5% of the raise each; the whole percentage for a legacy v2 launch, which put the
+  whole fee into the vault); `feeSplit` = launch v3; `curveFeeBps` from the config's cliff fee numerator;
+  the graduation projection = vault now + the vault part of the partner migration fee (`graduationSplit`
+  for v3, the whole fee for v2; added only while the fee is still in DBC: the Launch flag and the DBC
+  partner withdraw bit are both unset) over `swap_base_amount + migration_base_threshold` (equals the
+  launch composer preview); `floorPer100AtListingUsd` = 100 × (vault part ÷ supply at graduation) ÷ the
+  migration price × (1 − exit fee), a launch term shown next to the vault share on the token page (header
+  chip and callout before graduation, the vault card after) and on presale launch cards. The token page
+  also names where every fee goes (disclosures, graduation steps, curve fee row, crank details), with the
+  legacy wording for a v2 launch. Name, symbol and the
   token URI come from the Metaplex metadata account (cached; metadata is immutable). The image is the URI
   itself when it is an image, or the `image` field of the metadata JSON document when the URI ends in
   `.json` (fetched once per mint, 4 s timeout; any failure means the token shows its initials).

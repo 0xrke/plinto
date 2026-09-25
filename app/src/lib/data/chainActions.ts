@@ -80,12 +80,14 @@ const LAUNCH_STEP_LABELS: Record<string, string> = {
  */
 const CRANK_ACTION_LABELS: Record<string, string> = {
   register_pool: "Register the DBC pool",
-  harvest_curve_fees: "Harvest curve trading fees into the vault",
-  harvest_migration_fee: "Harvest the migration fee into the vault",
+  // Where a harvest pays depends on the launch version (v3 splits, v2 pays the vault); the crank
+  // panel shows it per action.
+  harvest_curve_fees: "Harvest the curve trading fees",
+  harvest_migration_fee: "Harvest the migration fee",
   harvest_surplus: "Harvest the curve surplus into the vault",
   migrate: "Migrate the pool to Meteora DAMM v2",
   sync_migration: "Record the migration on the launch",
-  harvest_lp_fees: "Harvest DAMM v2 LP fees into the vault",
+  harvest_lp_fees: "Harvest the DAMM v2 LP fees",
   burn_claimer_base: "Burn base tokens held by the claimer",
 };
 

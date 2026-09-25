@@ -30,6 +30,9 @@ export function launchToJson(launch: LaunchSummary) {
     quotePaused: launch.quotePaused,
     preset: launch.preset,
     vaultSharePct: launch.vaultSharePct,
+    feeSplit: launch.feeSplit,
+    curveFeeBps: launch.curveFeeBps,
+    floorPer100AtListingUsd: launch.floorPer100AtListingUsd,
     exitFeeBps: launch.exitFeeBps,
     baseDecimals: launch.baseDecimals,
     quote: {

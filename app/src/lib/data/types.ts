@@ -48,8 +48,26 @@ export interface LaunchSummary {
   baseDecimals: number;
   quote: QuoteMarket;
   preset: CurvePreset;
-  /** Share of the migration threshold routed to the vault (partner migration fee), 30..70. */
+  /**
+   * Share of the raise (the migration threshold) that funds the vault at graduation: 30..60 for a
+   * launch v3 (DBC migration fee minus the platform and creator 5% cuts); the whole migration fee
+   * percentage for a legacy v2 launch.
+   */
   vaultSharePct: number;
+  /**
+   * Launch v3 fee model: presale fees to the platform; at graduation platform 5% and creator 5% of
+   * the raise; pool fees split creator 50% / vault 30% / platform 20%. False for a legacy v2 launch,
+   * whose every harvest goes 100% into the vault.
+   */
+  feeSplit: boolean;
+  /** Presale (DBC curve) trading fee of the launch's config, in bps. */
+  curveFeeBps: number;
+  /**
+   * Floor per $100 at listing: USD that $100 of tokens bought at the listing (graduation) price
+   * redeems for at the floor right after graduation, after the exit fee. A launch term, fixed by the
+   * config; null when it cannot be computed.
+   */
+  floorPer100AtListingUsd: number | null;
   exitFeeBps: number;
   phase: LaunchPhase;
   /** Migration threshold of the DBC config in raw quote units. */

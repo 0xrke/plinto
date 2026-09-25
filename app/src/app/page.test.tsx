@@ -40,6 +40,16 @@ describe("home page", () => {
     expect(steps.textContent).toMatch(/graduation threshold the creator set/);
   });
 
+  it("describes the fee model: vault share 30 to 60%, the graduation cuts and the pool fee split", () => {
+    renderHome();
+    const steps = screen.getByRole("list", { name: "How it works" });
+    expect(steps.textContent).toMatch(/vault share is 30 to 60% of the raise \(default 50%\)/);
+    expect(steps.textContent).not.toMatch(/30 to 70%/);
+    expect(steps.textContent).toMatch(/platform 5% and the creator 5%/);
+    expect(steps.textContent).toMatch(/30% of the locked pool's trading fees/);
+    expect(steps.textContent).not.toMatch(/Trading fees from the locked pool also go to the vault/);
+  });
+
   it("features the graduated launch with the largest vault and counts launches by phase", async () => {
     renderHome();
     const featured = await screen.findByRole("region", { name: "Featured floor" });

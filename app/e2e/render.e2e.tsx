@@ -183,7 +183,9 @@ describe("page components render the on-chain launch from the local fork", () =>
     page.unmount();
 
     const after = (await (await fetch(`${APP}/api/launches/${uiMint}`)).json()) as { launch: LaunchJson };
-    expect(BigInt(after.launch.vaultRaw)).toBeGreaterThan(0n);
+    // Launch v3: the presale fee harvest pays the platform treasury; the vault is funded at graduation.
+    expect(after.launch.feeSplit).toBe(true);
+    expect(after.launch.vaultRaw).toBe("0");
     expect(after.launch.crankDue).toEqual([]);
   });
 

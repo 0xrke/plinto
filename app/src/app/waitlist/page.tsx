@@ -23,7 +23,7 @@ const PHASES = [
   {
     n: "02",
     title: "Market opens.",
-    body: "Half the raise becomes the floor. The other half becomes liquidity, locked for good.",
+    body: "Half the raise becomes the floor and 40% becomes liquidity, locked for good. The platform and the creator get 5% each.",
     value: "50%",
     chip: "bg-graduating-soft text-graduating",
     valueTone: "text-floor",
@@ -31,7 +31,7 @@ const PHASES = [
   {
     n: "03",
     title: "Trading.",
-    body: "The price wanders. The floor creeps up on trading fees and on the 2% left behind by everyone who exits, and never moves down.",
+    body: "The price wanders. The floor creeps up on part of every trading fee and on the 2% left behind by everyone who exits, and never moves down.",
     value: "2%",
     chip: "bg-floor-soft text-floor",
     valueTone: "text-ink",

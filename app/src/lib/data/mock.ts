@@ -1,4 +1,5 @@
-import { QUOTE_ALLOWLIST, type QuoteAsset } from "@stockfloor/sdk";
+import { QUOTE_ALLOWLIST, floorPer100AtListingForPreset, type QuoteAsset } from "@stockfloor/sdk";
+import { CURVE_TRADING_FEE_BPS } from "../config";
 import type { UpgradeStatus } from "../chain/upgradeAuthority";
 import type { LaunchDataSource, LaunchSummary, PayToken, QuoteMarket } from "./types";
 
@@ -6,7 +7,8 @@ import type { LaunchDataSource, LaunchSummary, PayToken, QuoteMarket } from "./t
  * Mock data source with realistic numbers for four launches in different phases.
  *
  * The numbers follow the launch economics of docs/BRIEF.md: a ~$1,000 migration
- * threshold, the vault share of that threshold harvested into the vault at graduation,
+ * threshold (the demo threshold policy), the vault share of that threshold harvested into the vault
+ * at graduation (launch v3: the platform and creator 5% cuts come out of the rest of the raise),
  * and a base supply near 1B tokens (tokens sold on the curve plus tokens migrated to
  * DAMM v2). All addresses below are random placeholders, not real accounts. Mock launches carry
  * no chain state (`chain: null`), so the UI falls back to price-based estimates.
@@ -38,8 +40,20 @@ function quoteBySymbol(symbol: string): QuoteMarket {
   return mockQuoteMarket(asset);
 }
 
+/** Fee-model fields every mock launch shares (launch v3), derived from its preset and vault share. */
+type MockLaunch = Omit<LaunchSummary, "feeSplit" | "curveFeeBps" | "floorPer100AtListingUsd">;
+
+function withFeeModel(launch: MockLaunch): LaunchSummary {
+  return {
+    ...launch,
+    feeSplit: true,
+    curveFeeBps: CURVE_TRADING_FEE_BPS,
+    floorPer100AtListingUsd: floorPer100AtListingForPreset(launch.preset, launch.vaultSharePct, launch.exitFeeBps),
+  };
+}
+
 function buildMockLaunches(): LaunchSummary[] {
-  return [
+  const launches: MockLaunch[] = [
     {
       // Graduated, trading far above the floor: max loss if you buy now is about 92%.
       mint: "7yTsT2yJoiYJfohGvHQQwDx54qKS69MXAYMTPQ4QC3Ep",
@@ -161,6 +175,7 @@ function buildMockLaunches(): LaunchSummary[] {
       chain: null,
     },
   ];
+  return launches.map(withFeeModel);
 }
 
 /** Mock wallet balances by mint, returned for any connected owner. */

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { LaunchSummary } from "@/lib/data/types";
-import { truncateAddress } from "@/lib/format";
+import { formatUsd, truncateAddress } from "@/lib/format";
 import { phaseLabel } from "@/lib/phase";
 import { PhaseBadge } from "@/components/ui/PhaseBadge";
 import { QuoteChip } from "@/components/ui/QuoteChip";
@@ -14,7 +14,7 @@ import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, CopyIcon } from "@/compon
 /**
  * Breadcrumb, the cover built from the logo (profile header like on X: the logo tile overlaps its
  * bottom-left edge), the name and symbol beside the tile, and the chips row (phase, quote asset, vault
- * share before graduation, mint with a copy button on wider screens).
+ * share and floor per $100 at listing before graduation, mint with a copy button on wider screens).
  */
 export function TokenHeader({ launch }: { launch: LaunchSummary }) {
   const [copied, setCopied] = useState(false);
@@ -86,6 +86,11 @@ export function TokenHeader({ launch }: { launch: LaunchSummary }) {
           {presale ? (
             <span className="chip tnum">
               Vault share <b>{launch.vaultSharePct}%</b>
+            </span>
+          ) : null}
+          {presale && launch.floorPer100AtListingUsd !== null ? (
+            <span className="chip tnum" title="What $100 bought at the listing price redeems for at the floor, after the exit fee">
+              Floor per $100 <b className="text-floor">{formatUsd(launch.floorPer100AtListingUsd)}</b>
             </span>
           ) : null}
           <span className="chip tnum pr-1 max-sm:hidden" title={launch.mint}>

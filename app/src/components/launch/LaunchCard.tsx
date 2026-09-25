@@ -110,7 +110,11 @@ export function LaunchCard({ launch }: { launch: LaunchSummary }) {
                 <span>Floor at graduation (est.)</span> <span>{formatUsd(floorUsd)}</span>.{" "}
               </>
             ) : null}
-            Vault share {launch.vaultSharePct}%.
+            Vault share {launch.vaultSharePct}%
+            {launch.floorPer100AtListingUsd !== null
+              ? ` (floor ${formatUsd(launch.floorPer100AtListingUsd)} per $100 at listing)`
+              : ""}
+            .
           </p>
           <div className="mt-4">
             <ProgressBar value={progress} label={`${launch.name} progress to graduation`} />

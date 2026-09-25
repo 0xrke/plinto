@@ -5,6 +5,7 @@ import type { LaunchSummary } from "@/lib/data/types";
 import { AttestationCheckbox } from "@/components/ui/AttestationCheckbox";
 import type { UpgradeStatus } from "@/lib/chain/upgradeAuthority";
 import { useProgramUpgradeStatus } from "@/lib/data/context";
+import { FEE_COPY } from "@/lib/config";
 import { formatPercent, truncateAddress } from "@/lib/format";
 import { IconTile } from "@/components/ui/Tiles";
 import { InfoIcon } from "@/components/ui/icons";
@@ -57,6 +58,20 @@ export function Disclosures({ launch }: { launch: LaunchSummary }) {
           <span className="font-bold text-ink">The floor protects from zero, not from loss.</span> If you buy
           above the floor, you can lose the difference. Redemptions pay a pro-rata share of the vault minus a{" "}
           {formatPercent(launch.exitFeeBps / 10_000)} exit fee that stays in the vault.
+        </li>
+        <li>
+          <span className="font-bold text-ink">Where the fees go.</span>{" "}
+          {launch.feeSplit ? (
+            <>
+              {FEE_COPY.presale} {FEE_COPY.graduation} {FEE_COPY.trading} {FEE_COPY.exit}
+            </>
+          ) : (
+            <>
+              This launch was created before the platform and creator fee split (launch v2): every fee it harvests
+              (curve, migration and pool fees) goes into the vault, and the platform and the creator take no cut. The{" "}
+              {formatPercent(launch.exitFeeBps / 10_000)} exit fee stays in the vault.
+            </>
+          )}
         </li>
         <li>
           <span className="font-bold text-ink">The programs are upgradeable.</span> The StockFloor program has no

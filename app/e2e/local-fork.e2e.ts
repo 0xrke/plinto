@@ -19,9 +19,12 @@ import { dirname, join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { Keypair, PublicKey, Transaction, VersionedTransaction } from "@solana/web3.js";
 import {
+  PLATFORM_TREASURY,
   QUOTE_ALLOWLIST,
   TOKEN_PROGRAM_ID,
   evaluateSendGuard,
+  graduationSplit,
+  lpFeeSplit,
   fetchLaunchState,
   getAtaBalance,
   isLoopbackRpcUrl,
@@ -108,6 +111,15 @@ async function freshSummary(): Promise<LaunchSummary> {
   expect(s).not.toBeNull();
   summary = s;
   return s!;
+}
+
+/** Quote balances of the launch v3 payees: the platform treasury and the launch creator. */
+async function payeeBalances(s: LaunchState): Promise<{ platform: bigint; creator: bigint }> {
+  const [platform, creatorQuote] = await Promise.all([
+    getAtaBalance(reader, PLATFORM_TREASURY, s.launch.quoteMint, s.launch.quoteTokenProgram),
+    getAtaBalance(reader, s.launch.creator, s.launch.quoteMint, s.launch.quoteTokenProgram),
+  ]);
+  return { platform, creator: creatorQuote };
 }
 
 async function baseBalance(kp: Keypair): Promise<bigint> {
@@ -252,12 +264,16 @@ describe.sequential("web app on a local Surfpool fork", () => {
     await expectAppMatchesChain();
   });
 
-  it("cranks the curve fees into the vault", async () => {
+  it("cranks the presale fees to the platform treasury; the vault is untouched (launch v3)", async () => {
     const before = await chainState();
+    expect(before.launch.feeSplitEnabled).toBe(true);
+    const fee = before.dbcPool!.partnerQuoteFee;
+    const paid = await payeeBalances(before);
     const { due } = await crank(buyer2, "crank (presale)");
     expect(due).toContain("harvest_curve_fees");
     const after = await chainState();
-    expect(after.vaultBalance).toBeGreaterThan(before.vaultBalance);
+    expect(after.vaultBalance).toBe(before.vaultBalance);
+    expect((await payeeBalances(after)).platform - paid.platform).toBe(fee);
     expect(after.dbcPool!.partnerQuoteFee).toBe(0n);
     const { json } = await expectAppMatchesChain();
     expect(json.phase).toBe("presale");
@@ -289,11 +305,18 @@ describe.sequential("web app on a local Surfpool fork", () => {
       const t = s.dbcConfig.migrationQuoteThreshold;
       return t - (t * BigInt(100 - s.dbcConfig.migrationFeePercentage) + 99n) / 100n;
     })();
+    // Launch v3: platform 5% and creator 5% of the threshold, the rest of the partner fee to the vault.
+    const split = graduationSplit(s.dbcConfig.migrationQuoteThreshold, partnerFee);
+    const paid = await payeeBalances(s);
     const { due } = await crank(buyer1, "crank (graduation)");
     expect(due).toEqual(expect.arrayContaining(["harvest_migration_fee", "harvest_surplus", "migrate"]));
     const after = await chainState();
     expect(after.phase).toBe("redeemable");
-    expect(after.vaultBalance - s.vaultBalance).toBeGreaterThanOrEqual(partnerFee);
+    // The surplus harvest adds to the vault on top of its part of the migration fee.
+    expect(after.vaultBalance - s.vaultBalance).toBeGreaterThanOrEqual(split.vault);
+    const paidAfter = await payeeBalances(after);
+    expect(paidAfter.platform - paid.platform).toBe(split.platform);
+    expect(paidAfter.creator - paid.creator).toBe(split.creator);
     const { json } = await expectAppMatchesChain();
     expect(json).toMatchObject({ phase: "graduated", chainPhase: "redeemable", redeemable: true, migrationFeeHarvested: true });
     expect(json.dammPool).toBe(after.damm.pool.toBase58());
@@ -301,7 +324,7 @@ describe.sequential("web app on a local Surfpool fork", () => {
     step("redeemable", { vaultRaw: json.vaultRaw, supplyRaw: json.supplyRaw, priceUsd: json.priceUsd, floorUsd: json.floorUsd, buyLabel: json.buyLabel, partnerFee });
   });
 
-  it("trades on the DAMM v2 pool after migration and cranks the LP fees into the vault", async () => {
+  it("trades on the DAMM v2 pool after migration and cranks the LP fees: creator 50%, vault 30%, platform 20%", async () => {
     let s = await freshSummary();
     const buyRaw = 30_000_000n;
     const qb = quoteTrade(s.chain!, "buy", buyRaw);
@@ -327,10 +350,18 @@ describe.sequential("web app on a local Surfpool fork", () => {
     const before = await chainState();
     const pending = before.positions.reduce((n, p) => n + p.pending.b, 0n);
     expect(pending).toBeGreaterThan(0n);
+    // One harvest per position, each split on its own (the vault takes each rounding remainder).
+    const parts = before.positions.map((p) => lpFeeSplit(p.pending.b));
+    const sum = (k: "platform" | "creator" | "vault") => parts.reduce((n, p) => n + p[k], 0n);
+    const paid = await payeeBalances(before);
     const { due } = await crank(creator, "crank (LP fees)");
     expect(due).toContain("harvest_lp_fees");
     const after = await chainState();
-    expect(after.vaultBalance - before.vaultBalance).toBe(pending);
+    expect(after.vaultBalance - before.vaultBalance).toBe(sum("vault"));
+    const paidAfter = await payeeBalances(after);
+    expect(paidAfter.platform - paid.platform).toBe(sum("platform"));
+    expect(paidAfter.creator - paid.creator).toBe(sum("creator"));
+    expect(sum("vault") + sum("platform") + sum("creator")).toBe(pending);
     await expectAppMatchesChain();
   });
 

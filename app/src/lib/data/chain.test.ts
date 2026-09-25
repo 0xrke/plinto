@@ -12,6 +12,7 @@ import {
   WSOL_MINT,
   associatedTokenAddress,
   getMigrationFeeDistribution,
+  graduationSplit,
   sqrtPriceX64ToUsd,
   type LaunchState,
 } from "@stockfloor/sdk";
@@ -52,6 +53,10 @@ describe("toLaunchSummary", () => {
     expect(s.phase).toBe("presale");
     expect(s.preset).toBe("gentle");
     expect(s.vaultSharePct).toBe(50);
+    expect(s.feeSplit).toBe(true);
+    expect(s.curveFeeBps).toBe(25);
+    // Fixed at launch: the SDK preview's floor per $100 bought at the listing price.
+    expect(s.floorPer100AtListingUsd).toBeCloseTo(built.preview.floorPer100AtListingUsd, 6);
     expect(s.exitFeeBps).toBe(200);
     expect(s.createdAt).toBe(Number(NOW) * 1000);
     expect(s.thresholdQuoteRaw).toBe(built.curve.thresholdQuoteRaw);
@@ -72,11 +77,45 @@ describe("toLaunchSummary", () => {
   });
 
   it("adds harvested curve fees already in the vault to the projected vault", () => {
-    const { state } = launchState({ quoteReserve: 10n });
+    // Only a v2 launch harvests curve fees into the vault; the projection adds whatever is there.
+    const { state } = launchState({ quoteReserve: 10n, version: 2 });
     const withFees: LaunchState = { ...state, vaultBalance: 481_750n };
     const cfg = state.dbcConfig;
     const { partnerMigrationFee } = getMigrationFeeDistribution(cfg.migrationQuoteThreshold, cfg.migrationFeePercentage, cfg.creatorMigrationFeePercentage);
     expect(toLaunchSummary(withFees, null, price)!.projectedAtGraduation!.vaultQuoteRaw).toBe(481_750n + partnerMigrationFee);
+  });
+
+  it("v3: the projected vault is the partner migration fee minus the platform and creator 5% cuts", () => {
+    const { state, built } = launchState({ quoteReserve: 10n });
+    const cfg = state.dbcConfig;
+    expect(cfg.migrationFeePercentage).toBe(60);
+    const { partnerMigrationFee } = getMigrationFeeDistribution(cfg.migrationQuoteThreshold, cfg.migrationFeePercentage, cfg.creatorMigrationFeePercentage);
+    const split = graduationSplit(cfg.migrationQuoteThreshold, partnerMigrationFee);
+    expect(split.platform).toBe(cfg.migrationQuoteThreshold / 20n);
+    expect(split.creator).toBe(cfg.migrationQuoteThreshold / 20n);
+    const s = toLaunchSummary(state, null, price)!;
+    expect(s.projectedAtGraduation!.vaultQuoteRaw).toBe(split.vault);
+    expect(split.vault).toBe(built.curve.vaultAtGraduation);
+    expect(split.vault).toBeLessThan(partnerMigrationFee);
+  });
+
+  it("v2 (legacy): the vault share is the whole migration fee, and nothing is cut for platform or creator", () => {
+    // The same DBC config under a v2 launch account: v2 routed the whole partner fee into the vault.
+    const { state, built } = launchState({ quoteReserve: 10n, version: 2 });
+    const s = toLaunchSummary(state, null, price)!;
+    expect(s.feeSplit).toBe(false);
+    expect(s.vaultSharePct).toBe(60);
+    expect(s.projectedAtGraduation!.vaultQuoteRaw).toBe(built.curve.partnerMigrationFee);
+    const v3 = toLaunchSummary(launchState({ quoteReserve: 10n }).state, null, price)!;
+    // More of the raise backs a v2 floor, so its floor per $100 at listing is higher.
+    expect(s.floorPer100AtListingUsd!).toBeGreaterThan(v3.floorPer100AtListingUsd!);
+  });
+
+  it("floor per $100 at listing matches the closed form for the flat default (about $34.88)", () => {
+    const { state, built } = launchState({ input: { preset: "flat", vaultSharePct: 50, thresholdUsd: 10_000 } });
+    const s = toLaunchSummary(state, null, price)!;
+    expect(s.floorPer100AtListingUsd).toBeCloseTo(built.preview.floorPer100AtListingUsd, 6);
+    expect(s.floorPer100AtListingUsd).toBeCloseTo(34.88, 1);
   });
 
   it("does not add the migration fee again once it was harvested before migration", () => {
@@ -122,21 +161,25 @@ describe("toLaunchSummary", () => {
     const redeemable = toLaunchSummary(state, null, price)!;
     expect(redeemable.phase).toBe("graduated");
     expect(redeemable.migrationFeeHarvested).toBe(true);
-    expect(redeemable.vaultRaw).toBe(built.curve.partnerMigrationFee);
+    expect(redeemable.vaultRaw).toBe(built.curve.vaultAtGraduation);
+    // The floor per $100 at listing is a launch term: it stays after graduation.
+    expect(redeemable.floorPer100AtListingUsd).toBeCloseTo(built.preview.floorPer100AtListingUsd, 6);
     expect(redeemable.supplyRaw).toBe(built.curve.baseSupplyAtGraduationRaw);
     const json = launchToJson(redeemable);
     expect(json.redeemable).toBe(true);
     expect(json.chainPhase).toBe("redeemable");
-    expect(json.vaultRaw).toBe(built.curve.partnerMigrationFee.toString());
+    expect(json.vaultRaw).toBe(built.curve.vaultAtGraduation.toString());
+    expect(json.feeSplit).toBe(true);
+    expect(json.floorPer100AtListingUsd).toBeCloseTo(built.preview.floorPer100AtListingUsd, 6);
     expect(json.buyLabel).toMatch(/^Price \$[\d.,]+ · Floor \$[\d.,]+ · Max loss if you buy now: −[\d.]+%$/);
   });
 
   it("detects the flat preset and a paused quote mint, and falls back when metadata is missing", () => {
-    const { state } = launchState({ input: { preset: "flat", vaultSharePct: 70 } });
+    const { state } = launchState({ input: { preset: "flat", vaultSharePct: 60 } });
     const paused: LaunchState = { ...state, quoteMint: { ...state.quoteMint, paused: true } };
     const s = toLaunchSummary(paused, null, undefined)!;
     expect(s.preset).toBe("flat");
-    expect(s.vaultSharePct).toBe(70);
+    expect(s.vaultSharePct).toBe(60);
     expect(s.quotePaused).toBe(true);
     expect(s.symbol).toBe(s.mint.slice(0, 4).toUpperCase());
     expect(s.name).toBe(`Launch ${s.symbol}`);

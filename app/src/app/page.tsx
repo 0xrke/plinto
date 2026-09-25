@@ -19,16 +19,16 @@ const STEPS = [
   {
     title: "Graduation",
     tone: "graduating",
-    summary: "A fixed share of the raise moves into the vault, the rest seeds a locked Meteora DAMM v2 pool.",
+    summary: "A fixed share of the raise moves into the vault, most of the rest seeds a locked Meteora DAMM v2 pool.",
     details:
-      "The vault share is 30 to 70% (default 50%), and the pool's liquidity is locked permanently. Your cover changes here in one transaction, from close to what you paid down to the floor. Anyone can complete the curve at any time.",
+      "The vault share is 30 to 60% of the raise (default 50%); the platform 5% and the creator 5% are paid out, and the rest seeds the pool, whose liquidity is locked permanently. Your cover changes here in one transaction, from close to what you paid down to the floor. Anyone can complete the curve at any time.",
   },
   {
     title: "Free market with a floor",
     tone: "floor",
     summary: "Redeem any time for a pro-rata share of the vault. The 2% exit fee stays in the vault; the floor only rises.",
     details:
-      "Redeeming burns your tokens. Trading fees from the locked pool also go to the vault. The program has no admin withdraw; the quote issuer's controls and program upgradeability are disclosed on every token page.",
+      "Redeeming burns your tokens. 30% of the locked pool's trading fees (after Meteora's share) also go to the vault; the creator gets 50% and the platform 20%. The program has no admin withdraw; the quote issuer's controls and program upgradeability are disclosed on every token page.",
   },
 ] as const;
 
