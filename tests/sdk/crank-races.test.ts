@@ -17,6 +17,7 @@ import {
   fetchLaunchState,
   getClock,
   getMintInfo,
+  lpFeeSplit,
   planCrank,
   runCrank,
   runCrankAll,
@@ -114,12 +115,17 @@ describe("SDK crank races and failures on the LiteSVM fork", () => {
     const mig = planCrank(s0).find((a) => a.kind === "harvest_migration_fee")!;
     const curve = planCrank(s0).find((a) => a.kind === "harvest_curve_fees")!;
     const surplus = planCrank(s0).find((a) => a.kind === "harvest_surplus")!;
-    // The migration fee reached the vault exactly once.
+    // The vault part of the migration fee reached the vault exactly once (v3: the curve fees go to
+    // the platform treasury, not the vault; the surplus goes to the vault).
+    expect(curve.kind === "harvest_curve_fees" && curve.partnerQuoteFee).toBeGreaterThan(0n);
     expect(s.vaultBalance - s0.vaultBalance).toBe(
-      (mig.kind === "harvest_migration_fee" ? mig.expectedQuote : 0n) +
-        (curve.kind === "harvest_curve_fees" ? curve.partnerQuoteFee : 0n) +
-        (surplus.kind === "harvest_surplus" ? surplus.expectedQuote : 0n),
+      (mig.kind === "harvest_migration_fee" ? mig.vault : 0n) + (surplus.kind === "harvest_surplus" ? surplus.expectedQuote : 0n),
     );
+    // ... and the platform and creator cuts were paid exactly once too.
+    expect(s.launch.totalPlatformQuote).toBe(
+      (mig.kind === "harvest_migration_fee" ? mig.platform : 0n) + (curve.kind === "harvest_curve_fees" ? curve.partnerQuoteFee : 0n),
+    );
+    expect(s.launch.totalCreatorQuote).toBe(mig.kind === "harvest_migration_fee" ? mig.creator : 0n);
   });
 
   it("records a failure that stays due (paused quote mint) without retrying it, and succeeds after unpause", async () => {
@@ -144,7 +150,8 @@ describe("SDK crank races and failures on the LiteSVM fork", () => {
     setMintPaused(fork, SPYX_MINT, false);
     const resumed = await runCrank(admin, { launch: L });
     expect(resumed.steps.map((s) => [s.action.kind, s.status])).toEqual([["harvest_lp_fees", "executed"]]);
-    expect((await state(L)).vaultBalance - s2.vaultBalance).toBe(s2.positions[0]!.pending.b);
+    // v3: the vault gets its 30% (plus rounding) of the LP fees; creator 50%, platform 20%.
+    expect((await state(L)).vaultBalance - s2.vaultBalance).toBe(lpFeeSplit(s2.positions[0]!.pending.b).vault);
   });
 
   it("runCrankAll cranks every launch and leaves presale launches without due actions alone", async () => {

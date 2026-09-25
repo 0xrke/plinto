@@ -24,8 +24,8 @@
  * formulas (vendor sources), DBC swap events, DAMM v2 account state, or @stockfloor/sdk math.
  *
  * Fee model v3 (docs/DECISIONS.md, 2026-09-25): 0.25% presale fee with no creator share, the
- * migration fee percentage is the vault share + 10, and the SDK-built parameters get those fields
- * pinned by `applyFeeModelV3` (a no-op once the SDK presets produce them).
+ * migration fee percentage is the vault share + 10; the SDK presets produce these fields
+ * (checked by `expectFeeModelV3`) and the parameters are used verbatim.
  */
 import { createTransferInstruction } from "@solana/spl-token";
 import { Keypair, PublicKey } from "@solana/web3.js";
@@ -69,7 +69,7 @@ import {
   swap2Ix,
   SwapMode,
 } from "../src/dbc.js";
-import { applyFeeModelV3, graduationSplit, lpFeeSplit, migrationFeePctForVaultShare } from "../src/fee-model.js";
+import { expectFeeModelV3, graduationSplit, lpFeeSplit, migrationFeePctForVaultShare } from "../src/fee-model.js";
 import { FloorTracker } from "../src/floor-invariants.js";
 import { anchorErrorFromLogs, Fork, TxFailure, TxSuccess } from "../src/fork.js";
 import { buyOnCurve, fundedWallet, Migration, migrateToDammV2, sellOnCurve } from "../src/scenario.js";
@@ -259,7 +259,7 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     };
     expect(DEFAULT_QUOTE_ASSET.mint).toBe(SPYX_MINT.toBase58());
     const built = buildDbcConfigParams(input, claimer, claimer);
-    applyFeeModelV3(built, VAULT_SHARE_PCT);
+    expectFeeModelV3(built, VAULT_SHARE_PCT);
     curve = computeLaunchCurve(input);
     preview = previewLaunch(input);
     threshold = curve.thresholdQuoteRaw;
@@ -723,6 +723,10 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     // Vault 50% of the raise (rounding in the vault's favour).
     expect(split.vault >= threshold / 2n && split.vault <= threshold / 2n + 2n).toBe(true);
     const expected = split.vault;
+    // The create-form preview (SDK) predicted every part of the split.
+    expect(preview.vaultAtGraduationQuoteRaw).toBe(split.vault);
+    expect(preview.platformGraduationFeeQuoteRaw).toBe(split.platform);
+    expect(preview.creatorGraduationBonusQuoteRaw).toBe(split.creator);
     const c = cranker();
     const dbcQuote0 = tokenAmount(fork, keys.quoteVault);
     const v0 = tokenAmount(fork, vault);

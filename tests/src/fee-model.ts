@@ -1,10 +1,8 @@
 /**
  * Fee model (launch v3) restated independently of the program, for the fork tests:
  * the graduation and LP splits (programs/stockfloor/src/math.rs), the presale fee parameters and a
- * helper that pins the v3 fee fields on SDK-built DBC config parameters.
+ * check that SDK-built DBC config parameters carry the v3 fee fields.
  */
-import { BN } from "@coral-xyz/anchor";
-
 /** 25 bps presale fee (DBC's minimum fee numerator). */
 export const CURVE_FEE_BPS = 25;
 export const CURVE_CLIFF_FEE_NUMERATOR = 2_500_000n;
@@ -42,12 +40,22 @@ export function lpFeeSplit(q: bigint): FeeSplit {
 export const migrationFeePctForVaultShare = (vaultSharePct: number): number => vaultSharePct + 10;
 
 /**
- * Pin the v3 fee fields on DBC ConfigParameters built by the SDK: 25 bps presale fee, no creator
- * share of curve fees, `migration_fee_percentage = vault share + 10`. Idempotent: once the SDK
- * presets produce these values themselves this is a no-op.
+ * Assert that DBC ConfigParameters built by the SDK carry the v3 fee fields: 25 bps presale fee, no
+ * creator share of curve fees, `migration_fee_percentage = vault share + 10`. The fork tests use the
+ * SDK parameters verbatim; this guards against the SDK presets drifting from the fee model.
  */
-export function applyFeeModelV3(params: any, vaultSharePct: number): void {
-  params.poolFees.baseFee.cliffFeeNumerator = new BN(CURVE_CLIFF_FEE_NUMERATOR.toString());
-  params.creatorTradingFeePercentage = 0;
-  params.migrationFee.feePercentage = migrationFeePctForVaultShare(vaultSharePct);
+export function expectFeeModelV3(params: any, vaultSharePct: number): void {
+  const got = {
+    cliffFeeNumerator: BigInt(params.poolFees.baseFee.cliffFeeNumerator.toString()),
+    creatorTradingFeePercentage: params.creatorTradingFeePercentage,
+    migrationFeePercentage: params.migrationFee.feePercentage,
+  };
+  const want = {
+    cliffFeeNumerator: CURVE_CLIFF_FEE_NUMERATOR,
+    creatorTradingFeePercentage: 0,
+    migrationFeePercentage: migrationFeePctForVaultShare(vaultSharePct),
+  };
+  if (JSON.stringify(got, (_k, v) => (typeof v === "bigint" ? v.toString() : v)) !== JSON.stringify(want, (_k, v) => (typeof v === "bigint" ? v.toString() : v))) {
+    throw new Error(`SDK DBC params are not on the v3 fee model: ${JSON.stringify(got, (_k, v) => (typeof v === "bigint" ? v.toString() : v))}`);
+  }
 }

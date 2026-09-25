@@ -25,7 +25,7 @@ import { authorityPda, buildDbcConfigParams, DEFAULT_QUOTE_ASSET } from "@stockf
 import { describe, expect, it } from "vitest";
 import { DBC_TOKEN_BADGE_SPYX, SPYX_MINT, TOKEN_2022_PROGRAM_ID } from "../src/constants.js";
 import { bnToBig, createConfigIx, fetchVirtualPool, initializeVirtualPoolWithSplTokenIx } from "../src/dbc.js";
-import { applyFeeModelV3 } from "../src/fee-model.js";
+import { expectFeeModelV3 } from "../src/fee-model.js";
 import { anchorErrorFromLogs, Fork, TxFailure } from "../src/fork.js";
 import { dammSwap2Ix } from "../src/damm.js";
 import { fundedWallet, migrateToDammV2 } from "../src/scenario.js";
@@ -242,7 +242,7 @@ describe("2. register_pool is permissionless for the committed base mint: the cr
       vaultSharePct: 50,
     };
     const { feeClaimer, leftoverReceiver, quoteMint, ...params } = buildDbcConfigParams(input, claimer, claimer);
-    applyFeeModelV3(params, input.vaultSharePct);
+    expectFeeModelV3(params, input.vaultSharePct);
     fork.send(
       [await createConfigIx({ config, feeClaimer, leftoverReceiver, quoteMint, payer: partner.publicKey, params: params as never, tokenBadge: DBC_TOKEN_BADGE_SPYX })],
       [partner, configKp],
@@ -289,7 +289,7 @@ describe("2. register_pool is permissionless for the committed base mint: the cr
       exitFeeBps: 200,
     };
     const { feeClaimer, leftoverReceiver, quoteMint, ...params } = buildDbcConfigParams(input, claimer, claimer);
-    applyFeeModelV3(params, input.vaultSharePct);
+    expectFeeModelV3(params, input.vaultSharePct);
     fork.send(
       [await createConfigIx({ config, feeClaimer, leftoverReceiver, quoteMint, payer: partner.publicKey, params: params as never, tokenBadge: DBC_TOKEN_BADGE_SPYX })],
       [partner, configKp],

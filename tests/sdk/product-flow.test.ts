@@ -7,6 +7,10 @@
  *   (curve fees, migration fee, surplus, migration, sync_migration) -> DAMM v2 trades from SDK quotes -> runCrank
  *   (LP fees + base donation burn) -> SDK redemptions -> idempotent crank.
  *
+ * Launch v3 fee model: presale fees go to the platform treasury, the migration fee is split
+ * platform 5% of T / creator 5% of T / vault the rest, LP fees creator 50% / platform 20% / vault the
+ * rest. Every payout is asserted against the SDK's split and the crank plan.
+ *
  * Test setup uses cheatcodes only to fund wallets with SOL and SPYx. Every amount an SDK preview or
  * quote predicts is asserted to equal the program's result exactly.
  */
@@ -30,7 +34,11 @@ import {
   getLaunch,
   getMintInfo,
   getMigrationFeeDistribution,
+  graduationSplit,
   launchPda,
+  lpFeeSplit,
+  migrationFeePctForVaultShare,
+  PLATFORM_TREASURY,
   listLaunches,
   planCrank,
   previewRedeem,
@@ -62,6 +70,8 @@ describe("SDK product flow on the LiteSVM mainnet fork (SDK APIs only)", () => {
   const wallets: Record<string, { kp: Keypair; sender: LiteSvmSender }> = {};
   let expectedPartnerCurveFees = 0n;
   let expectedVault = 0n;
+  let expectedPlatform = 0n;
+  let expectedCreator = 0n;
   let lpClaimingFees = 0n;
   let dammSwaps = 0n;
 
@@ -78,6 +88,18 @@ describe("SDK product flow on the LiteSVM mainnet fork (SDK APIs only)", () => {
   };
   const quoteBal = (owner: PublicKey) => getAtaBalance(admin, owner, SPYX_MINT, TOKEN_2022_PROGRAM_ID);
   const baseBal = (owner: PublicKey) => getAtaBalance(admin, owner, built.addresses.baseMint, TOKEN_PROGRAM_ID);
+  /** Quote balances of the two payees: the platform treasury and the launch creator. */
+  const payees = async () => ({ platform: await quoteBal(PLATFORM_TREASURY), creator: await quoteBal(creator.publicKey) });
+  /** The payee balances equal everything the flow expects them to have received so far. */
+  const expectPayees = async (s: LaunchState) => {
+    const p = await payees();
+    expect(p.platform, "platform treasury").toBe(expectedPlatform);
+    expect(p.creator - creatorQuoteAfterLaunch, "creator").toBe(expectedCreator);
+    expect(s.launch.totalPlatformQuote).toBe(expectedPlatform);
+    expect(s.launch.totalCreatorQuote).toBe(expectedCreator);
+    expect(s.launch.totalHarvestedQuote - s.launch.totalRedeemedQuote).toBe(s.vaultBalance);
+  };
+  let creatorQuoteAfterLaunch = 0n;
 
   /** Trade through the SDK and assert the program did exactly what the quote said. */
   async function trade(name: string, side: "buy" | "sell", amount: bigint) {
@@ -177,6 +199,14 @@ describe("SDK product flow on the LiteSVM mainnet fork (SDK APIs only)", () => {
     expect(s.progress.quoteReserve).toBe(fb.excludedFeeInputAmount);
     expect(s.progress.fraction).toBeCloseTo(Number(fb.excludedFeeInputAmount) / Number(threshold), 5);
     expectedPartnerCurveFees = fb.partnerFee;
+    // create_launch created the three payee ATAs (empty); the launch is v3.
+    expect(s.launch.version).toBe(3);
+    expect(s.launch.feeSplitEnabled).toBe(true);
+    expect(await quoteBal(PLATFORM_TREASURY)).toBe(0n);
+    creatorQuoteAfterLaunch = await quoteBal(creator.publicKey);
+    expect(s.dbcConfig.creatorTradingFeePercentage).toBe(0);
+    expect(s.dbcConfig.migrationFeePercentage).toBe(migrationFeePctForVaultShare(50));
+    expect(s.dbcPool!.creatorQuoteFee).toBe(0n);
 
     // Lookups: by config, by base mint, in the list.
     expect((await getLaunch(admin, { config: built.addresses.config }))!.address.equals(launchAddress)).toBe(true);
@@ -203,17 +233,19 @@ describe("SDK product flow on the LiteSVM mainnet fork (SDK APIs only)", () => {
     expect(s.dbcPool!.partnerQuoteFee).toBe(expectedPartnerCurveFees);
   });
 
-  it("runCrank harvests exactly the partner curve fees and nothing else is due", async () => {
+  it("runCrank harvests exactly the partner curve fees into the platform treasury; the vault is not touched", async () => {
     const plan = planCrank(await state());
     expect(plan.map((a) => a.kind)).toEqual(["harvest_curve_fees"]);
     const res = await runCrank(admin, { launch: launchAddress });
     expect(res.steps.map((s) => [s.action.kind, s.status])).toEqual([["harvest_curve_fees", "executed"]]);
     expect(res.remaining).toEqual([]);
-    expectedVault += expectedPartnerCurveFees;
+    expectedPlatform += expectedPartnerCurveFees;
     expectedPartnerCurveFees = 0n;
     const s = await state();
-    expect(s.vaultBalance).toBe(expectedVault);
-    expect(s.launch.totalHarvestedQuote).toBe(expectedVault);
+    expect(s.vaultBalance).toBe(0n);
+    expect(s.launch.totalHarvestedQuote).toBe(0n);
+    expect(expectedPlatform).toBeGreaterThan(0n);
+    await expectPayees(s);
     expect(s.claimerBaseBalance).toBe(0n); // created by the harvest, burned empty
   });
 
@@ -239,21 +271,45 @@ describe("SDK product flow on the LiteSVM mainnet fork (SDK APIs only)", () => {
     const plan = planCrank(s0);
     expect(plan.map((a) => a.kind)).toEqual(["harvest_curve_fees", "harvest_migration_fee", "harvest_surplus", "migrate"]);
     const mig = plan[1]!;
-    expect(mig.kind === "harvest_migration_fee" && mig.expectedQuote).toBe(built.preview.vaultAtGraduationQuoteRaw);
-    expect(built.preview.vaultAtGraduationQuoteRaw).toBe(getMigrationFeeDistribution(threshold, 50, 0).partnerMigrationFee);
+    if (mig.kind !== "harvest_migration_fee") throw new Error("expected harvest_migration_fee");
+    // DBC pays the partner fee at mf 60; the program splits it: platform 5% of T, creator 5% of T, vault the rest.
+    const partner = getMigrationFeeDistribution(threshold, 60, 0).partnerMigrationFee;
+    expect(mig.expectedQuote).toBe(partner);
+    expect(built.curve.partnerMigrationFee).toBe(partner);
+    expect({ platform: mig.platform, creator: mig.creator, vault: mig.vault }).toEqual(graduationSplit(threshold, partner));
+    expect(mig.vault).toBe(built.preview.vaultAtGraduationQuoteRaw);
+    expect(mig.platform).toBe(built.preview.platformGraduationFeeQuoteRaw);
+    expect(mig.creator).toBe(built.preview.creatorGraduationBonusQuoteRaw);
+    expect(mig.platform).toBe(threshold / 20n);
     const cranker = wallet("cranker", 0n).sender;
     for (const action of plan) {
       const s = await state();
+      const p0 = await payees();
       const b = buildCrankAction(s, action, cranker.payer);
       await cranker.send(b.instructions, { signers: b.signers, computeUnitLimit: b.computeUnitLimit, label: action.kind });
       const after = await state();
+      const p1 = await payees();
       const delta = after.vaultBalance - s.vaultBalance;
-      if (action.kind === "harvest_curve_fees") expect(delta).toBe(expectedPartnerCurveFees);
-      else if (action.kind === "harvest_migration_fee") expect(delta).toBe(action.expectedQuote);
-      else if (action.kind === "harvest_surplus") expect(delta).toBe(action.expectedQuote);
-      else expect(delta).toBe(0n);
+      const toPlatform = p1.platform - p0.platform;
+      const toCreator = p1.creator - p0.creator;
+      if (action.kind === "harvest_curve_fees") {
+        expect([delta, toPlatform, toCreator]).toEqual([0n, expectedPartnerCurveFees, 0n]);
+        expect(action.partnerQuoteFee).toBe(expectedPartnerCurveFees);
+      } else if (action.kind === "harvest_migration_fee") {
+        expect([delta, toPlatform, toCreator]).toEqual([action.vault, action.platform, action.creator]);
+      } else if (action.kind === "harvest_surplus") {
+        expect([delta, toPlatform, toCreator]).toEqual([action.expectedQuote, 0n, 0n]);
+      } else {
+        expect([delta, toPlatform, toCreator]).toEqual([0n, 0n, 0n]);
+      }
+      // The transit (claimer quote ATA) is empty between instructions.
+      expect(await quoteBal(s.claimer)).toBe(0n);
       expectedVault += delta;
+      expectedPlatform += toPlatform;
+      expectedCreator += toCreator;
     }
+    expectedPartnerCurveFees = 0n;
+    await expectPayees(await state());
     // Migration needs 3 signatures and still fits a legacy transaction.
     expect(cranker.sent.find((t) => t.label === "migrate")!.size).toBeLessThanOrEqual(1232);
     // Both one-shot harvests ran before the migration, so neither latched Launch.migrated: the next
@@ -302,10 +358,16 @@ describe("SDK product flow on the LiteSVM mainnet fork (SDK APIs only)", () => {
     let res = await runCrank(admin, { launch: launchAddress });
     expect(res.steps.map((s) => [s.action.kind, s.status])).toEqual([["harvest_lp_fees", "executed"]]);
     const s1 = await state();
-    expect(s1.vaultBalance - s0.vaultBalance).toBe(pendingQuote);
+    // creator 50%, platform 20%, vault the rest (rounding to the vault).
+    const lp1 = lpFeeSplit(pendingQuote);
+    expect(s1.vaultBalance - s0.vaultBalance).toBe(lp1.vault);
     expect(s1.baseSupply).toBe(s0.baseSupply);
     expect(s1.positions[0]!.pending).toEqual({ a: 0n, b: 0n });
-    expectedVault += pendingQuote;
+    expectedVault += lp1.vault;
+    expectedPlatform += lp1.platform;
+    expectedCreator += lp1.creator;
+    await expectPayees(s1);
+    expect(await quoteBal(s1.claimer)).toBe(0n);
 
     // 2. A base donation to the claimer with no fees pending: burn_claimer_base burns it exactly.
     const bob = wallets.bob!;
@@ -335,11 +397,15 @@ describe("SDK product flow on the LiteSVM mainnet fork (SDK APIs only)", () => {
     res = await runCrank(admin, { launch: launchAddress });
     expect(res.steps.map((s) => [s.action.kind, s.status])).toEqual([["harvest_lp_fees", "executed"]]);
     const s5 = await state();
-    expect(s5.vaultBalance - s4.vaultBalance).toBe(s4.positions[0]!.pending.b);
+    const lp2 = lpFeeSplit(s4.positions[0]!.pending.b);
+    expect(s5.vaultBalance - s4.vaultBalance).toBe(lp2.vault);
     expect(s4.baseSupply - s5.baseSupply).toBe(donation2);
     expect(s5.claimerBaseBalance).toBe(0n);
-    expectedVault += s4.positions[0]!.pending.b;
+    expectedVault += lp2.vault;
+    expectedPlatform += lp2.platform;
+    expectedCreator += lp2.creator;
     expect(s5.vaultBalance).toBe(expectedVault);
+    await expectPayees(s5);
   });
 
   it("redemptions through the SDK pay exactly previewRedeem; the floor view matches and the floor rises", async () => {
@@ -368,6 +434,8 @@ describe("SDK product flow on the LiteSVM mainnet fork (SDK APIs only)", () => {
     const s = await state();
     expect(s.vaultBalance).toBe(expectedVault);
     expect(s.launch.totalRedeemedQuote + s.vaultBalance).toBe(s.launch.totalHarvestedQuote);
+    // Redemptions pay only from the vault: the payees are unchanged.
+    await expectPayees(s);
     expect(await getFloor(admin, s.launch, admin.payer)).toEqual(s.floor);
   });
 

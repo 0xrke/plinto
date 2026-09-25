@@ -72,7 +72,13 @@ describe("SDK presets x vault shares on the real DBC and stockfloor programs", (
         expect(fetchLaunch(fork, L.config).pool.equals(L.keys.pool)).toBe(true);
 
         const { migration } = await graduate(fork, L, [20n, 15n]);
+        const [platform0, creator0] = [tokenAmount(fork, L.platformQuoteAccount), tokenAmount(fork, L.creatorQuoteAccount)];
         fork.send([await harvestMigrationFeeIx({ keys: L.keys })], [fork.newWallet(1)]);
+        // The SDK preview predicts every payout of the graduation split.
+        expect(tokenAmount(fork, L.platformQuoteAccount) - platform0).toBe(preview.platformGraduationFeeQuoteRaw);
+        expect(tokenAmount(fork, L.creatorQuoteAccount) - creator0).toBe(preview.creatorGraduationBonusQuoteRaw);
+        expect(tokenAmount(fork, L.claimerQuoteAccount)).toBe(0n);
+        expect(preview.poolSharePct).toBe(90 - share);
         const T = curve.thresholdQuoteRaw;
         const partnerFee = T - ceilDiv(T * BigInt(90 - share), 100n);
         expect(tokenAmount(fork, L.vault)).toBe(preview.vaultAtGraduationQuoteRaw);

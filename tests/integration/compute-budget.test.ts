@@ -26,7 +26,7 @@ import {
 } from "../src/constants.js";
 import { dammSwap2Ix, DammPoolKeys, pendingPositionFees } from "../src/damm.js";
 import { bnToBig, createConfigIx, DbcPoolKeys, fetchVirtualPool, initializeVirtualPoolWithSplTokenIx, migrationDammV2Ix, swap2Ix, SwapMode } from "../src/dbc.js";
-import { applyFeeModelV3, graduationSplit, lpFeeSplit } from "../src/fee-model.js";
+import { expectFeeModelV3, graduationSplit, lpFeeSplit } from "../src/fee-model.js";
 import { FloorTracker } from "../src/floor-invariants.js";
 import { Fork, TxSuccess } from "../src/fork.js";
 import { fundedWallet } from "../src/scenario.js";
@@ -134,7 +134,7 @@ describe("lifecycle under production compute-unit limits", () => {
       exitFeeBps: 200,
     };
     const { feeClaimer, leftoverReceiver, quoteMint, ...params } = buildDbcConfigParams(input, claimer, claimer);
-    applyFeeModelV3(params, input.vaultSharePct);
+    expectFeeModelV3(params, input.vaultSharePct);
     const T = bnToBig(params.migrationQuoteThreshold as never);
     meter("DBC create_config", [await createConfigIx({ config, feeClaimer, leftoverReceiver, quoteMint, payer: partner.publicKey, params: params as never, tokenBadge: DBC_TOKEN_BADGE_SPYX })], [partner, configKp]);
     const baseMintKp = Keypair.generate();

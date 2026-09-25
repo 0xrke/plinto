@@ -318,13 +318,14 @@ describe("extra DAMM v2 positions held by the claimer", () => {
     expect(lpPlan.map((a) => (a.kind === "harvest_lp_fees" ? a.position.toBase58() : ""))).toEqual(expectedOrder);
     expect(planCrank(s0, { includeForeignPositions: true }).filter((a) => a.kind === "harvest_lp_fees").length).toBe(3);
 
-    // runCrank with defaults (also harvests the pending curve fees and surplus of this launch).
+    // runCrank with defaults (also harvests the pending curve fees and surplus of this launch; v3
+    // curve fees go to the platform treasury, the surplus to the vault, LP fees are split).
     const v0 = tokenAmount(fork, L.vault);
-    const expectedOther = (s0.dbcPool!.partnerQuoteFee) + s0.partnerSurplus;
+    const expectedOther = s0.partnerSurplus;
     const res = await tracker.step("runCrank (defaults)", "no-outflow", () => runCrank(sender, { launch }));
     expect(res.steps.every((st) => st.status === "executed")).toBe(true);
     expect(res.steps.filter((st) => st.action.kind === "harvest_lp_fees").length).toBe(2);
-    expect(tokenAmount(fork, L.vault) - v0).toBe(expectedOther + pMigrated.pending.b + pTransferred.pending.b);
+    expect(tokenAmount(fork, L.vault) - v0).toBe(expectedOther + lpFeeSplit(pMigrated.pending.b).vault + lpFeeSplit(pTransferred.pending.b).vault);
     expect(pendingPositionFees(fork, second!.keys.pool, second!.position)).toEqual(pSecond.pending);
 
     // Opted in: the second pool's position, quote into the vault and base burned.
@@ -332,7 +333,7 @@ describe("extra DAMM v2 positions held by the claimer", () => {
     const s1 = mintSupply(fork, L.keys.baseMint);
     const opted = await tracker.step("runCrank (includeForeignPositions)", "no-outflow", () => runCrank(sender, { launch }, { includeForeignPositions: true }));
     expect(opted.steps.map((st) => [st.action.kind, st.status])).toEqual([["harvest_lp_fees", "executed"]]);
-    expect(tokenAmount(fork, L.vault) - v1).toBe(pSecond.pending.b);
+    expect(tokenAmount(fork, L.vault) - v1).toBe(lpFeeSplit(pSecond.pending.b).vault);
     expect(s1 - mintSupply(fork, L.keys.baseMint)).toBe(pSecond.pending.a);
     expect(planCrank((await fetchLaunchState(sender, { launch }))!, { includeForeignPositions: true })).toEqual([]);
   });

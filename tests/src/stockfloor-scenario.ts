@@ -1,10 +1,10 @@
 /**
  * StockFloor launch scenarios on the fork, built the way the product builds them:
  * DBC config parameters from @stockfloor/sdk buildDbcConfigParams (SPYx quote, fee_claimer =
- * leftover_receiver = claimer PDA ["authority", config]) with the v3 fee fields pinned
- * (`applyFeeModelV3`: 25 bps presale fee, no creator trading share, migration fee = vault share +
- * 10), DBC pool, create_launch, register_pool; then curve trades, completion and migration with the
- * harness helpers.
+ * leftover_receiver = claimer PDA ["authority", config]), used verbatim after `expectFeeModelV3`
+ * checked the v3 fee fields (25 bps presale fee, no creator trading share, migration fee = vault
+ * share + 10), DBC pool, create_launch, register_pool; then curve trades, completion and migration
+ * with the harness helpers.
  */
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {
@@ -20,7 +20,7 @@ import { DBC_TOKEN_BADGE_SPYX, SPYX_MINT, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_I
 import { bnToBig, createConfigIx, DbcPoolKeys, fetchVirtualPool, initializeVirtualPoolWithSplTokenIx, SwapMode } from "./dbc.js";
 import { Fork } from "./fork.js";
 import { buyOnCurve, fundedWallet, Migration, migrateToDammV2 } from "./scenario.js";
-import { applyFeeModelV3 } from "./fee-model.js";
+import { expectFeeModelV3 } from "./fee-model.js";
 import type { FloorTrackerAccounts } from "./floor-invariants.js";
 import {
   createLaunchIx,
@@ -68,7 +68,7 @@ export interface StockfloorLaunchOptions {
   creator?: Keypair;
   /** Skip register_pool (default false). */
   skipRegister?: boolean;
-  /** Skip pinning the v3 fee fields on the SDK-built parameters (default false). */
+  /** Skip the v3 fee-field check on the SDK-built parameters (default false). */
   rawSdkParams?: boolean;
   /** Mutate the SDK-built DBC ConfigParameters before create_config (adversarial configs). */
   mutateParams?: (params: any) => void;
@@ -116,7 +116,7 @@ export async function createStockfloorLaunch(fork: Fork, o: StockfloorLaunchOpti
     o.feeClaimer ?? claimer,
     o.leftoverReceiver ?? claimer,
   );
-  if (!o.rawSdkParams) applyFeeModelV3(params, input.vaultSharePct);
+  if (!o.rawSdkParams) expectFeeModelV3(params, input.vaultSharePct);
   o.mutateParams?.(params);
   fork.send(
     [
