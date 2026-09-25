@@ -9,19 +9,26 @@ use crate::constants::external::{
 use crate::constants::{CLAIMER_SEED, LAUNCH_SEED};
 use crate::cp_amm;
 use crate::errors::StockfloorError;
-use crate::events::LpFeesHarvested;
+use crate::events::{FeesDistributed, LpFeesHarvested, FEE_SOURCE_LP};
 use crate::external::{load_damm_pool, load_damm_position};
+use crate::instructions::fee_split::SplitAccounts;
+use crate::math::lp_fee_split;
 use crate::state::Launch;
 use crate::token_utils::{
     assert_quote_mint_transferable, assert_vault_not_frozen, assert_vault_unencumbered,
-    burn_all_signed,
+    burn_all_signed, token_amount,
 };
 
 /// Permissionless: claim DAMM v2 position fees for a position whose NFT is held by the
-/// claimer PDA, on a pool with mints (base_mint, quote_mint). Quote goes straight into the
-/// vault, base is burned. Any such position qualifies (the migrated partner position, or a
-/// position someone gave to the claimer): the proceeds can only raise the floor. The claimer
-/// (NFT owner) signs the CPI; it has no authority over the vault.
+/// claimer PDA, on a pool with mints (base_mint, quote_mint). Base is burned. Any such position
+/// qualifies (the migrated partner position, or a position someone gave to the claimer): the
+/// proceeds can only raise the floor or pay the fee split. The claimer (NFT owner) signs the CPI;
+/// it has no authority over the vault.
+///
+/// Quote:
+/// - v3: into the transit, then `math::lp_fee_split`: creator 50%, platform 20%, vault the rest
+///   (>= 30% and every rounding unit). An unpayable payee's share goes to the vault.
+/// - v2: straight into the vault (unchanged).
 ///
 /// Account order:
 ///  0. `payer`                     signer, writable (rent for the claimer base ATA if missing)
@@ -43,6 +50,11 @@ use crate::token_utils::{
 /// 16. `damm_pool_authority`
 /// 17. `damm_event_authority`
 /// 18. `damm_program`
+/// 19. `claimer_quote_account`     writable, ATA(claimer, quote_mint, quote_token_program): v3 transit
+/// 20. `creator_quote_account`     writable, ATA(launch.creator, quote_mint, quote_token_program)
+/// 21. `platform_quote_account`    writable, ATA(PLATFORM_TREASURY, quote_mint, quote_token_program)
+///
+/// Accounts 19-21 are address-checked for every launch version and only used by v3 launches.
 #[derive(Accounts)]
 pub struct HarvestLpFees<'info> {
     #[account(mut)]
@@ -120,6 +132,28 @@ pub struct HarvestLpFees<'info> {
     /// CHECK: constant address.
     #[account(address = DAMM_V2_PROGRAM_ID)]
     pub damm_program: UncheckedAccount<'info>,
+
+    /// CHECK: address-checked transit account (created by `create_launch` for v3 launches);
+    /// checked for encumbrances after the CPI.
+    #[account(
+        mut,
+        address = launch.quote_ata(&claimer.key()) @ StockfloorError::PayeeAccountMismatch,
+    )]
+    pub claimer_quote_account: UncheckedAccount<'info>,
+
+    /// CHECK: address-checked (the launch creator's quote ATA); payability checked before paying.
+    #[account(
+        mut,
+        address = launch.creator_quote_account() @ StockfloorError::PayeeAccountMismatch,
+    )]
+    pub creator_quote_account: UncheckedAccount<'info>,
+
+    /// CHECK: address-checked (the platform treasury's quote ATA); payability checked before paying.
+    #[account(
+        mut,
+        address = launch.platform_quote_account() @ StockfloorError::PayeeAccountMismatch,
+    )]
+    pub platform_quote_account: UncheckedAccount<'info>,
 }
 
 pub fn handle_harvest_lp_fees(ctx: Context<HarvestLpFees>) -> Result<()> {
@@ -150,11 +184,34 @@ pub fn handle_harvest_lp_fees(ctx: Context<HarvestLpFees>) -> Result<()> {
     }
     assert_quote_mint_transferable(&accounts.quote_mint.to_account_info())?;
     assert_vault_not_frozen(&accounts.vault.to_account_info())?;
+    let fee_split = accounts.launch.fee_split_enabled();
 
     let config_key = accounts.launch.config;
     let bump = [accounts.launch.claimer_bump];
     let seeds: &[&[u8]] = &[CLAIMER_SEED, config_key.as_ref(), &bump];
     let signer = &[seeds];
+
+    let claimer_info = accounts.claimer.to_account_info();
+    let transit_info = accounts.claimer_quote_account.to_account_info();
+    let platform_info = accounts.platform_quote_account.to_account_info();
+    let creator_info = accounts.creator_quote_account.to_account_info();
+    let vault_info = accounts.vault.to_account_info();
+    let quote_mint_info = accounts.quote_mint.to_account_info();
+    let quote_program_info = accounts.quote_token_program.to_account_info();
+    let split_accounts = SplitAccounts {
+        claimer: &claimer_info,
+        transit: &transit_info,
+        platform: &platform_info,
+        creator: &creator_info,
+        vault: &vault_info,
+        quote_mint: &quote_mint_info,
+        quote_token_program: &quote_program_info,
+    };
+    let baseline = if fee_split {
+        Some(split_accounts.baseline()?)
+    } else {
+        None
+    };
     let vault_before = accounts.vault.amount;
 
     cp_amm::cpi::claim_position_fee(CpiContext::new_with_signer(
@@ -164,15 +221,19 @@ pub fn handle_harvest_lp_fees(ctx: Context<HarvestLpFees>) -> Result<()> {
             pool: accounts.damm_pool.to_account_info(),
             position: accounts.position.to_account_info(),
             token_a_account: accounts.claimer_base_account.to_account_info(),
-            token_b_account: accounts.vault.to_account_info(),
+            token_b_account: if fee_split {
+                transit_info.clone()
+            } else {
+                vault_info.clone()
+            },
             token_a_vault: accounts.damm_token_a_vault.to_account_info(),
             token_b_vault: accounts.damm_token_b_vault.to_account_info(),
             token_a_mint: accounts.base_mint.to_account_info(),
-            token_b_mint: accounts.quote_mint.to_account_info(),
+            token_b_mint: quote_mint_info.clone(),
             position_nft_account: accounts.position_nft_account.to_account_info(),
-            signer: accounts.claimer.to_account_info(),
+            signer: claimer_info.clone(),
             token_a_program: accounts.token_program.to_account_info(),
-            token_b_program: accounts.quote_token_program.to_account_info(),
+            token_b_program: quote_program_info.clone(),
             event_authority: accounts.damm_event_authority.to_account_info(),
             program: accounts.damm_program.to_account_info(),
         },
@@ -183,35 +244,65 @@ pub fn handle_harvest_lp_fees(ctx: Context<HarvestLpFees>) -> Result<()> {
         &accounts.token_program.to_account_info(),
         &accounts.base_mint.to_account_info(),
         &accounts.claimer_base_account.to_account_info(),
-        &accounts.claimer.to_account_info(),
+        &claimer_info,
         signer,
     )?;
 
-    // The vault was writable in a CPI into an upgradeable program: it must come back owned by the
-    // vault authority and unencumbered.
-    assert_vault_unencumbered(
-        &accounts.vault.to_account_info(),
-        &accounts.launch.vault_authority_key()?,
-    )?;
+    let (vault_part, vault_after, distribution) = match baseline {
+        Some(baseline) => {
+            let received = split_accounts.received(&accounts.launch, &baseline)?;
+            let split = lp_fee_split(received).map_err(StockfloorError::from)?;
+            let d = split_accounts.distribute(
+                &accounts.launch,
+                &baseline,
+                received,
+                split,
+                accounts.quote_mint.decimals,
+                signer,
+            )?;
+            (d.vault, d.vault_balance, Some(d))
+        }
+        None => {
+            // v2: the vault was writable in a CPI into an upgradeable program: it must come back
+            // owned by the vault authority and unencumbered.
+            assert_vault_unencumbered(&vault_info, &accounts.launch.vault_authority_key()?)?;
+            let after = token_amount(&vault_info)?;
+            let delta = after
+                .checked_sub(vault_before)
+                .ok_or(StockfloorError::VaultDecreased)?;
+            (delta, after, None)
+        }
+    };
 
-    let accounts = ctx.accounts;
-    accounts.vault.reload()?;
-    let vault_after = accounts.vault.amount;
-    let quote_amount = vault_after
-        .checked_sub(vault_before)
-        .ok_or(StockfloorError::VaultDecreased)?;
-
-    let launch = &mut accounts.launch;
-    launch.total_harvested_quote = launch.total_harvested_quote.saturating_add(quote_amount);
+    let damm_pool = accounts.damm_pool.key();
+    let position = accounts.position.key();
+    let launch = &mut ctx.accounts.launch;
+    launch.total_harvested_quote = launch.total_harvested_quote.saturating_add(vault_part);
     launch.total_burned_base = launch.total_burned_base.saturating_add(base_burned);
+    if let Some(d) = distribution {
+        launch.total_platform_quote = launch.total_platform_quote.saturating_add(d.platform);
+        launch.total_creator_quote = launch.total_creator_quote.saturating_add(d.creator);
+    }
 
     emit!(LpFeesHarvested {
         launch: launch.key(),
-        damm_pool: accounts.damm_pool.key(),
-        position: accounts.position.key(),
-        quote_amount,
+        damm_pool,
+        position,
+        quote_amount: vault_part,
         base_burned,
         vault_balance: vault_after,
     });
+    if let Some(d) = distribution {
+        emit!(FeesDistributed {
+            launch: launch.key(),
+            source: FEE_SOURCE_LP,
+            received: d.received,
+            platform_amount: d.platform,
+            creator_amount: d.creator,
+            vault_amount: d.vault,
+            platform_fallback: d.platform_fallback,
+            creator_fallback: d.creator_fallback,
+        });
+    }
     Ok(())
 }
