@@ -100,6 +100,15 @@ answers with the same sentence instead of a developer message.
     keeper will not migrate the pool and the permissionless crank has to. The demo build's $50 quick pick
     is the C2 mainnet demo threshold (`docs/research/surfpool-e2e.md` §3), so the whole demo can be driven
     from the UI. The threshold policy is UI-level only: the program has no USD oracle.
+  - **Curve and vault share**: the flat curve (1.01×) is the default, gentle (1.2×) the alternative. The
+    slider picks the vault share of the raise, 30–60% (default 50%); the caption reads
+    `Vault X% · Pool 90−X% · Platform 5% · Creator 5%`. The preview shows the graduation split in dollars
+    (floor vault, locked pool, platform 5%, creator bonus 5%), the **floor per $100 at listing**
+    (`previewLaunch().floorPer100AtListingUsd`: what $100 bought at the listing price redeems for at the
+    floor, after the 2% exit fee; about $34.88 on flat 50/40), the price move of a $1,000 buy into the
+    DAMM v2 pool (`(1 + 1000 / pool quote)² − 1`, pool fee ignored) and one line per fee (`FEE_COPY` in
+    `src/lib/config.ts`): presale 0.25% to the platform; graduation platform 5% and creator 5%; trading 1%
+    split creator 50% / floor 30% / platform 20% after Meteora's 20%; exit 2% stays in the vault.
   - Once a launch is on chain — and while a retry is pending, because a retry re-sends the transactions
     built from the original input — every parameter fieldset is disabled, so the preview can never
     promise a floor or a threshold other than the launched one.

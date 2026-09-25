@@ -11,12 +11,18 @@ import {
   type LaunchInput,
 } from "@stockfloor/sdk";
 import {
+  CREATOR_GRADUATION_BONUS_PCT,
+  CURVE_TRADING_FEE_BPS,
   DEFAULT_EXIT_FEE_BPS,
   IS_LOCAL_RPC,
+  LP_FEE_SPLIT_PCT,
+  METEORA_PROTOCOL_FEE_PCT,
+  PLATFORM_GRADUATION_FEE_PCT,
   THRESHOLD_POLICY,
   VAULT_SHARE_DEFAULT,
   VAULT_SHARE_MAX,
   VAULT_SHARE_MIN,
+  poolSharePct,
   type ThresholdPolicy,
 } from "@/lib/config";
 import { imageUrlFromUri } from "@/lib/chain/metadata";
@@ -37,23 +43,24 @@ import { useAttestation } from "@/lib/attestation";
 import { useActionGate } from "@/components/token/useActionGate";
 import { AttestationCheckbox } from "@/components/ui/AttestationCheckbox";
 import { VolatilityTag } from "@/components/ui/QuoteChip";
-import { IconTile } from "@/components/ui/Tiles";
-import { CheckIcon, InfoIcon, LockIcon, PercentIcon, PieIcon, SwapIcon, WalletIcon } from "@/components/ui/icons";
+import { IconTile, type Tone } from "@/components/ui/Tiles";
+import { CheckIcon, InfoIcon, LockIcon, PercentIcon, PieIcon, SwapIcon, TrendIcon, WalletIcon } from "@/components/ui/icons";
 import { WalletButton } from "@/components/layout/WalletButton";
 import { PageColumns } from "@/components/layout/PageColumns";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { LaunchPreviewPanel, MOBILE_GUTTER } from "./LaunchPreviewPanel";
 
+/** Flat first: it is the default (docs/DECISIONS.md, founder decisions of 2026-09-25). */
 const PRESETS: { id: CurvePreset; title: string; body: string }[] = [
-  {
-    id: "gentle",
-    title: "Gentle",
-    body: "The last price is 1.2× the first. IPO-style price discovery that rewards early buyers a little.",
-  },
   {
     id: "flat",
     title: "Flat",
     body: "The last price is 1.01× the first. Everyone in the presale pays nearly the same price.",
+  },
+  {
+    id: "gentle",
+    title: "Gentle",
+    body: "The last price is 1.2× the first. IPO-style price discovery that rewards early buyers a little.",
   },
 ];
 
@@ -178,7 +185,7 @@ export function CreateLaunchForm({
     symbol: "",
     metadataUri: "",
     quoteSymbol: QUOTE_ALLOWLIST[0]?.symbol ?? "SPYx",
-    preset: "gentle",
+    preset: "flat",
     vaultSharePct: VAULT_SHARE_DEFAULT,
     thresholdUsd: thresholdInput(policy.defaultUsd),
   });
@@ -307,6 +314,7 @@ export function CreateLaunchForm({
   const quoteSymbol = market?.asset.symbol ?? "the quote asset";
   // Where the thumb sits on the track, in percent of its width.
   const sharePos = ((values.vaultSharePct - VAULT_SHARE_MIN) / (VAULT_SHARE_MAX - VAULT_SHARE_MIN)) * 100;
+  const poolPct = poolSharePct(values.vaultSharePct);
   const firstBuyUsd = market && firstBuyRaw !== null && !firstBuyError ? quoteRawToUsd(firstBuyRaw, market) : 0;
 
   const form = (
@@ -486,20 +494,25 @@ export function CreateLaunchForm({
             style={{
               background: `linear-gradient(to right, var(--color-floor-bar) 0 ${sharePos}%, var(--color-presale-ring) ${sharePos}% 100%)`,
             }}
-            aria-valuetext={`${values.vaultSharePct}% to the vault, ${100 - values.vaultSharePct}% to market liquidity`}
+            aria-valuetext={`${values.vaultSharePct}% to the floor vault, ${poolPct}% to locked pool liquidity, ${PLATFORM_GRADUATION_FEE_PCT}% to the platform, ${CREATOR_GRADUATION_BONUS_PCT}% to the creator`}
           />
           <div className="tnum mt-3 flex justify-between gap-3 text-xs font-bold">
             <span className="text-floor">{values.vaultSharePct}% vault</span>
-            <span className="text-right text-presale">{100 - values.vaultSharePct}% DAMM v2 liquidity</span>
+            <span className="text-right text-presale">{poolPct}% DAMM v2 pool</span>
           </div>
           <div aria-hidden className="tnum mt-1 flex justify-between text-[11px] font-semibold text-ink-3">
             <span>{VAULT_SHARE_MIN}% min</span>
             <span>{VAULT_SHARE_MAX}% max</span>
           </div>
         </div>
-        <p className="field-hint mt-3 leading-relaxed">
-          A higher share means a higher floor and a thinner market. The share is taken as the DBC partner migration fee
-          and harvested into the vault at graduation.
+        <p className="tnum mt-3 text-[13px] font-bold text-ink-2">
+          {`Vault ${values.vaultSharePct}% · Pool ${poolPct}% · Platform ${PLATFORM_GRADUATION_FEE_PCT}% · Creator ${CREATOR_GRADUATION_BONUS_PCT}%`}
+        </p>
+        <p className="field-hint mt-1.5 leading-relaxed">
+          At graduation the platform takes {PLATFORM_GRADUATION_FEE_PCT}% of the raise and you get a{" "}
+          {CREATOR_GRADUATION_BONUS_PCT}% bonus; the slider splits the other{" "}
+          {100 - PLATFORM_GRADUATION_FEE_PCT - CREATOR_GRADUATION_BONUS_PCT}% between the floor vault and the locked
+          pool. A higher vault share means a higher floor for buyers and a thinner market that moves more on each trade.
         </p>
       </StepCard>
 
@@ -625,24 +638,26 @@ export function CreateLaunchForm({
       <StepCard step={6} title="Fixed terms" disabled={locked}>
         <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
           <FixedTerm icon={<PercentIcon />} tone="risk" label="Exit fee">
-            {formatPercent(DEFAULT_EXIT_FEE_BPS / 10_000)}, stays in vault
+            {formatPercent(DEFAULT_EXIT_FEE_BPS / 10_000)}, stays in the vault
           </FixedTerm>
           <FixedTerm icon={<SwapIcon />} tone="presale" label="Curve trading fee">
-            1%
+            {formatPercent(CURVE_TRADING_FEE_BPS / 10_000, { digits: 2 })}, to the platform
           </FixedTerm>
-          <FixedTerm icon={<PieIcon />} tone="graduating" label="Team allocation">
-            None
+          <FixedTerm icon={<PieIcon />} tone="graduating" label="Your bonus at graduation">
+            {CREATOR_GRADUATION_BONUS_PCT}% of the raise
           </FixedTerm>
-          <FixedTerm icon={<LockIcon />} tone="floor" label="Your share of the raise">
-            None
+          <FixedTerm icon={<TrendIcon />} tone="violet" label="Your share of pool fees">
+            {LP_FEE_SPLIT_PCT.creator}%
           </FixedTerm>
         </dl>
         <p className="mt-5 flex gap-3 rounded-soft bg-cloud p-4 text-[13px] leading-relaxed text-ink-2">
           <LockIcon size={18} className="mt-px shrink-0 text-violet" />
           <span>
-            This is not a fundraising round. The raise splits between the floor vault and permanently locked liquidity,
-            and you receive none of it: your only income is 30% of the curve trading fee. Launch here for a token you
-            intend to keep working on, not for launch revenue.
+            This is not a fundraising round. There is no team allocation, and the presale fees go to the platform, not
+            to you. You earn only if the token graduates: a one-off bonus of {CREATOR_GRADUATION_BONUS_PCT}% of the
+            raise, then {LP_FEE_SPLIT_PCT.creator}% of the pool&apos;s trading fees after Meteora&apos;s{" "}
+            {METEORA_PROTOCOL_FEE_PCT}%. The rest of the raise sits in the floor vault and in permanently locked
+            liquidity. Launch here for a token you intend to keep working on.
           </span>
         </p>
 
@@ -749,6 +764,7 @@ export function CreateLaunchForm({
             symbol={values.symbol}
             // The avatar can only show a direct image; a metadata JSON document is read after launch.
             imageUrl={errors.metadataUri ? null : imageUrlFromUri(values.metadataUri.trim())}
+            exitFeeBps={DEFAULT_EXIT_FEE_BPS}
           />
       }
     />
@@ -763,7 +779,7 @@ function FixedTerm({
   children,
 }: {
   icon: ReactNode;
-  tone: "risk" | "presale" | "graduating" | "floor";
+  tone: Tone;
   label: string;
   children: ReactNode;
 }) {

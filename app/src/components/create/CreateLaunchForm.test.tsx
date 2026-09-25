@@ -10,8 +10,9 @@ import { StubLaunchActions } from "@/lib/data/actions";
 import { DataProvider } from "@/lib/data/context";
 import { MockDataSource, mockQuoteMarket } from "@/lib/data/mock";
 import type { LaunchActions, LaunchResume } from "@/lib/data/types";
-import { thresholdPolicy, type ThresholdPolicy } from "@/lib/config";
-import { formatUsd } from "@/lib/format";
+import { FEE_COPY, thresholdPolicy, type ThresholdPolicy } from "@/lib/config";
+import { formatPercent, formatUsd } from "@/lib/format";
+import { priceMoveOnBuy } from "@/lib/launchForm";
 import { CreateLaunchForm } from "./CreateLaunchForm";
 import { formatPriceUsd } from "./format";
 
@@ -92,7 +93,7 @@ function expectFrozen(label: string | RegExp) {
 function expectedFloor(
   symbol: string,
   vaultSharePct: number,
-  preset: "gentle" | "flat" = "gentle",
+  preset: "gentle" | "flat" = "flat",
   thresholdUsd = 10_000,
 ) {
   const market = mockQuoteMarket(QUOTE_ALLOWLIST.find((a) => a.symbol === symbol)!);
@@ -124,6 +125,67 @@ describe("<CreateLaunchForm />", () => {
     const higher = expectedFloor("SPYx", 60);
     expect(screen.getByText(formatPriceUsd(higher.floorAtGraduationUsd))).toBeTruthy();
     expect(higher.floorAtGraduationUsd).toBeGreaterThan(initial.floorAtGraduationUsd);
+  });
+
+  it("starts on the flat curve and a 50% vault share, with the slider bounded to 30..60", async () => {
+    renderForm(false);
+    await screen.findByText(formatPriceUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
+    expect((screen.getByRole("radio", { name: /^Flat/ }) as HTMLInputElement).checked).toBe(true);
+    const slider = screen.getByLabelText("Share of the raise locked in the floor vault") as HTMLInputElement;
+    expect([slider.min, slider.max, slider.value]).toEqual(["30", "60", "50"]);
+    expect(screen.getByText("Vault 50% · Pool 40% · Platform 5% · Creator 5%")).toBeTruthy();
+    fireEvent.change(slider, { target: { value: "30" } });
+    expect(screen.getByText("Vault 30% · Pool 60% · Platform 5% · Creator 5%")).toBeTruthy();
+    fireEvent.change(slider, { target: { value: "60" } });
+    expect(screen.getByText("Vault 60% · Pool 30% · Platform 5% · Creator 5%")).toBeTruthy();
+    expect(slider.getAttribute("aria-valuetext")).toBe(
+      "60% to the floor vault, 30% to locked pool liquidity, 5% to the platform, 5% to the creator",
+    );
+  });
+
+  it("previews the graduation split in dollars, the floor per $100 at listing and the price move on a $1,000 buy", async () => {
+    renderForm(false);
+    const p = expectedFloor("SPYx", 50);
+    await screen.findByText(formatPriceUsd(p.floorAtGraduationUsd));
+    const preview = screen.getByRole("region", { name: "Live preview" });
+    const row = (label: string) => within(preview).getByText(label, { selector: "dt" }).parentElement!.textContent!;
+
+    // Flat curve, 50% vault, 40% pool: about $34.88 back per $100 bought at the listing price.
+    expect(p.floorPer100AtListingUsd).toBeCloseTo(34.88, 1);
+    expect(row("Floor per $100 at listing")).toContain(formatUsd(p.floorPer100AtListingUsd));
+    const move = priceMoveOnBuy(p, 1_000);
+    expect(move).toBeCloseTo(0.5625, 2);
+    expect(row("Price move on a $1,000 buy")).toContain(formatPercent(move, { signed: true }));
+
+    expect(row("Floor vault (50%)")).toContain(formatUsd(p.vaultAtGraduationUsd));
+    expect(row("Locked pool (40%)")).toContain(formatUsd(p.poolQuoteAtGraduationUsd));
+    expect(row("Platform (5%)")).toContain(formatUsd(p.platformGraduationFeeUsd));
+    expect(row("Creator bonus (5%)")).toContain(formatUsd(p.creatorGraduationBonusUsd));
+    // About $500 each at the $10,000 default.
+    expect(p.platformGraduationFeeUsd).toBeGreaterThan(490);
+    expect(p.platformGraduationFeeUsd).toBeLessThan(510);
+
+    // The fee lines, one per fee.
+    for (const line of Object.values(FEE_COPY)) expect(within(preview).getByText(line)).toBeTruthy();
+
+    // A higher vault share raises the guarantee and thins the pool.
+    fireEvent.change(screen.getByLabelText("Share of the raise locked in the floor vault"), { target: { value: "60" } });
+    const high = expectedFloor("SPYx", 60);
+    expect(high.floorPer100AtListingUsd).toBeCloseTo(45.06, 1);
+    expect(row("Floor per $100 at listing")).toContain(formatUsd(high.floorPer100AtListingUsd));
+    expect(row("Locked pool (30%)")).toContain(formatUsd(high.poolQuoteAtGraduationUsd));
+    expect(priceMoveOnBuy(high, 1_000)).toBeGreaterThan(move);
+  });
+
+  it("states the fixed terms of the new fee model", async () => {
+    renderForm(false);
+    await screen.findByText(formatPriceUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
+    const term = (label: string) => screen.getByText(label, { selector: "dt" }).parentElement!.textContent!;
+    expect(term("Curve trading fee")).toContain("0.25%, to the platform");
+    expect(term("Exit fee")).toContain("2%, stays in the vault");
+    expect(term("Your bonus at graduation")).toContain("5% of the raise");
+    expect(term("Your share of pool fees")).toContain("50%");
+    expect(screen.queryByText(/your only income is 30% of the curve trading fee/)).toBeNull();
   });
 
   it("lists every allowlisted quote asset with a volatility label", async () => {
@@ -185,7 +247,7 @@ describe("<CreateLaunchForm />", () => {
 
   it("offers $10,000 (default), $25,000 and $50,000, and the preview follows a pick or a custom value", async () => {
     renderForm(false);
-    const atDefault = expectedFloor("SPYx", 50, "gentle", 10_000);
+    const atDefault = expectedFloor("SPYx", 50, "flat", 10_000);
     expect(await screen.findByText(formatPriceUsd(atDefault.floorAtGraduationUsd))).toBeTruthy();
     expect(screen.getByText(`≈ ${formatUsd(10_000)}`)).toBeTruthy();
     expect((screen.getByLabelText("Custom amount in USD") as HTMLInputElement).value).toBe("10,000");
@@ -196,7 +258,7 @@ describe("<CreateLaunchForm />", () => {
     expect(screen.queryByRole("button", { name: "$50" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "$25,000" }));
-    const at25k = expectedFloor("SPYx", 50, "gentle", 25_000);
+    const at25k = expectedFloor("SPYx", 50, "flat", 25_000);
     expect(screen.getByText(formatPriceUsd(at25k.floorAtGraduationUsd))).toBeTruthy();
     expect(screen.getByText(`≈ ${formatUsd(25_000)}`)).toBeTruthy();
     expect(at25k.floorAtGraduationUsd).toBeGreaterThan(atDefault.floorAtGraduationUsd);
@@ -205,7 +267,7 @@ describe("<CreateLaunchForm />", () => {
 
     // A custom value the picks do not offer.
     fireEvent.change(screen.getByLabelText("Custom amount in USD"), { target: { value: "12,500" } });
-    const at12k = expectedFloor("SPYx", 50, "gentle", 12_500);
+    const at12k = expectedFloor("SPYx", 50, "flat", 12_500);
     expect(screen.getByText(formatPriceUsd(at12k.floorAtGraduationUsd))).toBeTruthy();
     expect(screen.getByText(`≈ ${formatUsd(12_500)}`)).toBeTruthy();
     expect(screen.getByText("Between $10,000 and $100,000. Checked against the same rules the chain applies to the pool config.")).toBeTruthy();
@@ -214,7 +276,7 @@ describe("<CreateLaunchForm />", () => {
 
   it("demo threshold policy: $50 / $100 / $1,000 (default) and a $1 minimum", async () => {
     renderForm(false, new MockDataSource(0), new StubLaunchActions(0), thresholdPolicy(true));
-    const atDefault = expectedFloor("SPYx", 50, "gentle", 1_000);
+    const atDefault = expectedFloor("SPYx", 50, "flat", 1_000);
     expect(await screen.findByText(formatPriceUsd(atDefault.floorAtGraduationUsd))).toBeTruthy();
     const picks = within(screen.getByRole("group", { name: "Graduation threshold quick picks" })).getAllByRole("button");
     expect(picks.map((b) => b.textContent)).toEqual(["$50", "$100", "$1,000 default"]);
@@ -223,7 +285,7 @@ describe("<CreateLaunchForm />", () => {
 
     // The $50 pick: the C2 demo threshold. Floor, vault and threshold all follow it.
     fireEvent.click(screen.getByRole("button", { name: "$50" }));
-    const at50 = expectedFloor("SPYx", 50, "gentle", 50);
+    const at50 = expectedFloor("SPYx", 50, "flat", 50);
     expect(screen.getByText(formatPriceUsd(at50.floorAtGraduationUsd))).toBeTruthy();
     expect(screen.getByText(`≈ ${formatUsd(50)}`)).toBeTruthy();
     expect((screen.getByLabelText("Custom amount in USD") as HTMLInputElement).value).toBe("50");

@@ -1,7 +1,14 @@
 import type { ReactNode } from "react";
 import type { CurvePreset, LaunchPreview } from "@stockfloor/sdk";
 import type { QuoteMarket } from "@/lib/data/types";
-import { BASE_DECIMALS } from "@/lib/config";
+import {
+  BASE_DECIMALS,
+  CREATOR_GRADUATION_BONUS_PCT,
+  FEE_COPY,
+  PLATFORM_GRADUATION_FEE_PCT,
+  PRICE_MOVE_BUY_USD,
+} from "@/lib/config";
+import { formatUsdWhole, priceMoveOnBuy } from "@/lib/launchForm";
 import { EMPTY, formatMaxLoss, formatPercent, formatTokenAmount, formatUsd } from "@/lib/format";
 import { quoteRawToUsd } from "@/lib/metrics";
 import { FloorMeter } from "@/components/token/FloorMeter";
@@ -48,6 +55,7 @@ export function LaunchPreviewPanel({
   name,
   symbol,
   imageUrl,
+  exitFeeBps,
 }: {
   preview: LaunchPreview | null;
   error: string | null;
@@ -61,6 +69,8 @@ export function LaunchPreviewPanel({
   symbol: string;
   /** Direct image URL for the avatar, or null (a metadata JSON document is not read here). */
   imageUrl: string | null;
+  /** Exit fee of the launch, for the floor-per-$100 note. */
+  exitFeeBps: number;
 }) {
   const displaySymbol = symbol.trim() || "TOKEN";
   const quoteSymbol = market?.asset.symbol ?? "";
@@ -125,6 +135,9 @@ export function LaunchPreviewPanel({
           </span>{" "}
           <span className="whitespace-nowrap">(≈ {formatUsd(quoteRawToUsd(preview.vaultAtGraduationQuoteRaw, market))})</span>{" "}
           in the vault
+        </p>
+        <p className="tnum mt-2 text-sm text-on-dark">
+          <b className="text-mint">{formatUsd(preview.floorPer100AtListingUsd)}</b> back per $100 bought at listing
         </p>
       </MidnightCard>
     );
@@ -216,6 +229,27 @@ export function LaunchPreviewPanel({
                   : "—"}
               </Row>
             </dl>
+            <div className="mt-2 rounded-[14px] bg-floor-wash px-3.5 py-3">
+              <dl className="flex items-baseline justify-between gap-4">
+                <dt className="text-sm font-semibold text-floor-strong">Floor per $100 at listing</dt>
+                <dd className="tnum text-[17px] font-extrabold text-floor">
+                  {formatUsd(preview.floorPer100AtListingUsd)}
+                </dd>
+              </dl>
+              <p className="mt-1 text-xs leading-relaxed text-ink-2">
+                What $100 of tokens bought at the listing price redeems for at the floor right after graduation, after
+                the {formatPercent(exitFeeBps / 10_000)} exit fee. Not a guarantee: the floor only rises, but in USD it
+                moves with {market.asset.underlying}.
+              </p>
+            </div>
+            <dl className="mt-1 divide-y divide-line">
+              <Row
+                label={`Price move on a ${formatUsdWhole(PRICE_MOVE_BUY_USD)} buy`}
+                sub={`into the ${formatUsd(preview.poolQuoteAtGraduationUsd, { compact: true })} pool, before its fee`}
+              >
+                {formatPercent(priceMoveOnBuy(preview, PRICE_MOVE_BUY_USD), { signed: true })}
+              </Row>
+            </dl>
             <div className="mt-2 flex items-baseline justify-between gap-4 rounded-[14px] bg-risk-wash px-3.5 py-3">
               <p className="text-sm font-semibold text-risk-strong">Max loss at graduation price</p>
               <p className="tnum text-[15px] font-extrabold text-risk">
@@ -227,6 +261,23 @@ export function LaunchPreviewPanel({
               market falls to the floor. The floor also moves with {market.asset.underlying} in USD.{" "}
               <span className="font-semibold text-ink-2">The floor protects from zero, not from loss.</span>
             </p>
+
+            <h3 className="card-title mt-6 text-lg text-ink">At graduation</h3>
+            <dl className="mt-1 divide-y divide-line">
+              <Row label={`Floor vault (${preview.vaultSharePct}%)`}>{formatUsd(preview.vaultAtGraduationUsd)}</Row>
+              <Row label={`Locked pool (${preview.poolSharePct}%)`}>{formatUsd(preview.poolQuoteAtGraduationUsd)}</Row>
+              <Row label={`Platform (${PLATFORM_GRADUATION_FEE_PCT}%)`}>{formatUsd(preview.platformGraduationFeeUsd)}</Row>
+              <Row label={`Creator bonus (${CREATOR_GRADUATION_BONUS_PCT}%)`}>
+                {formatUsd(preview.creatorGraduationBonusUsd)}
+              </Row>
+            </dl>
+
+            <h3 className="card-title mt-6 text-lg text-ink">Fees</h3>
+            <ul className="mt-2 space-y-1.5 text-[13px] leading-relaxed text-ink-2">
+              {[FEE_COPY.presale, FEE_COPY.graduation, FEE_COPY.trading, FEE_COPY.exit].map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
           </div>
         ) : (
           <p className={`text-[13px] text-ink-3 max-lg:order-5 max-lg:mb-10 max-lg:mt-4 ${MOBILE_GUTTER}`}>

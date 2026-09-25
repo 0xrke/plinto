@@ -3,6 +3,7 @@ import {
   STOCKFLOOR_PROGRAM_ID,
   buildDbcConfigParams,
   previewLaunch,
+  priceImpactPct,
   type CurvePreset,
   type LaunchInput,
   type LaunchPreview,
@@ -144,4 +145,14 @@ export function launchPriceError(dataSource: "mock" | "chain", priceSource: Pric
   return priceSource === "stale"
     ? "The quote price is more than 5 minutes old (Jupiter is unreachable). Launching needs a live price to set the graduation threshold."
     : "The live quote price is unavailable (Jupiter). Launching needs it to set the graduation threshold.";
+}
+
+/**
+ * Relative price move after listing caused by a buy of `buyUsd` into the full-range DAMM v2 pool the
+ * launch seeds, as a fraction (0.5625 = +56.25%): `(1 + buy / pool quote)^2 - 1`, pool fee ignored.
+ * Zero when the preview has no pool quote.
+ */
+export function priceMoveOnBuy(preview: Pick<LaunchPreview, "poolQuoteAtGraduationUsd">, buyUsd: number): number {
+  if (!(preview.poolQuoteAtGraduationUsd > 0) || !(buyUsd >= 0)) return 0;
+  return priceImpactPct(buyUsd, preview.poolQuoteAtGraduationUsd) / 100;
 }

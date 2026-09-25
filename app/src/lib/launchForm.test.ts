@@ -5,6 +5,7 @@ import {
   launchPriceError,
   parseThresholdUsd,
   previewLaunchInput,
+  priceMoveOnBuy,
   validateLaunchForm,
   validateThresholdUsd,
   type LaunchFormValues,
@@ -146,6 +147,39 @@ describe("previewLaunchInput", () => {
     const { preview, error } = previewLaunchInput(input(THRESHOLD_MAX_USD, 0.0000001));
     expect(preview).toBeNull();
     expect(error).toMatch(/outside \(0, u64::MAX\]/);
+  });
+});
+
+describe("priceMoveOnBuy", () => {
+  it("is the constant-product move of a buy into the pool quote, pool fee ignored", () => {
+    // $1,000 into a $4,000 pool (a $10,000 raise at 40% pool): (1 + 0.25)^2 - 1.
+    expect(priceMoveOnBuy({ poolQuoteAtGraduationUsd: 4_000 }, 1_000)).toBeCloseTo(0.5625, 12);
+    // 1% of the raise into the same pool: about +5.06%.
+    expect(priceMoveOnBuy({ poolQuoteAtGraduationUsd: 4_000 }, 100)).toBeCloseTo(0.050625, 12);
+    expect(priceMoveOnBuy({ poolQuoteAtGraduationUsd: 4_000 }, 0)).toBe(0);
+    expect(priceMoveOnBuy({ poolQuoteAtGraduationUsd: 0 }, 1_000)).toBe(0);
+  });
+
+  it("follows the live preview: a thinner pool moves more", () => {
+    const spyx = QUOTE_ALLOWLIST.find((a) => a.symbol === "SPYx")!;
+    const at = (vaultSharePct: number) =>
+      previewLaunchInput({
+        name: "P",
+        symbol: "P",
+        uri: "",
+        quote: spyx,
+        quotePriceUsd: 758,
+        quoteMultiplier: 1,
+        preset: "flat",
+        vaultSharePct,
+        thresholdUsd: 10_000,
+        exitFeeBps: 200,
+      }).preview!;
+    const pool40 = at(50);
+    expect(pool40.poolQuoteAtGraduationUsd).toBeCloseTo(4_000, -1);
+    expect(priceMoveOnBuy(pool40, 1_000)).toBeCloseTo(0.5625, 2);
+    expect(priceMoveOnBuy(at(60), 1_000)).toBeGreaterThan(priceMoveOnBuy(pool40, 1_000));
+    expect(priceMoveOnBuy(at(30), 1_000)).toBeLessThan(priceMoveOnBuy(pool40, 1_000));
   });
 });
 
