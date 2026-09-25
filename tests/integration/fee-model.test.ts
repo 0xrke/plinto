@@ -632,6 +632,17 @@ describe("fee model v3: the creator payee is launch.creator (the create_launch s
     expect(tokenAmount(fork, launchCreatorQuote)).toBe(mig.creator);
     expect(tokenAmount(fork, spyxAta(L.creator.publicKey))).toBe(0n);
   });
+
+  it("the platform treasury key cannot be a launch creator (its payee ATA would be passed twice), so no launch can make the two payees collide", async () => {
+    const fork = Fork.create({ stockfloor: true, spike: false });
+    const L = await createStockfloorLaunch(fork, { skipCreateLaunch: true });
+    const ix = await createLaunchIx({ payer: L.partner.publicKey, creator: PLATFORM_TREASURY, config: L.config, baseMint: L.keys.baseMint, exitFeeBps: 200 });
+    // The treasury's signature is forged (signature verification off): the rejection is the program's.
+    const res = fork.sendTxForgedSigners([ix], [L.partner, L.configKeypair]);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(anchorErrorFromLogs(res.logs)?.name).toBe("ConstraintDuplicateMutableAccount");
+    expect(fork.getAccount(deriveLaunch(L.config))).toBeNull();
+  });
 });
 
 // ====================================================================================================
