@@ -269,3 +269,62 @@ Format: date — decision · alternatives · reason.
   pool, the floor in dollars, the creator bonus and the platform cut are all toy-sized and spam is cheap; Meteora's
   keepers skip stock-quoted pools under ~$750. The bound is UI-level like the quote allowlist: the program has no
   USD oracle, and the demo must keep working on-chain. Not implemented yet.
+
+## 2026-09-25 — Fee model: implementation decisions (branch `feat/fee-model`)
+
+Format as above: **decision** · alternatives · why. D1–D13 refer to the implementation plan.
+
+- **D1 Platform treasury is a plain key, `78tRFS255ADZT2oMSXi5xjHt7Y2SVDLdDEBz759eQsqJ`** (`PLATFORM_TREASURY` in
+  `constants.rs` and the SDK `addresses.ts`; keypair in the gitignored `keys/platform-treasury.json`). Payments go to
+  its quote ATA `ATA(PLATFORM_TREASURY, quote_mint, quote_token_program)`. · A program PDA · A PDA needs an admin
+  withdraw instruction; a key keeps "no admin instruction" true. Changing the treasury needs a program upgrade; the
+  founder may swap in a hardware or multisig key before any mainnet upgrade.
+- **D2 `LAUNCH_VERSION` 3, fee routing by `launch.version`.** v3 follows the new split; v2 launches (the live
+  mainnet SFDEMO) keep their original promise, 100% of every harvest into the vault. Two informational counters,
+  `total_platform_quote` and `total_creator_quote`, take 16 of the 62 reserved bytes (`reserved` becomes 46 bytes,
+  the account size stays 8 + 343). · Migrate v2 accounts; one code path for all · Holders of an existing launch keep
+  what they were promised and old accounts still decode.
+- **D3 Harvests that split go through a transit account** `ATA(claimer PDA, quote_mint, quote_token_program)`.
+  DBC and DAMM v2 pay one lump to one account; the claimer then pays platform, creator and the vault (everything left
+  in the transit, including any donation or dust) with `transfer_checked`. The transit ends at 0
+  (`TransitNotEmptied` otherwise) and is checked after every CPI: owner = claimer, no delegate, no close authority,
+  no CPI Guard, no required memo (`ClaimerQuoteAccountEncumbered`). · Pay out of the vault · Only `redeem` may move
+  quote out of the vault.
+- **D4 Payees can never block the floor.** `create_launch` creates the creator, platform and transit ATAs
+  (`init_if_needed`, paid by the launch payer); harvests take them as address-checked accounts
+  (`PayeeAccountMismatch`), so no rent is due at harvest time. Before paying the platform or the creator the program
+  checks the account is payable (token-program owned, right mint and owner, `Initialized`, not frozen, no required
+  incoming memo). An unpayable payee's share goes to the vault. Exception: in `harvest_curve_fees` (v3) an unpayable
+  platform account makes the harvest fail with `PlatformQuoteAccountUnavailable`; the fees stay claimable in DBC.
+  · Fail the harvest on an unpayable creator · A creator could otherwise block `harvest_migration_fee`, and with it
+  `redeem`, forever. Curve fees must not fall back to the vault (that would make the presale fund the vault again).
+- **D5 The creator payee is `launch.creator`** (the signer of `create_launch`), not `pool.creator`, which may differ.
+  `LaunchCreated` and `PoolRegistered` report both.
+- **D6 Presale fees.** The program requires `creator_trading_fee_percentage == 0`
+  (`MAX_CREATOR_TRADING_FEE_PERCENTAGE` = 0, same error code). SDK preset: 25 bps (`cliffFeeNumerator` 2_500_000,
+  DBC's minimum). v3 `harvest_curve_fees` claims straight into the platform ATA (DBC leaves the receiver
+  unconstrained); no transit, the vault is not touched. Allowed any time, on failed and successful presales. The
+  20% anti-snipe cliff and scheduler modes 0/1 stay allowed.
+- **D7 Graduation.** `migration_fee_percentage` must be in [40, 70] (pool 30–60%). Of what the migration fee harvest
+  actually receives: platform `min(floor(T*5%), received)`, creator `min(floor(T*5%), received - platform)`, vault
+  the rest plus the transit sweep. The vault gets the rounding. `create_launch` rejects a threshold whose vault part
+  at graduation would be 0 (`MigrationQuoteThresholdTooSmall`). `harvest_surplus` is unchanged (100% to the vault).
+  SDK: `migrationFee.feePercentage = vaultSharePct + 10`.
+- **D8 Post-graduation trading.** `create_launch` now also requires `migration_fee_option == 6` (Customizable),
+  `migrated_pool_fee_bps == 100`, `migrated_dynamic_fee == 0`, `migrated_pool_base_fee_mode == 0`,
+  `migrated_compounding_fee_bps == 0`, `migrated_pool_base_fee_bytes` all zero and `enable_first_swap_with_min_fee
+  == 0` (audit F04/F05). v3 `harvest_lp_fees` splits the quote through the transit: creator `floor(q/2)`, platform
+  `floor(q/5)`, vault the rest (≥ 30%). Base is burned as before.
+- **D9 Exit fee** stays program-bounded at ≤ 500 bps; the SDK and UI fix it at 200. Requiring 200 on chain is a
+  possible follow-up.
+- **D10 Events.** Existing events are unchanged; their `quote_amount` is the part that entered the vault (0 for v3
+  curve fees). New `FeesDistributed { launch, source (0 curve, 1 migration, 2 lp), received, platform_amount,
+  creator_amount, vault_amount, platform_fallback, creator_fallback }`.
+- **D11 Errors** are appended after `MigrationQuoteThresholdTooSmall` only (no renumbering): `MigratedPoolFeeInvalid`,
+  `MigratedDynamicFeeNotAllowed`, `FirstSwapWithMinFeeNotAllowed`, `PayeeAccountMismatch`,
+  `PlatformQuoteAccountUnavailable`, `ClaimerQuoteAccountEncumbered`, `TransitNotEmptied`. Only the texts of
+  `MigrationFeePercentageOutOfRange`, `CreatorTradingFeeTooHigh` and `MigrationQuoteThresholdTooSmall` change.
+- **D12 Threshold policy is UI-only** (`NEXT_PUBLIC_DEMO_THRESHOLDS=1` restores $50/$100/$1,000 and min $1; normal
+  min $10,000, picks $10K/$25K/$50K, max $100K). The SDK minimum stays $1. The buyer guarantee is shown as "Floor per
+  $100 at listing" = `100 × v / (√r + 1 − m) × 0.98` (never "guaranteed").
+- **D13 Referral on UI swaps** (platform ATA as DBC `referral_token_account`) is an optional last step.
