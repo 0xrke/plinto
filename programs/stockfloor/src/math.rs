@@ -156,6 +156,81 @@ pub fn floor_q64(vault_raw: u64, supply: u64) -> Option<u128> {
     Some(((vault_raw as u128) << 64) / supply as u128)
 }
 
+/// A harvest split between the platform treasury, the launch creator and the vault (v3 launches).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct FeeSplit {
+    pub platform: u64,
+    pub creator: u64,
+    pub vault: u64,
+}
+
+impl FeeSplit {
+    /// Everything to the vault (v2 launches, fallbacks).
+    pub const fn all_to_vault(amount: u64) -> Self {
+        FeeSplit {
+            platform: 0,
+            creator: 0,
+            vault: amount,
+        }
+    }
+
+    /// `platform + creator + vault` (checked).
+    pub fn total(&self) -> Result<u64, MathError> {
+        self.platform
+            .checked_add(self.creator)
+            .and_then(|x| x.checked_add(self.vault))
+            .ok_or(MathError::Overflow)
+    }
+}
+
+/// `floor(amount * bps / 10_000)` in u128.
+pub fn bps_floor(amount: u64, bps: u16) -> Result<u64, MathError> {
+    if u64::from(bps) > BPS_DENOMINATOR {
+        return Err(MathError::InvalidFeeBps);
+    }
+    pro_rata_floor(amount, u64::from(bps), BPS_DENOMINATOR)
+}
+
+/// Split of the partner migration fee actually received at graduation, for threshold `T`:
+///
+/// ```text
+/// platform = min(floor(T * 500 / 10_000), received)
+/// creator  = min(floor(T * 500 / 10_000), received - platform)
+/// vault    = received - platform - creator
+/// ```
+///
+/// The cuts are fixed shares of the raise, not of the fee, so the vault gets every rounding unit
+/// and the whole remainder. The sum is exactly `received`.
+pub fn graduation_split(threshold: u64, received: u64) -> Result<FeeSplit, MathError> {
+    use crate::constants::{CREATOR_GRADUATION_BONUS_BPS, PLATFORM_GRADUATION_FEE_BPS};
+    let platform = bps_floor(threshold, PLATFORM_GRADUATION_FEE_BPS)?.min(received);
+    let rest = received.checked_sub(platform).ok_or(MathError::Overflow)?;
+    let creator = bps_floor(threshold, CREATOR_GRADUATION_BONUS_BPS)?.min(rest);
+    let vault = rest.checked_sub(creator).ok_or(MathError::Overflow)?;
+    Ok(FeeSplit {
+        platform,
+        creator,
+        vault,
+    })
+}
+
+/// Split of harvested DAMM v2 LP quote fees `q`: creator `floor(q / 2)`, platform `floor(q / 5)`,
+/// vault the rest (at least `floor(3q / 10)`, and every rounding unit). The sum is exactly `q`.
+pub fn lp_fee_split(received: u64) -> Result<FeeSplit, MathError> {
+    use crate::constants::{LP_FEE_CREATOR_BPS, LP_FEE_PLATFORM_BPS};
+    let creator = bps_floor(received, LP_FEE_CREATOR_BPS)?;
+    let platform = bps_floor(received, LP_FEE_PLATFORM_BPS)?;
+    let vault = received
+        .checked_sub(creator)
+        .and_then(|x| x.checked_sub(platform))
+        .ok_or(MathError::Overflow)?;
+    Ok(FeeSplit {
+        platform,
+        creator,
+        vault,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -632,6 +707,132 @@ mod tests {
             let after = compute_redeem(donated, s, a, bps).map(|q| q.net).unwrap_or(0);
             prop_assert!(after >= before);
             prop_assert!(floor_not_decreased(v, s, donated, s));
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Fee splits (v3 launches).
+    // ---------------------------------------------------------------------
+
+    fn gs(t: u64, r: u64) -> (u64, u64, u64) {
+        let s = graduation_split(t, r).unwrap();
+        (s.platform, s.creator, s.vault)
+    }
+
+    #[test]
+    fn graduation_split_vectors() {
+        // Received = the partner migration fee at mf 60 (vault share 50%) unless stated.
+        let fee60 = |t: u64| crate::external::partner_migration_fee(t, 60);
+        assert_eq!(gs(0, 0), (0, 0, 0));
+        assert_eq!(gs(1, fee60(1)), (0, 0, fee60(1)));
+        // T < 20: both cuts round to 0, the vault gets everything.
+        assert_eq!(gs(19, fee60(19)), (0, 0, fee60(19)));
+        assert_eq!(fee60(19), 11);
+        assert_eq!(gs(20, fee60(20)), (1, 1, 10));
+        assert_eq!(gs(21, fee60(21)), (1, 1, 10));
+        assert_eq!(gs(39, fee60(39)), (1, 1, 21));
+        assert_eq!(gs(40, fee60(40)), (2, 2, 20));
+        // The C2 demo threshold ($50) and the C1 threshold ($1,000) in SPYx raw units.
+        assert_eq!(
+            gs(6_548_266, fee60(6_548_266)),
+            (327_413, 327_413, 3_274_133)
+        );
+        assert_eq!(fee60(6_548_266), 3_928_959);
+        assert_eq!(
+            gs(131_346_320, fee60(131_346_320)),
+            (6_567_316, 6_567_316, 65_673_160)
+        );
+        let max = u64::MAX;
+        let cut = max / 20;
+        assert_eq!(gs(max, fee60(max)), (cut, cut, fee60(max) - 2 * cut));
+        // Received below the two cuts: the platform is paid first, then the creator, vault 0.
+        assert_eq!(gs(1_000, 100), (50, 50, 0));
+        assert_eq!(gs(1_000, 99), (50, 49, 0));
+        assert_eq!(gs(1_000, 50), (50, 0, 0));
+        assert_eq!(gs(1_000, 49), (49, 0, 0));
+        assert_eq!(gs(1_000, 0), (0, 0, 0));
+        assert_eq!(gs(1_000, 101), (50, 50, 1));
+        // Received above the threshold (a larger fee than the model expects) goes to the vault.
+        assert_eq!(gs(100, max), (5, 5, max - 10));
+    }
+
+    #[test]
+    fn lp_fee_split_vectors() {
+        let ls = |q: u64| {
+            let s = lp_fee_split(q).unwrap();
+            (s.creator, s.platform, s.vault)
+        };
+        assert_eq!(ls(0), (0, 0, 0));
+        assert_eq!(ls(1), (0, 0, 1));
+        assert_eq!(ls(2), (1, 0, 1));
+        assert_eq!(ls(3), (1, 0, 2));
+        assert_eq!(ls(4), (2, 0, 2));
+        assert_eq!(ls(5), (2, 1, 2));
+        assert_eq!(ls(9), (4, 1, 4));
+        assert_eq!(ls(10), (5, 2, 3));
+        assert_eq!(ls(11), (5, 2, 4));
+        assert_eq!(ls(1_000_000), (500_000, 200_000, 300_000));
+        let max = u64::MAX;
+        assert_eq!(ls(max), (max / 2, max / 5, max - max / 2 - max / 5));
+    }
+
+    #[test]
+    fn fee_split_helpers() {
+        assert_eq!(
+            FeeSplit::all_to_vault(7),
+            FeeSplit {
+                platform: 0,
+                creator: 0,
+                vault: 7
+            }
+        );
+        assert_eq!(FeeSplit::all_to_vault(7).total(), Ok(7));
+        let over = FeeSplit {
+            platform: u64::MAX,
+            creator: 1,
+            vault: 0,
+        };
+        assert_eq!(over.total(), Err(MathError::Overflow));
+        assert_eq!(bps_floor(u64::MAX, 10_000), Ok(u64::MAX));
+        assert_eq!(bps_floor(1, 10_001), Err(MathError::InvalidFeeBps));
+        assert_eq!(bps_floor(19, 500), Ok(0));
+        assert_eq!(bps_floor(20, 500), Ok(1));
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig { cases: 4096, .. ProptestConfig::default() })]
+
+        /// The parts sum to `received`, each cut is at most 5% of T, the platform is paid before
+        /// the creator, and the vault gets at least `received - 2 * floor(T / 20)`.
+        #[test]
+        fn prop_graduation_split(t in any::<u64>(), r in any::<u64>()) {
+            let s = graduation_split(t, r).unwrap();
+            prop_assert_eq!(s.total().unwrap(), r);
+            let cut = t / 20;
+            prop_assert!(s.platform <= cut && s.creator <= cut);
+            prop_assert!(s.vault as u128 >= (r as u128).saturating_sub(2 * cut as u128));
+            prop_assert_eq!(s.platform, cut.min(r));
+            if s.creator > 0 { prop_assert_eq!(s.platform, cut); }
+        }
+
+        /// Realistic graduation: received = the partner fee at mf in [40, 70]; the vault always
+        /// gets at least 30% of T minus one unit and the cuts are exactly floor(T / 20).
+        #[test]
+        fn prop_graduation_split_at_accepted_mf(t in 20u64..=u64::MAX / 2, mf in 40u8..=70) {
+            let r = crate::external::partner_migration_fee(t, mf);
+            let s = graduation_split(t, r).unwrap();
+            prop_assert_eq!(s.platform, t / 20);
+            prop_assert_eq!(s.creator, t / 20);
+            prop_assert!(s.vault as u128 * 100 + 100 >= t as u128 * 30);
+        }
+
+        #[test]
+        fn prop_lp_fee_split(q in any::<u64>()) {
+            let s = lp_fee_split(q).unwrap();
+            prop_assert_eq!(s.total().unwrap(), q);
+            prop_assert_eq!(s.creator, q / 2);
+            prop_assert_eq!(s.platform, q / 5);
+            prop_assert!(s.vault as u128 >= (3 * q as u128) / 10);
         }
     }
 

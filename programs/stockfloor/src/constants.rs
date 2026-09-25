@@ -21,16 +21,37 @@ pub const VAULT_AUTHORITY_SEED: &[u8] = b"vault_authority";
 /// Maximum exit fee accepted by `create_launch` (5%).
 pub const MAX_EXIT_FEE_BPS: u16 = 500;
 
-/// Allowed range for the DBC `migration_fee_percentage` (the share of the migration
-/// threshold that becomes the partner migration fee, i.e. the initial floor).
-/// 99 is the maximum accepted by DBC itself (`MAX_MIGRATION_FEE_PERCENTAGE`).
+/// Allowed range for the DBC `migration_fee_percentage` (the share of the migration threshold
+/// that becomes the partner migration fee). Of that fee, 5% of the threshold goes to the platform,
+/// 5% to the creator and the rest to the vault (`math::graduation_split`), so the range [40, 70]
+/// is a vault share of 30-60% of the raise and a DAMM v2 pool of 60-30% of it.
 pub const MIN_MIGRATION_FEE_PERCENTAGE: u8 = 30;
 pub const MAX_MIGRATION_FEE_PERCENTAGE: u8 = 99;
 
-/// Maximum DBC `creator_trading_fee_percentage` (brief §4 default). The creator's share
-/// of curve trading fees is capped so a config cannot route the partner share (the
-/// vault's) to the creator.
+/// Maximum DBC `creator_trading_fee_percentage`: 0. The whole partner share of presale fees goes to
+/// the platform treasury (v3 `harvest_curve_fees`); the creator is paid at graduation instead.
 pub const MAX_CREATOR_TRADING_FEE_PERCENTAGE: u8 = 30;
+
+/// Platform treasury (a plain key, not a PDA: a PDA would need an admin withdraw path). It is only
+/// ever a payment destination, through its quote ATA `ATA(PLATFORM_TREASURY, quote_mint,
+/// quote_token_program)`. Changing it needs a program upgrade.
+#[constant]
+pub const PLATFORM_TREASURY: Pubkey = pubkey!("78tRFS255ADZT2oMSXi5xjHt7Y2SVDLdDEBz759eQsqJ");
+/// Platform share of the raise at graduation: 5% of `migration_quote_threshold`.
+pub const PLATFORM_GRADUATION_FEE_BPS: u16 = 500;
+/// Creator's one-off success bonus at graduation: 5% of `migration_quote_threshold`.
+pub const CREATOR_GRADUATION_BONUS_BPS: u16 = 500;
+/// Creator share of harvested DAMM v2 LP quote fees (v3).
+pub const LP_FEE_CREATOR_BPS: u16 = 5_000;
+/// Platform share of harvested DAMM v2 LP quote fees (v3). The vault gets the rest (>= 30%).
+pub const LP_FEE_PLATFORM_BPS: u16 = 2_000;
+/// Required DAMM v2 pool fee after migration: 1%.
+pub const REQUIRED_MIGRATED_POOL_FEE_BPS: u16 = 100;
+/// DBC `MigrationFeeOption::Customizable`: the migrated pool fee comes from the config itself
+/// (the fixed tiers 0-5 inherit a static Meteora DAMM v2 config whose fees we cannot verify).
+pub const DBC_MIGRATION_FEE_OPTION_CUSTOMIZABLE: u8 = 6;
+/// First launch layout version whose harvests split fees between platform, creator and vault.
+pub const LAUNCH_VERSION_FEE_SPLIT: u8 = 3;
 
 /// DBC fee numerators are out of 1e9.
 pub const DBC_FEE_DENOMINATOR: u64 = 1_000_000_000;
@@ -38,9 +59,10 @@ pub const DBC_FEE_DENOMINATOR: u64 = 1_000_000_000;
 /// 20%, the start of the brief's optional anti-snipe schedule (§4).
 pub const MAX_CURVE_FEE_NUMERATOR: u64 = 200_000_000;
 
-/// Launch account layout version. 2 = split claimer / vault authority bumps (M2). Version 1 was
-/// never deployed.
-pub const LAUNCH_VERSION: u8 = 2;
+/// Launch account layout version. 2 = split claimer / vault authority bumps (M2); 3 = fee split
+/// between platform, creator and vault, plus the platform and creator counters. Version 1 was never
+/// deployed. Version 2 launches keep paying 100% of every harvest into the vault.
+pub const LAUNCH_VERSION: u8 = 3;
 
 /// External programs and their well-known PDAs.
 pub mod external {
@@ -114,4 +136,24 @@ mod tests {
     const _: () = assert!(MAX_MIGRATION_FEE_PERCENTAGE < 100);
     const _: () = assert!(MAX_CREATOR_TRADING_FEE_PERCENTAGE <= 100);
     const _: () = assert!(MAX_CURVE_FEE_NUMERATOR < DBC_FEE_DENOMINATOR);
+    // Graduation cuts leave the vault a share, and the LP split leaves the vault >= 30%.
+    const _: () = assert!(
+        (PLATFORM_GRADUATION_FEE_BPS as u64 + CREATOR_GRADUATION_BONUS_BPS as u64)
+            < crate::math::BPS_DENOMINATOR
+    );
+    const _: () = assert!(
+        LP_FEE_CREATOR_BPS as u64 + LP_FEE_PLATFORM_BPS as u64 + 3_000
+            <= crate::math::BPS_DENOMINATOR
+    );
+    const _: () = assert!(LAUNCH_VERSION >= LAUNCH_VERSION_FEE_SPLIT);
+
+    #[test]
+    fn platform_treasury_is_the_agreed_key() {
+        assert_eq!(
+            PLATFORM_TREASURY.to_string(),
+            "78tRFS255ADZT2oMSXi5xjHt7Y2SVDLdDEBz759eQsqJ"
+        );
+        assert_ne!(PLATFORM_TREASURY, Pubkey::default());
+        assert!(PLATFORM_TREASURY.is_on_curve());
+    }
 }
