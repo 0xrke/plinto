@@ -328,3 +328,29 @@ Format as above: **decision** · alternatives · why. D1–D13 refer to the impl
   min $10,000, picks $10K/$25K/$50K, max $100K). The SDK minimum stays $1. The buyer guarantee is shown as "Floor per
   $100 at listing" = `100 × v / (√r + 1 − m) × 0.98` (never "guaranteed").
 - **D13 Referral on UI swaps** (platform ATA as DBC `referral_token_account`) is an optional last step.
+
+### Fee model: implementation notes (program part)
+
+- **The payee "can receive" check also rejects an account that refuses non-confidential credits.** SPYx carries
+  `ConfidentialTransferMint`, so a holder can configure `ConfidentialTransferAccount` with
+  `allow_non_confidential_credits` off, and Token-2022 then rejects plain transfers into it. Without this a creator
+  could still block `harvest_migration_fee` (and with it `redeem`). · Frozen / memo / owner / mint checks only (the
+  plan) · Found in the Token-2022 8.0.1 transfer path while implementing D4.
+- **The transit and payee accounts are checked by address for every launch version,** including v2 launches, which
+  ignore them. Clients always pass the three derived ATAs (they may not exist for a v2 launch).
+- **The platform treasury cannot be a launch creator:** its payee ATA would be passed twice as a mutable account, and
+  Anchor rejects `create_launch` (`ConstraintDuplicateMutableAccount`). So a v3 launch never has colliding payees.
+  The platform launches its own tokens from another key.
+- **v3 `harvest_curve_fees` does not look at the vault at all** (not passed to DBC, no frozen / encumbrance check),
+  so an issuer-frozen vault does not stop presale fee collection. Every harvest that pays the vault still checks it.
+- **`FeesDistributed` is emitted for every v3 split harvest, including zero amounts** (as the existing events are;
+  audit F21 is out of scope). `total_harvested_quote` now counts only quote that entered the vault.
+- **Issuer controls stay the one way to stall the floor:** freezing the transit (like freezing the vault) makes the
+  split harvests fail until the issuer unfreezes it. That is the same trust in the SPYx issuer as before.
+- **Fork harness pins the v3 fee fields** (`tests/src/fee-model.ts` `applyFeeModelV3`) on SDK-built parameters until
+  the SDK presets produce them; `integration/sdk-presets-fork` checks the SDK's own parameters and is the acceptance
+  test for the SDK part.
+- **Measured compute units (six runs, 2026-09-25):** `create_launch` up to 163,053 (the first launch also creates the
+  platform ATA), `harvest_curve_fees` 91,276 when it creates the claimer base ATA and 59,180 otherwise,
+  `harvest_migration_fee` 69,817, `harvest_lp_fees` 90,551. Limits in `integration/compute-budget`: 200,000 /
+  120,000 / 85,000 / 100,000 / 120,000; the SDK `CU_LIMITS` should follow.

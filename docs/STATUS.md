@@ -4,6 +4,23 @@
 **C2 done: StockFloor is live on Solana mainnet.** What remains is C3 (hosting the app, the video, the submission)
 and a handful of decisions only the user can make.
 
+## Fee model, branch `feat/fee-model` (2026-09-25, in progress, not merged)
+- **Program part done** (docs/DECISIONS.md, "Fee model: implementation decisions"): launch v3 with presale fees to
+  the platform treasury, the 5% / 5% / rest graduation split, the 50 / 20 / 30 LP split through the claimer's transit
+  account, payee fallbacks to the vault, the F04/F05 config checks, v2 launches unchanged. Tests:
+  `cargo test -p stockfloor --lib` 58 passed; fork suite (`pnpm --filter @stockfloor/tests exec vitest run --exclude
+  'integration/audit-poc/**'`) 104 passed, 24 failed. **All 24 failures need the SDK part (C9/C10):**
+  `tests/sdk/*` (the SDK builders still use the old account lists: `AccountNotEnoughKeys`),
+  `integration/sdk-presets-fork` (checks the SDK's own presets: creator trading 30 and migration fee = vault share are
+  now rejected) and the SDK `runCrank` case in `integration/lp-positions`.
+- **Not done yet:** SDK (IDL sync, builders, presets, preview, crank, `CU_LIMITS`, tx1 size), app, docs.
+- **The deployed mainnet program is still the old binary.** The SDK and app must not ship v3 account lists against it
+  without a program upgrade (a hard stop; the `.so` grew from 459,064 to 537,568 bytes, so it may need
+  `solana program extend`).
+- **Untracked audit PoCs** (`tests/integration/audit-poc/*.test.ts`, `programs/stockfloor/tests/audit_poc_*.rs`): they
+  pass when a bug exists, so F04, F05 and F08 (probably F09) now fail by design and `pnpm test` (which runs them)
+  reports failures. The founder should decide whether to delete them or turn them into regression tests.
+
 ## Done (with test results)
 - **M0–M5** repo, program, SDK, CLI, web app, docs, screenshots — see `docs/DECISIONS.md`.
 - **C1** full lifecycle on a LiteSVM mainnet fork (`docs/research/c1-evidence.md`).
