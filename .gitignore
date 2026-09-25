@@ -22,3 +22,8 @@ coverage
 
 # Local reference checkouts (large, fetched by scripts)
 vendor/
+
+# Local tooling and private notes
+.claude/
+__pycache__/
+private/

@@ -75,8 +75,8 @@ and the decisions below.
      speaks the v2 account lists). The `.so` grew by 78,504 bytes, so the upgrade may need `solana program
      extend` (costs SOL; the deployer holds about 2.747 SOL). Existing v2 launches, SFDEMO included, keep paying
      100% into the vault after the upgrade.
-   - **Treasury key.** `keys/platform-treasury.json` is a hot key that receives all platform income; replace it
-     with a hardware or multisig key before the upgrade if wanted (changing it later needs another upgrade).
+   - **Treasury key.** Move the platform treasury to a hardware or multisig key before the mainnet upgrade
+     (changing it later needs another upgrade).
    - **Untracked audit PoCs** (`tests/integration/audit-poc/*.test.ts`, `programs/stockfloor/tests/audit_poc_*.rs`):
      they pass when a bug exists and encode the v2 fee model, so `pnpm test` reports them failing: 39 fork PoC
      tests in 20 files (F01, F02, F04, F05, F07–F13, F19–F21; F19's failure is an IDL name lookup in the PoC
