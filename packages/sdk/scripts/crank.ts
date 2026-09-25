@@ -9,6 +9,10 @@
  *
  * LP fee harvests (see planCrank in src/crank.ts): by default only positions on the launch's own
  * DAMM v2 pool, only when at least 0.00001 quote token is pending, at most 4 per pass.
+ *
+ * Launch v3 fee split: presale fees go to the platform treasury (the crank re-creates its quote ATA
+ * idempotently first), the migration fee is split platform 5% / creator 5% of the threshold / vault
+ * the rest, LP fees creator 50% / platform 20% / vault the rest. v2 launches pay everything into the vault.
  */
 import { fetchLaunchState, planCrank, runCrank, runCrankAll, type CrankRunResult } from "../src";
 import { bool, CliError, int, json, launchRef, log, parseArgs, runCli, sendingContext, str } from "./lib/cli";
@@ -22,7 +26,14 @@ function printResult(r: CrankRunResult, asJson: boolean) {
   }
   if (r.steps.length === 0) log(`${r.launch.toBase58()}: nothing due (phase ${r.finalState?.phase})`);
   for (const s of r.steps) {
-    log(`${r.launch.toBase58()}: ${s.action.kind} ${s.status}${s.signature ? ` ${s.signature}` : ""}${s.unitsConsumed ? ` (${s.unitsConsumed} CU)` : ""}${s.errorName ? ` [${s.errorName}]` : ""}${s.status !== "executed" && s.reason ? ` ${s.reason.split("\n")[0]}` : ""}`);
+    const a = s.action;
+    const amounts =
+      a.kind === "harvest_migration_fee"
+        ? ` [platform ${a.platform}, creator ${a.creator}, vault ${a.vault} raw]`
+        : a.kind === "harvest_curve_fees"
+          ? ` [partner fee ${a.partnerQuoteFee} raw${r.finalState?.launch.feeSplitEnabled ? " to the platform" : " to the vault"}]`
+          : "";
+    log(`${r.launch.toBase58()}: ${s.action.kind}${amounts} ${s.status}${s.signature ? ` ${s.signature}` : ""}${s.unitsConsumed ? ` (${s.unitsConsumed} CU)` : ""}${s.errorName ? ` [${s.errorName}]` : ""}${s.status !== "executed" && s.reason ? ` ${s.reason.split("\n")[0]}` : ""}`);
   }
   if (r.remaining.length > 0) log(`${r.launch.toBase58()}: still due ${r.remaining.map((a) => a.kind).join(", ")}`);
 }

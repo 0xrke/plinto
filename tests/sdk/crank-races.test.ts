@@ -12,13 +12,16 @@ import {
   buildLaunchTransactions,
   buildTrade,
   computeThresholdQuoteRaw,
+  decodeTokenAccount,
   DEFAULT_QUOTE_ASSET,
   effectiveMintMultiplier,
   fetchLaunchState,
   getClock,
   getMintInfo,
   lpFeeSplit,
+  PLATFORM_TREASURY,
   planCrank,
+  platformQuoteAccount,
   runCrank,
   runCrankAll,
   type LaunchInput,
@@ -152,6 +155,28 @@ describe("SDK crank races and failures on the LiteSVM fork", () => {
     expect(resumed.steps.map((s) => [s.action.kind, s.status])).toEqual([["harvest_lp_fees", "executed"]]);
     // v3: the vault gets its 30% (plus rounding) of the LP fees; creator 50%, platform 20%.
     expect((await state(L)).vaultBalance - s2.vaultBalance).toBe(lpFeeSplit(s2.positions[0]!.pending.b).vault);
+  });
+
+  it("re-creates a closed platform treasury quote ATA before harvesting the presale fees (v3)", async () => {
+    const L = await launch();
+    await buy(L, threshold / 4n);
+    const s0 = await state(L);
+    const fees = s0.dbcPool!.partnerQuoteFee;
+    expect(fees).toBeGreaterThan(0n);
+    const platformAta = platformQuoteAccount(SPYX_MINT, s0.launch.quoteTokenProgram);
+    expect(fork.getAccount(platformAta)).not.toBeNull(); // created by create_launch
+    // The treasury closed its ATA (cheatcode: the account no longer exists; a real close needs it empty).
+    fork.setAccount(platformAta, { lamports: 0n, data: new Uint8Array(0), owner: PublicKey.default });
+    expect(fork.getAccount(platformAta)).toBeNull();
+    const res = await runCrank(admin, { launch: L });
+    expect(res.steps.map((st) => [st.action.kind, st.status])).toEqual([["harvest_curve_fees", "executed"]]);
+    const after = fork.getAccount(platformAta)!;
+    expect(after).not.toBeNull();
+    const t = decodeTokenAccount(after.data);
+    expect(t.owner.equals(PLATFORM_TREASURY) && t.mint.equals(SPYX_MINT)).toBe(true);
+    // The harvest paid exactly the partner curve fees into the re-created ATA; the vault is untouched.
+    expect(t.amount).toBe(fees);
+    expect((await state(L)).vaultBalance).toBe(s0.vaultBalance);
   });
 
   it("runCrankAll cranks every launch and leaves presale launches without due actions alone", async () => {

@@ -36,6 +36,8 @@ import {
   syncMigrationIx,
 } from "./stockfloor/instructions";
 import { CU_LIMITS } from "./transaction";
+import { PLATFORM_TREASURY } from "./addresses";
+import { createAtaIdempotentIx } from "./token";
 import { graduationSplit } from "./math";
 import { LAUNCH_VERSION_FEE_SPLIT } from "./stockfloor/accounts";
 
@@ -212,12 +214,20 @@ export function buildCrankAction(state: LaunchState, action: CrankAction, payer:
   switch (action.kind) {
     case "register_pool":
       return { instructions: [registerPoolIx({ config: L.config, pool: action.pool, baseMint: L.baseMint })], signers: [], computeUnitLimit: CU_LIMITS.registerPool };
-    case "harvest_curve_fees":
+    case "harvest_curve_fees": {
+      const harvestCu = action.createsClaimerBaseAccount ? CU_LIMITS.harvestCurveFeesCreatesAta : CU_LIMITS.harvestCurveFees;
+      if (L.version < LAUNCH_VERSION_FEE_SPLIT) {
+        return { instructions: [harvestCurveFeesIx({ payer, keys })], signers: [], computeUnitLimit: harvestCu };
+      }
+      // v3 pays the presale fees straight to the platform treasury's quote ATA and fails while it
+      // does not exist (the fees stay claimable in DBC). create_launch created it, but the treasury
+      // key can close it; re-create it idempotently first (rent only when it is missing).
       return {
-        instructions: [harvestCurveFeesIx({ payer, keys })],
+        instructions: [createAtaIdempotentIx(payer, PLATFORM_TREASURY, L.quoteMint, L.quoteTokenProgram), harvestCurveFeesIx({ payer, keys })],
         signers: [],
-        computeUnitLimit: action.createsClaimerBaseAccount ? CU_LIMITS.harvestCurveFeesCreatesAta : CU_LIMITS.harvestCurveFees,
+        computeUnitLimit: harvestCu + CU_LIMITS.createAta,
       };
+    }
     case "harvest_migration_fee":
       return { instructions: [harvestMigrationFeeIx({ keys })], signers: [], computeUnitLimit: CU_LIMITS.harvestMigrationFee };
     case "harvest_surplus":

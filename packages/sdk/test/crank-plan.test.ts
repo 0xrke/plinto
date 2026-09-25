@@ -24,8 +24,10 @@ import {
   type LaunchState,
   associatedTokenAddress,
   authorityPda,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
   CU_LIMITS,
   PLATFORM_TREASURY,
+  platformQuoteAccount,
 } from "../src";
 
 const SPYX = new PublicKey(DEFAULT_QUOTE_ASSET.mint);
@@ -281,7 +283,22 @@ describe("planCrank", () => {
     const m = buildCrankAction(state, migrate!, payer);
     expect(m.signers.length).toBe(2);
     expect(m.computeUnitLimit).toBe(200_000);
-    expect(buildCrankAction(state, curve!, payer).computeUnitLimit).toBe(120_000); // creates the claimer base ATA
+    // v3: the presale fees are paid to the platform treasury's quote ATA, which the harvest requires;
+    // the crank re-creates it idempotently first (a closed ATA would otherwise stall the harvest).
+    const curveBuilt = buildCrankAction(state, curve!, payer);
+    expect(curveBuilt.computeUnitLimit).toBe(CU_LIMITS.harvestCurveFeesCreatesAta + CU_LIMITS.createAta); // creates the claimer base ATA
+    expect(curveBuilt.instructions.length).toBe(2);
+    const ataIx = curveBuilt.instructions[0]!;
+    expect(ataIx.programId.equals(ASSOCIATED_TOKEN_PROGRAM_ID)).toBe(true);
+    expect(Array.from(ataIx.data)).toEqual([1]); // CreateIdempotent
+    expect(ataIx.keys[0]!.pubkey.equals(payer)).toBe(true);
+    expect(ataIx.keys[1]!.pubkey.equals(platformQuoteAccount(SPYX, TOKEN_2022_PROGRAM_ID))).toBe(true);
+    expect(ataIx.keys[2]!.pubkey.equals(PLATFORM_TREASURY)).toBe(true);
+    // A v2 launch pays its curve fees into the vault: no platform ATA needed.
+    const v2 = scenario({ complete: true, partnerQuoteFee: 5_000n, version: 2 });
+    const v2Built = buildCrankAction(v2 as unknown as LaunchState, planCrank(v2)[0]!, payer);
+    expect(v2Built.instructions.length).toBe(1);
+    expect(v2Built.computeUnitLimit).toBe(CU_LIMITS.harvestCurveFeesCreatesAta);
     expect(buildCrankAction(state, mig!, payer).instructions.length).toBe(1);
     expect(buildCrankAction(state, surplus!, payer).signers).toEqual([]);
 

@@ -128,6 +128,9 @@ await runCrankAll(sender);            // every launch
   (`launch.creator`, carried in `launchKeysFromAccount(...).creator`) for the creator's quote ATA; the
   platform and transit ATAs are derived. The `harvest_migration_fee` action carries the expected
   `platform`, `creator` and `vault` amounts (v2: all to the vault).
+- **Presale fees (v3)** go straight to the platform treasury's quote ATA, and `harvest_curve_fees`
+  fails while that ATA does not exist or is frozen (the fees stay claimable in DBC). The crank
+  re-creates it idempotently in the same transaction, so a closed treasury ATA cannot stall it.
 
 - **`sync_migration`** is planned as soon as DBC reports the migration while `Launch.migrated` is unset,
   which is the normal case: the one-shot DBC harvests run before `migration_damm_v2` and latch nothing.

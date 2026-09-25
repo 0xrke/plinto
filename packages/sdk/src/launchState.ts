@@ -223,7 +223,7 @@ export async function fetchLaunchState(reader: ChainReader, ref: LaunchRef, opts
   const { address, launch } = found;
   const config = launch.config;
   const pool = launch.poolRegistered ? launch.pool : dbcPoolPda(config, launch.baseMint, launch.quoteMint);
-  const keys: LaunchKeys = { config, pool, baseMint: launch.baseMint, quoteMint: launch.quoteMint, quoteTokenProgram: launch.quoteTokenProgram };
+  const keys: LaunchKeys = { config, pool, baseMint: launch.baseMint, quoteMint: launch.quoteMint, quoteTokenProgram: launch.quoteTokenProgram, creator: launch.creator };
   const claimer = authorityPda(config)[0];
   const vaultAuthority = vaultAuthorityPda(config)[0];
   const claimerBase = claimerBaseAccount(config, launch.baseMint);
