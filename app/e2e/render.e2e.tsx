@@ -98,7 +98,8 @@ describe("page components render the on-chain launch from the local fork", () =>
       </App>,
     );
     await screen.findByRole("heading", { name: json.name, level: 1 }, { timeout: 30_000 });
-    expect(screen.getAllByText("Graduated").length).toBeGreaterThan(0);
+    // A redeemable launch (migration fee in the vault) is badged "Floor live" since the Pastel rebuild.
+    expect(screen.getAllByText("Floor live").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Price and floor" })).toBeTruthy();
 
     // The label is the exact sentence; max loss does not depend on the quote USD price, so it must
@@ -281,7 +282,8 @@ describe("page components render the on-chain launch from the local fork", () =>
 
     // The page turns into the graduated view: floor meter, honest buy label, redeem open.
     const redeemField = await screen.findByLabelText("Amount to redeem", {}, { timeout: 60_000 });
-    expect(screen.getAllByText("Graduated").length).toBeGreaterThan(0);
+    // A redeemable launch (migration fee in the vault) is badged "Floor live" since the Pastel rebuild.
+    expect(screen.getAllByText("Floor live").length).toBeGreaterThan(0);
     await screen.findByRole("button", { name: /^Price \$[\d.,]+ · Floor \$[\d.,]+ · Max loss if you buy now: (−[\d.]+|0)%$/ });
 
     fireEvent.click(within(screen.getByRole("heading", { name: "Redeem at the floor" }).closest("section")!).getByRole("button", { name: "Max" }));

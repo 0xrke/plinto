@@ -301,6 +301,16 @@ components in jsdom against the fork and checks them against the same JSON, and 
 `CreateLaunchForm` (including the advanced threshold control), the curve trade panel, the crank button
 and the redeem panel with a keypair-backed wallet context.
 
+**Fee-model re-run, 2026-09-25 (branch `feat/fee-model`)**: fresh surfnet (Surfpool, `target/deploy/stockfloor.so`
+537,568 bytes, sha256 `86b90a59…8f26`, launch v3), `next build && next start` of the branch, live Jupiter SPYx price
+$770.68. `pnpm e2e:local`: **11 + 4 tests passed**. The payout checks follow launch v3: the presale crank pays the
+whole partner fee to the platform treasury's quote ATA and leaves the vault untouched; the graduation crank pays the
+platform and the creator exactly `graduationSplit(T, partner fee)` (5% of T each; the platform also gets the
+completing buy's presale fee) and the vault at least the rest (64,508,894 raw of a 77,410,672 partner fee); the LP
+crank pays exactly `lpFeeSplit` per position (creator 50%, vault 30% plus rounding, platform 20%). The UI-driven
+$50 flow renders `CreateLaunchForm` with the demo threshold policy. The render checks expect the "Floor live" badge
+of a redeemable launch (the Pastel rebuild renamed it from "Graduated" after the run below).
+
 Recorded run, 2026-09-16 ~02:40 local (2026-09-15 23:40Z), fresh surfnet (Surfpool 1.5.0,
 `target/deploy/stockfloor.so` 458,160 bytes, sha256
 `b1a1531ca855730382334c7e66cb9635e7bdde3d0cbc12cb8ae4f354243df0e3`, not rebuilt), `next build &&

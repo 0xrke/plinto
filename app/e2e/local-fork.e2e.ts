@@ -315,7 +315,9 @@ describe.sequential("web app on a local Surfpool fork", () => {
     // The surplus harvest adds to the vault on top of its part of the migration fee.
     expect(after.vaultBalance - s.vaultBalance).toBeGreaterThanOrEqual(split.vault);
     const paidAfter = await payeeBalances(after);
-    expect(paidAfter.platform - paid.platform).toBe(split.platform);
+    // The graduation crank also harvests the completing buy's presale fee, which goes to the platform too.
+    const curveFees = s.dbcPool!.partnerQuoteFee - after.dbcPool!.partnerQuoteFee;
+    expect(paidAfter.platform - paid.platform).toBe(split.platform + curveFees);
     expect(paidAfter.creator - paid.creator).toBe(split.creator);
     const { json } = await expectAppMatchesChain();
     expect(json).toMatchObject({ phase: "graduated", chainPhase: "redeemable", redeemable: true, migrationFeeHarvested: true });
