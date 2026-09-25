@@ -101,3 +101,26 @@ pub struct FloorSnapshot {
     /// `(vault_raw << 64) / supply`, 0 when the supply is 0.
     pub floor_q64: u128,
 }
+
+/// Where a harvest's quote went (launch v3). Emitted next to the source-specific event.
+///
+/// `source`: 0 = curve (presale) fees, 1 = partner migration fee, 2 = DAMM v2 LP fees.
+/// `received` is what the harvest collected; `platform_amount + creator_amount + vault_amount`
+/// equals `received` plus any pre-existing transit balance swept into the vault. A `*_fallback`
+/// flag means that payee's account could not receive and its share went to the vault.
+#[event]
+pub struct FeesDistributed {
+    pub launch: Pubkey,
+    pub source: u8,
+    pub received: u64,
+    pub platform_amount: u64,
+    pub creator_amount: u64,
+    pub vault_amount: u64,
+    pub platform_fallback: bool,
+    pub creator_fallback: bool,
+}
+
+/// `FeesDistributed.source` values.
+pub const FEE_SOURCE_CURVE: u8 = 0;
+pub const FEE_SOURCE_MIGRATION: u8 = 1;
+pub const FEE_SOURCE_LP: u8 = 2;

@@ -132,7 +132,9 @@ pub fn handle_create_launch(ctx: Context<CreateLaunch>, exit_fee_bps: u16) -> Re
     launch.total_redeemed_base = 0;
     launch.total_redeemed_quote = 0;
     launch.total_exit_fees = 0;
-    launch.reserved = [0u8; 62];
+    launch.total_platform_quote = 0;
+    launch.total_creator_quote = 0;
+    launch.reserved = [0u8; 46];
 
     emit!(LaunchCreated {
         launch: launch.key(),

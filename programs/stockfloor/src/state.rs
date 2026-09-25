@@ -7,8 +7,9 @@ use crate::constants::{CLAIMER_SEED, VAULT_AUTHORITY_SEED};
 /// There is no admin field: nothing in this account can be changed by anyone
 /// except through the permissionless instructions of this program.
 ///
-/// Layout version 2 (`8 + 343` bytes, unchanged in size from version 1: the vault authority bump
-/// took one reserved byte).
+/// Layout version 3 (`8 + 343` bytes, unchanged in size since version 1: the vault authority bump
+/// took one reserved byte in version 2, the platform and creator counters 16 in version 3). The
+/// version also selects the fee routing of the harvests: see `fee_split_enabled`.
 #[account]
 #[derive(InitSpace, Debug)]
 pub struct Launch {
@@ -56,13 +57,24 @@ pub struct Launch {
     pub total_redeemed_base: u64,
     pub total_redeemed_quote: u64,
     pub total_exit_fees: u64,
+    /// Quote paid to the platform treasury by harvests (v3; informational, saturating).
+    pub total_platform_quote: u64,
+    /// Quote paid to the launch creator by harvests (v3; informational, saturating).
+    pub total_creator_quote: u64,
     /// Reserved for future fields.
-    pub reserved: [u8; 62],
+    pub reserved: [u8; 46],
 }
 
 impl Launch {
     pub fn is_pool_registered(&self) -> bool {
         self.pool != Pubkey::default()
+    }
+
+    /// `true` for launches created with the v3 fee model: curve fees go to the platform, the
+    /// migration fee and LP fees are split between platform, creator and vault. Older launches
+    /// (version 2, e.g. the live mainnet demo) keep paying 100% of every harvest into the vault.
+    pub fn fee_split_enabled(&self) -> bool {
+        self.version >= crate::constants::LAUNCH_VERSION_FEE_SPLIT
     }
 
     /// Address of the claimer PDA from the stored bump (`create_program_address`, no search).
@@ -113,6 +125,83 @@ mod tests {
         assert_eq!(Launch::INIT_SPACE, 343);
     }
 
+    fn sample_launch(version: u8) -> Launch {
+        Launch {
+            version,
+            bump: 1,
+            claimer_bump: 2,
+            vault_authority_bump: 3,
+            exit_fee_bps: 0x0405,
+            migration_fee_harvested: true,
+            surplus_harvested: false,
+            migrated: true,
+            config: Pubkey::new_from_array([10; 32]),
+            creator: Pubkey::new_from_array([11; 32]),
+            pool: Pubkey::new_from_array([12; 32]),
+            base_mint: Pubkey::new_from_array([13; 32]),
+            quote_mint: Pubkey::new_from_array([14; 32]),
+            quote_token_program: Pubkey::new_from_array([15; 32]),
+            vault: Pubkey::new_from_array([16; 32]),
+            created_at: 0x1718_1920_2122_2324,
+            total_harvested_quote: 101,
+            total_burned_base: 102,
+            total_redeemed_base: 103,
+            total_redeemed_quote: 104,
+            total_exit_fees: 105,
+            total_platform_quote: 0x0102_0304_0506_0708,
+            total_creator_quote: 0x1112_1314_1516_1718,
+            reserved: [0xEE; 46],
+        }
+    }
+
+    /// Byte offsets inside the account data (with the 8-byte discriminator), as the SDK decodes
+    /// them: `total_platform_quote` at 289, `total_creator_quote` at 297, `reserved` at 305.
+    #[test]
+    fn v3_layout_offsets() {
+        use anchor_lang::{AccountSerialize, Discriminator};
+        let launch = sample_launch(3);
+        let mut data = Vec::new();
+        launch.try_serialize(&mut data).unwrap();
+        assert_eq!(data.len(), 8 + Launch::INIT_SPACE);
+        assert_eq!(&data[..8], Launch::DISCRIMINATOR);
+        assert_eq!(data[8], 3);
+        assert_eq!(&data[12..14], &0x0405u16.to_le_bytes());
+        assert_eq!(&data[17..49], &[10u8; 32]); // config
+        assert_eq!(&data[49..81], &[11u8; 32]); // creator
+        assert_eq!(&data[209..241], &[16u8; 32]); // vault
+        assert_eq!(&data[241..249], &0x1718_1920_2122_2324i64.to_le_bytes());
+        assert_eq!(&data[249..257], &101u64.to_le_bytes()); // total_harvested_quote
+        assert_eq!(&data[281..289], &105u64.to_le_bytes()); // total_exit_fees
+        assert_eq!(&data[289..297], &0x0102_0304_0506_0708u64.to_le_bytes());
+        assert_eq!(&data[297..305], &0x1112_1314_1516_1718u64.to_le_bytes());
+        assert_eq!(&data[305..351], &[0xEEu8; 46]);
+    }
+
+    /// A version 2 account (zeroed reserved bytes) decodes with zero counters.
+    #[test]
+    fn v2_account_decodes_with_zero_counters() {
+        use anchor_lang::{AccountDeserialize, AccountSerialize};
+        let mut v2 = sample_launch(2);
+        v2.total_platform_quote = 0;
+        v2.total_creator_quote = 0;
+        v2.reserved = [0; 46];
+        let mut data = Vec::new();
+        v2.try_serialize(&mut data).unwrap();
+        let decoded = Launch::try_deserialize(&mut data.as_slice()).unwrap();
+        assert_eq!(decoded.version, 2);
+        assert_eq!(decoded.total_platform_quote, 0);
+        assert_eq!(decoded.total_creator_quote, 0);
+        assert!(!decoded.fee_split_enabled());
+    }
+
+    #[test]
+    fn fee_split_is_enabled_from_version_3() {
+        assert!(!sample_launch(1).fee_split_enabled());
+        assert!(!sample_launch(2).fee_split_enabled());
+        assert!(sample_launch(3).fee_split_enabled());
+        assert!(sample_launch(crate::constants::LAUNCH_VERSION).fee_split_enabled());
+    }
+
     #[test]
     fn stored_bumps_derive_the_canonical_pdas() {
         for i in 0..32u8 {
@@ -145,7 +234,9 @@ mod tests {
                 total_redeemed_base: 0,
                 total_redeemed_quote: 0,
                 total_exit_fees: 0,
-                reserved: [0; 62],
+                total_platform_quote: 0,
+                total_creator_quote: 0,
+                reserved: [0; 46],
             };
             assert_eq!(launch.claimer_key().unwrap(), claimer);
             assert_eq!(launch.vault_authority_key().unwrap(), vault_authority);
