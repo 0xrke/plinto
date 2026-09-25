@@ -28,6 +28,7 @@ Environment:
 | `NEXT_PUBLIC_SITE_URL` | unset (Vercel's production URL when it is set) | Public origin of the deployment, used as the metadata base for link previews (Open Graph / Twitter card) |
 | `NEXT_PUBLIC_REPO_URL` | unset | Source repository (https). When set, the footer links to the code, `docs/architecture.md` and the README security section; when unset those links are hidden rather than guessed |
 | `NEXT_PUBLIC_LIVE_APP_URL` | unset | The chain-connected deployment. Named by the demo-data banner of a preview build |
+| `NEXT_PUBLIC_DEMO_THRESHOLDS` | unset | `1` switches `/create` to the demo threshold policy: quick picks $50 / $100 / $1,000 (default $1,000) and a $1 minimum (the SDK's `MIN_THRESHOLD_USD`), for cheap demo launches. Unset (or any other value): quick picks $10,000 (default) / $25,000 / $50,000 and a $10,000 minimum. The maximum is $100,000 either way. UI-level only; the program has no USD oracle |
 | `STOCKFLOOR_LOCAL_BUILD` | unset | `1` marks a production build as local (fork or demo data), which is what the deploy guard below asks for |
 | `NEXT_PUBLIC_WS_URL` | RPC port + 1 | WebSocket endpoint, only if it is not the RPC port + 1 |
 | `NEXT_PUBLIC_ALLOW_MAINNET` | unset | First mainnet send switch. Sending through a non-loopback RPC needs `1` here **and** `STOCKFLOOR_ALLOW_MAINNET=1` (checkpoint C2 only), the same two-switch rule as the CLI (`--allow-mainnet` + `STOCKFLOOR_ALLOW_MAINNET=1`). With neither, the app sends only to a loopback surfnet or local validator; with only one, it sends nowhere and says which switch is missing |
@@ -85,17 +86,20 @@ answers with the same sentence instead of a developer message.
     (`{ name, symbol, description, image }`); a bare image URL still works (the app reads it as the image)
     but leaves the token without a description everywhere else, forever. The preview avatar shows initials
     for a JSON URI, because the document is only fetched once the token exists.
-  - **Graduation threshold (advanced)**: quick picks ($50, $100, $1,000 default, $10,000) plus a custom
-    USD amount. The preview (threshold in the quote asset, floor at graduation, vault, prices) follows it.
-    Validation is in `src/lib/launchForm.ts`: the field takes a dollar amount with at most two decimals
-    between the SDK's `MIN_THRESHOLD_USD` ($1) and `THRESHOLD_MAX_USD` ($10,000,000, an app bound so one
+  - **Graduation threshold (advanced)**: quick picks $10,000 (default), $25,000 and $50,000 plus a custom
+    USD amount; a build with `NEXT_PUBLIC_DEMO_THRESHOLDS=1` offers $50, $100 and $1,000 (default) instead.
+    The preview (threshold in the quote asset, floor at graduation, vault, prices) follows it. The rules
+    live in `thresholdPolicy()` in `src/lib/config.ts` and the validation in `src/lib/launchForm.ts`: the
+    field takes a dollar amount with at most two decimals between the policy minimum ($10,000, or the
+    SDK's `MIN_THRESHOLD_USD` of $1 in a demo build) and `THRESHOLD_MAX_USD` ($100,000, an app bound so one
     extra zero cannot 10× a raise), and `previewLaunchInput` then runs `previewLaunch` **and**
     `buildDbcConfigParams`, the SDK's port of everything DBC's `create_config` checks on chain. A
     threshold the chain would reject (the raw u64 threshold at the live quote price, the DBC sqrt-price
     range) shows up on the field and disables Launch instead of failing at signing time. Below
-    `METEORA_KEEPER_MIN_THRESHOLD_USD` ($750) the form says that Meteora's keeper will not migrate the
-    pool and the permissionless crank has to. The $50 quick pick is the C2 mainnet demo threshold
-    (`docs/research/surfpool-e2e.md` §3), so the whole demo can be driven from the UI.
+    `METEORA_KEEPER_MIN_THRESHOLD_USD` ($750, reachable only in a demo build) the form says that Meteora's
+    keeper will not migrate the pool and the permissionless crank has to. The demo build's $50 quick pick
+    is the C2 mainnet demo threshold (`docs/research/surfpool-e2e.md` §3), so the whole demo can be driven
+    from the UI. The threshold policy is UI-level only: the program has no USD oracle.
   - Once a launch is on chain — and while a retry is pending, because a retry re-sends the transactions
     built from the original input — every parameter fieldset is disabled, so the preview can never
     promise a floor or a threshold other than the launched one.

@@ -1,4 +1,16 @@
-import { isLoopbackRpcUrl } from "@stockfloor/sdk";
+import {
+  CREATOR_GRADUATION_BONUS_BPS,
+  DEFAULT_VAULT_SHARE_PCT,
+  LP_FEE_CREATOR_BPS,
+  LP_FEE_PLATFORM_BPS,
+  MIN_THRESHOLD_USD,
+  PLATFORM_GRADUATION_FEE_BPS,
+  STOCKFLOOR_DBC_DEFAULTS,
+  VAULT_SHARE_MAX_PCT,
+  VAULT_SHARE_MIN_PCT,
+  isLoopbackRpcUrl,
+  poolSharePctForVaultShare,
+} from "@stockfloor/sdk";
 
 /**
  * Public runtime configuration. `NEXT_PUBLIC_*` values are inlined at build time.
@@ -19,6 +31,12 @@ import { isLoopbackRpcUrl } from "@stockfloor/sdk";
  *                            architecture document and the security model.
  * NEXT_PUBLIC_LIVE_APP_URL   Where the chain-connected deployment lives. Shown in the demo-data
  *                            banner of a preview build.
+ * NEXT_PUBLIC_DEMO_THRESHOLDS "1" switches the create form to the demo threshold policy: quick picks
+ *                            $50 / $100 / $1,000 (default $1,000) and a minimum of $1 (the SDK's
+ *                            MIN_THRESHOLD_USD), for cheap demo launches. Unset: quick picks
+ *                            $10,000 (default) / $25,000 / $50,000 and a minimum of $10,000. The
+ *                            maximum is $100,000 either way. UI-level only: the program has no USD
+ *                            oracle and accepts any threshold the DBC config does.
  */
 export const DEFAULT_RPC_URL = "http://127.0.0.1:8899";
 
@@ -100,23 +118,79 @@ export const LIVE_APP_URL: string | undefined = httpsEnv(process.env.NEXT_PUBLIC
 
 /** Base token parameters from docs/BRIEF.md section 4. */
 export const BASE_DECIMALS = 6;
-export const DEFAULT_THRESHOLD_USD = 1000;
+
+/** Graduation-threshold rules of the create form (docs/DECISIONS.md D12). */
+export interface ThresholdPolicy {
+  /** The demo policy (`NEXT_PUBLIC_DEMO_THRESHOLDS=1`). */
+  demo: boolean;
+  minUsd: number;
+  maxUsd: number;
+  defaultUsd: number;
+  /** Quick picks, in the order the form shows them. */
+  presetsUsd: readonly number[];
+}
+
 /**
- * Quick picks for the advanced graduation-threshold control. $50 is the C2 mainnet demo threshold
- * (docs/research/surfpool-e2e.md §3), $1,000 the default.
+ * Upper bound of the threshold field in both policies. The chain accepts far more (the real limit is
+ * the raw u64 threshold, checked by the SDK against the live quote price), but a launch this size is
+ * not a plausible xStock presale, and an unbounded field turns one extra zero into a 10x raise.
  */
-export const THRESHOLD_PRESETS_USD = [50, 100, DEFAULT_THRESHOLD_USD, 10_000] as const;
+export const THRESHOLD_MAX_USD = 100_000;
+
 /**
- * Upper bound of the threshold field. The chain accepts far more (the real limit is the raw u64
- * threshold, checked by the SDK against the live quote price), but a launch this size is not a
- * plausible xStock presale, and an unbounded field turns one extra zero into a 10× raise.
+ * Normal: min $10,000, picks $10,000 (default) / $25,000 / $50,000. Demo: the SDK minimum ($1) and the
+ * old picks $50 / $100 / $1,000 (default $1,000); $50 is the C2 mainnet demo threshold
+ * (docs/research/surfpool-e2e.md §3).
  */
-export const THRESHOLD_MAX_USD = 10_000_000;
+export function thresholdPolicy(demo: boolean): ThresholdPolicy {
+  return demo
+    ? { demo: true, minUsd: MIN_THRESHOLD_USD, maxUsd: THRESHOLD_MAX_USD, defaultUsd: 1_000, presetsUsd: [50, 100, 1_000] }
+    : { demo: false, minUsd: 10_000, maxUsd: THRESHOLD_MAX_USD, defaultUsd: 10_000, presetsUsd: [10_000, 25_000, 50_000] };
+}
+
+/** Only the exact value "1" turns the demo thresholds on. */
+export function isDemoThresholds(value: string | undefined): boolean {
+  return value === "1";
+}
+
+export const DEMO_THRESHOLDS: boolean = isDemoThresholds(process.env.NEXT_PUBLIC_DEMO_THRESHOLDS);
+export const THRESHOLD_POLICY: ThresholdPolicy = thresholdPolicy(DEMO_THRESHOLDS);
+
 export const DEFAULT_EXIT_FEE_BPS = 200;
-export const CURVE_TRADING_FEE_BPS = 100;
-export const VAULT_SHARE_MIN = 30;
-export const VAULT_SHARE_MAX = 70;
-export const VAULT_SHARE_DEFAULT = 50;
+
+/** Vault share of the raise, chosen by the creator (SDK bounds). The pool gets `90 - vault share`. */
+export const VAULT_SHARE_MIN = VAULT_SHARE_MIN_PCT;
+export const VAULT_SHARE_MAX = VAULT_SHARE_MAX_PCT;
+export const VAULT_SHARE_DEFAULT = DEFAULT_VAULT_SHARE_PCT;
+
+/** Share of the raise that seeds the DAMM v2 pool for a vault share: `90 - vault share` (30..60). */
+export function poolSharePct(vaultSharePct: number): number {
+  return poolSharePctForVaultShare(vaultSharePct);
+}
+
+/** Presale (DBC curve) trading fee of every new launch: 0.25%, DBC's minimum. */
+export const CURVE_TRADING_FEE_BPS: number = STOCKFLOOR_DBC_DEFAULTS.curveTradingFeeBps;
+/** DAMM v2 pool fee after graduation: 1%, dynamic fee off. */
+export const MIGRATED_POOL_FEE_BPS: number = STOCKFLOOR_DBC_DEFAULTS.migratedPoolFeeBps;
+/** Meteora's protocol share of every DBC and DAMM v2 trading fee. */
+export const METEORA_PROTOCOL_FEE_PCT = 20;
+/** Paid out of the raise at graduation, as a share of the threshold. */
+export const PLATFORM_GRADUATION_FEE_PCT = PLATFORM_GRADUATION_FEE_BPS / 100;
+export const CREATOR_GRADUATION_BONUS_PCT = CREATOR_GRADUATION_BONUS_BPS / 100;
+/** Split of the pool's trading fees after Meteora's share (the floor vault gets the rest). */
+export const LP_FEE_SPLIT_PCT = {
+  creator: LP_FEE_CREATOR_BPS / 100,
+  floor: 100 - LP_FEE_CREATOR_BPS / 100 - LP_FEE_PLATFORM_BPS / 100,
+  platform: LP_FEE_PLATFORM_BPS / 100,
+} as const;
+
+/** One sentence per fee of a launch (launch v3), for the create form, the preview and the token page. */
+export const FEE_COPY = {
+  presale: `Presale: a ${CURVE_TRADING_FEE_BPS / 100}% curve trading fee. Meteora keeps ${METEORA_PROTOCOL_FEE_PCT}% and the rest goes to the StockFloor platform, whether or not the presale graduates. The creator and the vault get none of it.`,
+  graduation: `Graduation: platform ${PLATFORM_GRADUATION_FEE_PCT}% and creator ${CREATOR_GRADUATION_BONUS_PCT}% of the raise (a one-off bonus). The other ${100 - PLATFORM_GRADUATION_FEE_PCT - CREATOR_GRADUATION_BONUS_PCT}% splits between the floor vault (the vault share) and the locked pool.`,
+  trading: `Trading: a ${MIGRATED_POOL_FEE_BPS / 100}% pool fee. After Meteora's ${METEORA_PROTOCOL_FEE_PCT}%, creator ${LP_FEE_SPLIT_PCT.creator}%, floor vault ${LP_FEE_SPLIT_PCT.floor}%, platform ${LP_FEE_SPLIT_PCT.platform}%.`,
+  exit: `Exit: a ${DEFAULT_EXIT_FEE_BPS / 100}% fee on redemption stays in the floor vault and raises the floor.`,
+} as const;
 
 /** React Query polling intervals for on-chain data (milliseconds). */
 export const POLL_MS = {

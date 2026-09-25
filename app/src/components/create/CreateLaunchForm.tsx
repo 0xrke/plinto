@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
   METEORA_KEEPER_MIN_THRESHOLD_USD,
-  MIN_THRESHOLD_USD,
   QUOTE_ALLOWLIST,
   uiToRaw,
   type CurvePreset,
@@ -13,13 +12,12 @@ import {
 } from "@stockfloor/sdk";
 import {
   DEFAULT_EXIT_FEE_BPS,
-  DEFAULT_THRESHOLD_USD,
   IS_LOCAL_RPC,
-  THRESHOLD_MAX_USD,
-  THRESHOLD_PRESETS_USD,
+  THRESHOLD_POLICY,
   VAULT_SHARE_DEFAULT,
   VAULT_SHARE_MAX,
   VAULT_SHARE_MIN,
+  type ThresholdPolicy,
 } from "@/lib/config";
 import { imageUrlFromUri } from "@/lib/chain/metadata";
 import type { LaunchResume } from "@/lib/data/types";
@@ -156,7 +154,14 @@ function StepCard({
   );
 }
 
-export function CreateLaunchForm({ intro }: { intro?: ReactNode } = {}) {
+export function CreateLaunchForm({
+  intro,
+  thresholdPolicy: policy = THRESHOLD_POLICY,
+}: {
+  intro?: ReactNode;
+  /** Threshold rules; defaults to the build's policy (`NEXT_PUBLIC_DEMO_THRESHOLDS`). Tests pass the demo one. */
+  thresholdPolicy?: ThresholdPolicy;
+} = {}) {
   const formId = useId();
   const wallet = useWallet();
   const { actions, dataSource } = useData();
@@ -175,12 +180,12 @@ export function CreateLaunchForm({ intro }: { intro?: ReactNode } = {}) {
     quoteSymbol: QUOTE_ALLOWLIST[0]?.symbol ?? "SPYx",
     preset: "gentle",
     vaultSharePct: VAULT_SHARE_DEFAULT,
-    thresholdUsd: thresholdInput(DEFAULT_THRESHOLD_USD),
+    thresholdUsd: thresholdInput(policy.defaultUsd),
   });
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submit, setSubmit] = useState<SubmitState>({ status: "idle" });
 
-  const errors = validateLaunchForm(values);
+  const errors = validateLaunchForm(values, policy);
   // Only a threshold that passes the range check is sent to the SDK; otherwise the preview keeps the default.
   const thresholdUsd = errors.thresholdUsd ? null : parseThresholdUsd(values.thresholdUsd);
   const market = markets.data?.find((m) => m.asset.symbol === values.quoteSymbol) ?? null;
@@ -506,13 +511,14 @@ export function CreateLaunchForm({ intro }: { intro?: ReactNode } = {}) {
         hint={
           <>
             How much the presale must raise before the curve completes, the vault is funded and the floor goes live. The
-            default is {formatUsdWhole(DEFAULT_THRESHOLD_USD)}; a small threshold makes a cheap demo with the same
-            mechanics. Fixed in USD at launch and converted to {quoteSymbol} at the price shown above.
+            default is {formatUsdWhole(policy.defaultUsd)}
+            {policy.demo ? "; this demo build allows small thresholds for cheap launches with the same mechanics" : ""}.
+            Fixed in USD at launch and converted to {quoteSymbol} at the price shown above.
           </>
         }
       >
-        <div className="segmented">
-          {THRESHOLD_PRESETS_USD.map((amount) => {
+        <div className="segmented" role="group" aria-label="Graduation threshold quick picks">
+          {policy.presetsUsd.map((amount) => {
             const selected = thresholdUsd === amount;
             return (
               <button
@@ -523,7 +529,7 @@ export function CreateLaunchForm({ intro }: { intro?: ReactNode } = {}) {
                 className="tnum flex-col !gap-0 px-1 leading-tight"
               >
                 {formatUsdWhole(amount)}
-                {amount === DEFAULT_THRESHOLD_USD ? (
+                {amount === policy.defaultUsd ? (
                   <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-3"> default</span>
                 ) : null}
               </button>
@@ -543,7 +549,7 @@ export function CreateLaunchForm({ intro }: { intro?: ReactNode } = {}) {
               className={`${FIELD} tnum pl-8 font-bold`}
               inputMode="decimal"
               autoComplete="off"
-              placeholder={thresholdInput(DEFAULT_THRESHOLD_USD)}
+              placeholder={thresholdInput(policy.defaultUsd)}
               value={values.thresholdUsd}
               aria-invalid={errors.thresholdUsd || previewError ? true : undefined}
               aria-describedby={`${formId}-threshold-hint`}
@@ -561,7 +567,7 @@ export function CreateLaunchForm({ intro }: { intro?: ReactNode } = {}) {
           >
             {errors.thresholdUsd ??
               previewError ??
-              `Between ${formatUsdWhole(MIN_THRESHOLD_USD)} and ${formatUsdWhole(THRESHOLD_MAX_USD)}. Checked against the same rules the chain applies to the pool config.`}
+              `Between ${formatUsdWhole(policy.minUsd)} and ${formatUsdWhole(policy.maxUsd)}. Checked against the same rules the chain applies to the pool config.`}
           </p>
         </div>
         {thresholdUsd !== null && thresholdUsd < METEORA_KEEPER_MIN_THRESHOLD_USD ? (

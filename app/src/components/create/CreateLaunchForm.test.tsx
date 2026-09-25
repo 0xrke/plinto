@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WalletContext, type WalletContextState } from "@solana/wallet-adapter-react";
@@ -10,6 +10,7 @@ import { StubLaunchActions } from "@/lib/data/actions";
 import { DataProvider } from "@/lib/data/context";
 import { MockDataSource, mockQuoteMarket } from "@/lib/data/mock";
 import type { LaunchActions, LaunchResume } from "@/lib/data/types";
+import { thresholdPolicy, type ThresholdPolicy } from "@/lib/config";
 import { formatUsd } from "@/lib/format";
 import { CreateLaunchForm } from "./CreateLaunchForm";
 import { formatPriceUsd } from "./format";
@@ -47,6 +48,7 @@ function renderForm(
   connected: boolean,
   dataSource: MockDataSource = new MockDataSource(0),
   actions: LaunchActions = new StubLaunchActions(0),
+  policy?: ThresholdPolicy,
 ) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Wrapper = ({ children }: { children: ReactNode }) => (
@@ -58,7 +60,7 @@ function renderForm(
       </WalletContext.Provider>
     </QueryClientProvider>
   );
-  return render(<CreateLaunchForm />, { wrapper: Wrapper });
+  return render(<CreateLaunchForm thresholdPolicy={policy} />, { wrapper: Wrapper });
 }
 
 /** Stub actions whose createLaunch reports the given outcome and records the input it was given. */
@@ -91,7 +93,7 @@ function expectedFloor(
   symbol: string,
   vaultSharePct: number,
   preset: "gentle" | "flat" = "gentle",
-  thresholdUsd = 1000,
+  thresholdUsd = 10_000,
 ) {
   const market = mockQuoteMarket(QUOTE_ALLOWLIST.find((a) => a.symbol === symbol)!);
   return previewLaunch({
@@ -117,9 +119,9 @@ describe("<CreateLaunchForm />", () => {
     expect(screen.getByText(formatPriceUsd(initial.graduationPriceUsd))).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Share of the raise locked in the floor vault"), {
-      target: { value: "70" },
+      target: { value: "60" },
     });
-    const higher = expectedFloor("SPYx", 70);
+    const higher = expectedFloor("SPYx", 60);
     expect(screen.getByText(formatPriceUsd(higher.floorAtGraduationUsd))).toBeTruthy();
     expect(higher.floorAtGraduationUsd).toBeGreaterThan(initial.floorAtGraduationUsd);
   });
@@ -181,29 +183,55 @@ describe("<CreateLaunchForm />", () => {
     expect(button.disabled).toBe(false);
   });
 
-  it("sets the graduation threshold from a preset or a custom value, and the preview follows", async () => {
+  it("offers $10,000 (default), $25,000 and $50,000, and the preview follows a pick or a custom value", async () => {
     renderForm(false);
-    const atDefault = expectedFloor("SPYx", 50, "gentle", 1000);
+    const atDefault = expectedFloor("SPYx", 50, "gentle", 10_000);
     expect(await screen.findByText(formatPriceUsd(atDefault.floorAtGraduationUsd))).toBeTruthy();
-    expect(screen.getByText(`≈ ${formatUsd(1000)}`)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^\$1,000/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText(`≈ ${formatUsd(10_000)}`)).toBeTruthy();
+    expect((screen.getByLabelText("Custom amount in USD") as HTMLInputElement).value).toBe("10,000");
+    const picks = within(screen.getByRole("group", { name: "Graduation threshold quick picks" })).getAllByRole("button");
+    expect(picks.map((b) => b.textContent)).toEqual(["$10,000 default", "$25,000", "$50,000"]);
+    expect(screen.getByRole("button", { name: /^\$10,000/ }).getAttribute("aria-pressed")).toBe("true");
+    // The demo picks are not offered in a normal build.
+    expect(screen.queryByRole("button", { name: "$50" })).toBeNull();
 
-    // The $50 preset: the C2 demo threshold. Floor, vault and threshold all follow it.
+    fireEvent.click(screen.getByRole("button", { name: "$25,000" }));
+    const at25k = expectedFloor("SPYx", 50, "gentle", 25_000);
+    expect(screen.getByText(formatPriceUsd(at25k.floorAtGraduationUsd))).toBeTruthy();
+    expect(screen.getByText(`≈ ${formatUsd(25_000)}`)).toBeTruthy();
+    expect(at25k.floorAtGraduationUsd).toBeGreaterThan(atDefault.floorAtGraduationUsd);
+    expect((screen.getByLabelText("Custom amount in USD") as HTMLInputElement).value).toBe("25,000");
+    expect(screen.getByRole("button", { name: "$25,000" }).getAttribute("aria-pressed")).toBe("true");
+
+    // A custom value the picks do not offer.
+    fireEvent.change(screen.getByLabelText("Custom amount in USD"), { target: { value: "12,500" } });
+    const at12k = expectedFloor("SPYx", 50, "gentle", 12_500);
+    expect(screen.getByText(formatPriceUsd(at12k.floorAtGraduationUsd))).toBeTruthy();
+    expect(screen.getByText(`≈ ${formatUsd(12_500)}`)).toBeTruthy();
+    expect(screen.getByText("Between $10,000 and $100,000. Checked against the same rules the chain applies to the pool config.")).toBeTruthy();
+    expect(screen.queryByText(/Meteora's keeper does not migrate the pool for you/)).toBeNull();
+  });
+
+  it("demo threshold policy: $50 / $100 / $1,000 (default) and a $1 minimum", async () => {
+    renderForm(false, new MockDataSource(0), new StubLaunchActions(0), thresholdPolicy(true));
+    const atDefault = expectedFloor("SPYx", 50, "gentle", 1_000);
+    expect(await screen.findByText(formatPriceUsd(atDefault.floorAtGraduationUsd))).toBeTruthy();
+    const picks = within(screen.getByRole("group", { name: "Graduation threshold quick picks" })).getAllByRole("button");
+    expect(picks.map((b) => b.textContent)).toEqual(["$50", "$100", "$1,000 default"]);
+    expect(screen.getByRole("button", { name: /^\$1,000/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText(/Between \$1 and \$100,000/)).toBeTruthy();
+
+    // The $50 pick: the C2 demo threshold. Floor, vault and threshold all follow it.
     fireEvent.click(screen.getByRole("button", { name: "$50" }));
     const at50 = expectedFloor("SPYx", 50, "gentle", 50);
     expect(screen.getByText(formatPriceUsd(at50.floorAtGraduationUsd))).toBeTruthy();
     expect(screen.getByText(`≈ ${formatUsd(50)}`)).toBeTruthy();
-    expect(at50.floorAtGraduationUsd).toBeLessThan(atDefault.floorAtGraduationUsd);
     expect((screen.getByLabelText("Custom amount in USD") as HTMLInputElement).value).toBe("50");
     // Below the Meteora keeper threshold the form says the crank has to migrate.
     expect(screen.getByText(/Meteora's keeper does not migrate the pool for you/)).toBeTruthy();
 
-    // A custom value the presets do not offer.
-    fireEvent.change(screen.getByLabelText("Custom amount in USD"), { target: { value: "2,500" } });
-    const at2500 = expectedFloor("SPYx", 50, "gentle", 2500);
-    expect(screen.getByText(formatPriceUsd(at2500.floorAtGraduationUsd))).toBeTruthy();
-    expect(screen.getByText(`≈ ${formatUsd(2500)}`)).toBeTruthy();
-    expect(screen.queryByText(/Meteora's keeper does not migrate the pool for you/)).toBeNull();
+    fireEvent.change(screen.getByLabelText("Custom amount in USD"), { target: { value: "0.5" } });
+    expect(screen.getAllByText(/Use at least \$1:/).length).toBeGreaterThan(0);
   });
 
   it("sends the metadata URI as the token URI, and never renders a JSON document as the avatar", async () => {
@@ -234,7 +262,7 @@ describe("<CreateLaunchForm />", () => {
     expect(container.querySelector("img")?.getAttribute("src")).toBe("https://example.com/logo.png");
   });
 
-  it("refuses a threshold below the SDK minimum or above the maximum, and sends the chosen one", async () => {
+  it("refuses a threshold below $10,000 or above $100,000, and sends the chosen one", async () => {
     const { actions, calls } = recordingActions({ ok: true });
     renderForm(true, new MockDataSource(0), actions);
     await screen.findByText(formatPriceUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
@@ -243,22 +271,22 @@ describe("<CreateLaunchForm />", () => {
     const button = screen.getByRole("button", { name: "Launch token" }) as HTMLButtonElement;
     const field = screen.getByLabelText("Custom amount in USD");
 
-    fireEvent.change(field, { target: { value: "0.5" } });
+    fireEvent.change(field, { target: { value: "5,000" } });
     // The message is on the field and in the preview panel, which cannot preview an invalid threshold.
-    expect(screen.getAllByText(/Use at least \$1/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Use at least \$10,000/).length).toBeGreaterThan(0);
     expect(button.disabled).toBe(true);
     expect(screen.getByText("Preview unavailable")).toBeTruthy();
 
-    fireEvent.change(field, { target: { value: "10000001" } });
-    expect(screen.getAllByText(/Use at most \$10,000,000/).length).toBeGreaterThan(0);
+    fireEvent.change(field, { target: { value: "100001" } });
+    expect(screen.getAllByText(/Use at most \$100,000/).length).toBeGreaterThan(0);
     expect(button.disabled).toBe(true);
 
-    fireEvent.change(field, { target: { value: "50" } });
+    fireEvent.change(field, { target: { value: "30,000" } });
     expect(button.disabled).toBe(false);
     await act(async () => {
       fireEvent.click(button);
     });
-    expect(calls).toEqual([{ thresholdUsd: 50, vaultSharePct: 50, firstBuyQuoteRaw: undefined }]);
+    expect(calls).toEqual([{ thresholdUsd: 30_000, vaultSharePct: 50, firstBuyQuoteRaw: undefined }]);
   });
 
   it("freezes the parameters after a launch and while a retry is pending", async () => {
@@ -267,15 +295,15 @@ describe("<CreateLaunchForm />", () => {
     await screen.findByText(formatPriceUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Harbor Coffee Co-op" } });
     fireEvent.change(screen.getByLabelText("Symbol"), { target: { value: "HRBR" } });
-    fireEvent.change(screen.getByLabelText("Custom amount in USD"), { target: { value: "50" } });
+    fireEvent.change(screen.getByLabelText("Custom amount in USD"), { target: { value: "25,000" } });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Launch token" }));
     });
-    // The launch happened at $50: the form must not go on offering a different floor next to it.
+    // The launch happened at $25,000: the form must not go on offering a different floor next to it.
     expectFrozen("Custom amount in USD");
     expectFrozen("Share of the raise locked in the floor vault");
     expectFrozen(/^Amount in SPYx/);
-    expect(screen.getByText(`≈ ${formatUsd(50)}`)).toBeTruthy();
+    expect(screen.getByText(`≈ ${formatUsd(25_000)}`)).toBeTruthy();
     cleanup();
 
     // A failure that can be retried re-sends the transactions built from the original input, so the
@@ -285,7 +313,7 @@ describe("<CreateLaunchForm />", () => {
     await screen.findByText(formatPriceUsd(expectedFloor("SPYx", 50).floorAtGraduationUsd));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Harbor Coffee Co-op" } });
     fireEvent.change(screen.getByLabelText("Symbol"), { target: { value: "HRBR" } });
-    fireEvent.change(screen.getByLabelText("Custom amount in USD"), { target: { value: "100" } });
+    fireEvent.change(screen.getByLabelText("Custom amount in USD"), { target: { value: "40,000" } });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Launch token" }));
     });
@@ -295,6 +323,6 @@ describe("<CreateLaunchForm />", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Retry from the failed step" }));
     });
-    expect(retry.calls.map((c) => c.thresholdUsd)).toEqual([100, 100]);
+    expect(retry.calls.map((c) => c.thresholdUsd)).toEqual([40_000, 40_000]);
   });
 });

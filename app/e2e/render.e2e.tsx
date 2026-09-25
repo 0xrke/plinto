@@ -17,6 +17,7 @@ import { createBackend } from "@/lib/data";
 import { DataProvider } from "@/lib/data/context";
 import type { LaunchJson } from "@/lib/data/serialize";
 import { AttestationProvider } from "@/lib/attestation";
+import { thresholdPolicy } from "@/lib/config";
 import { formatTokenAmount } from "@/lib/format";
 import { CreateLaunchForm } from "@/components/create/CreateLaunchForm";
 import { LaunchList } from "@/components/launch/LaunchList";
@@ -204,11 +205,12 @@ describe("page components render the on-chain launch from the local fork", () =>
 
     const form = render(
       <App wallet={wallet}>
-        <CreateLaunchForm />
+        {/* The $50 quick pick exists only under the demo threshold policy (NEXT_PUBLIC_DEMO_THRESHOLDS=1). */}
+        <CreateLaunchForm thresholdPolicy={thresholdPolicy(true)} />
       </App>,
     );
     await screen.findByText("Floor at graduation", {}, { timeout: 30_000 });
-    // The preview at the $1,000 default, then the same launch at the $50 preset.
+    // The preview at the demo policy's $1,000 default, then the same launch at the $50 preset.
     const previewRow = () => screen.getByText("Graduation threshold", { selector: "dt" }).parentElement!.textContent!;
     const defaultThreshold = previewRow();
     fireEvent.click(screen.getByRole("button", { name: "$50" }));

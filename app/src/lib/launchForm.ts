@@ -8,7 +8,7 @@ import {
   type LaunchPreview,
 } from "@stockfloor/sdk";
 import type { PriceSource } from "./chain/prices";
-import { THRESHOLD_MAX_USD, VAULT_SHARE_MAX, VAULT_SHARE_MIN } from "./config";
+import { THRESHOLD_POLICY, VAULT_SHARE_MAX, VAULT_SHARE_MIN, type ThresholdPolicy } from "./config";
 
 export interface LaunchFormValues {
   name: string;
@@ -55,22 +55,27 @@ export function parseThresholdUsd(input: string): number | null {
 }
 
 /**
- * Range check of the threshold field against the SDK's `MIN_THRESHOLD_USD` and the app's upper
- * bound. The remaining on-chain limits (the raw u64 threshold at the live quote price, the DBC
- * curve range) depend on the quote asset and are checked by `previewLaunchInput`.
+ * Range check of the threshold field against the app's threshold policy (min $10,000, or the SDK's
+ * `MIN_THRESHOLD_USD` in a demo build; max $100,000). The remaining on-chain limits (the raw u64
+ * threshold at the live quote price, the DBC curve range) depend on the quote asset and are checked
+ * by `previewLaunchInput`.
  */
-export function validateThresholdUsd(input: string): string | undefined {
+export function validateThresholdUsd(input: string, policy: ThresholdPolicy = THRESHOLD_POLICY): string | undefined {
   if (input.trim() === "") return "Enter a graduation threshold in USD.";
   const value = parseThresholdUsd(input);
-  if (value === null) return "Enter a dollar amount with at most two decimals, for example 50 or 1,000.";
-  if (value < MIN_THRESHOLD_USD)
-    return `Use at least ${formatUsdWhole(MIN_THRESHOLD_USD)}: below that the raise rounds to a handful of raw units and the vault can round to zero.`;
-  if (value > THRESHOLD_MAX_USD) return `Use at most ${formatUsdWhole(THRESHOLD_MAX_USD)}.`;
+  if (value === null) return "Enter a dollar amount with at most two decimals, for example 10,000 or 25,000.";
+  const min = Math.max(policy.minUsd, MIN_THRESHOLD_USD);
+  if (value < min) {
+    return min <= MIN_THRESHOLD_USD
+      ? `Use at least ${formatUsdWhole(min)}: below that the raise rounds to a handful of raw units and the vault can round to zero.`
+      : `Use at least ${formatUsdWhole(min)}: a smaller raise leaves the pool too thin for a real market.`;
+  }
+  if (value > policy.maxUsd) return `Use at most ${formatUsdWhole(policy.maxUsd)}.`;
   return undefined;
 }
 
 /** Client-side validation of the create form. The SDK and the program validate again. */
-export function validateLaunchForm(values: LaunchFormValues): LaunchFormErrors {
+export function validateLaunchForm(values: LaunchFormValues, policy: ThresholdPolicy = THRESHOLD_POLICY): LaunchFormErrors {
   const errors: LaunchFormErrors = {};
   const name = values.name.trim();
   if (name.length === 0) errors.name = "Enter a token name.";
@@ -101,7 +106,7 @@ export function validateLaunchForm(values: LaunchFormValues): LaunchFormErrors {
     errors.vaultSharePct = `Choose a vault share between ${VAULT_SHARE_MIN}% and ${VAULT_SHARE_MAX}%.`;
   }
 
-  const threshold = validateThresholdUsd(values.thresholdUsd);
+  const threshold = validateThresholdUsd(values.thresholdUsd, policy);
   if (threshold) errors.thresholdUsd = threshold;
   return errors;
 }

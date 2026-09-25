@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MIN_THRESHOLD_USD, QUOTE_ALLOWLIST, type LaunchInput } from "@stockfloor/sdk";
-import { THRESHOLD_MAX_USD } from "./config";
+import { THRESHOLD_MAX_USD, thresholdPolicy } from "./config";
 import {
   launchPriceError,
   parseThresholdUsd,
@@ -17,8 +17,10 @@ const valid: LaunchFormValues = {
   quoteSymbol: "SPYx",
   preset: "gentle",
   vaultSharePct: 50,
-  thresholdUsd: "1000",
+  thresholdUsd: "10000",
 };
+
+const DEMO = thresholdPolicy(true);
 
 describe("validateLaunchForm", () => {
   it("accepts a valid form, including an empty metadata URI and a bare image URL", () => {
@@ -50,16 +52,20 @@ describe("validateLaunchForm", () => {
     ).toBeDefined();
   });
 
-  it("keeps the vault share within 30..70", () => {
+  it("keeps the vault share within 30..60", () => {
     expect(validateLaunchForm({ ...valid, vaultSharePct: 29 }).vaultSharePct).toBeDefined();
-    expect(validateLaunchForm({ ...valid, vaultSharePct: 71 }).vaultSharePct).toBeDefined();
+    expect(validateLaunchForm({ ...valid, vaultSharePct: 61 }).vaultSharePct).toMatch(/between 30% and 60%/);
+    expect(validateLaunchForm({ ...valid, vaultSharePct: 70 }).vaultSharePct).toBeDefined();
+    expect(validateLaunchForm({ ...valid, vaultSharePct: 50.5 }).vaultSharePct).toBeDefined();
     expect(validateLaunchForm({ ...valid, vaultSharePct: 30 }).vaultSharePct).toBeUndefined();
-    expect(validateLaunchForm({ ...valid, vaultSharePct: 70 }).vaultSharePct).toBeUndefined();
+    expect(validateLaunchForm({ ...valid, vaultSharePct: 60 }).vaultSharePct).toBeUndefined();
   });
 
-  it("reports a bad graduation threshold on its own field", () => {
-    expect(validateLaunchForm({ ...valid, thresholdUsd: "50" }).thresholdUsd).toBeUndefined();
-    expect(validateLaunchForm({ ...valid, thresholdUsd: "0.5" }).thresholdUsd).toBeDefined();
+  it("reports a bad graduation threshold on its own field, under the policy it is given", () => {
+    expect(validateLaunchForm({ ...valid, thresholdUsd: "25,000" }).thresholdUsd).toBeUndefined();
+    expect(validateLaunchForm({ ...valid, thresholdUsd: "50" }).thresholdUsd).toMatch(/at least \$10,000/);
+    expect(validateLaunchForm({ ...valid, thresholdUsd: "50" }, DEMO).thresholdUsd).toBeUndefined();
+    expect(validateLaunchForm({ ...valid, thresholdUsd: "0.5" }, DEMO).thresholdUsd).toBeDefined();
     expect(validateLaunchForm({ ...valid, thresholdUsd: "" }).thresholdUsd).toBeDefined();
   });
 });
@@ -80,16 +86,27 @@ describe("parseThresholdUsd", () => {
 });
 
 describe("validateThresholdUsd", () => {
-  it("accepts the demo threshold, the default and both bounds", () => {
-    for (const ok of [String(MIN_THRESHOLD_USD), "50", "1000", "1,000", String(THRESHOLD_MAX_USD)]) {
+  it("normal policy: accepts $10,000 to $100,000, the quick picks included", () => {
+    for (const ok of ["10000", "10,000", "25,000", "50000", "99,999.99", String(THRESHOLD_MAX_USD)]) {
       expect(validateThresholdUsd(ok), ok).toBeUndefined();
     }
   });
 
-  it("refuses below the SDK minimum and above the app maximum", () => {
-    expect(validateThresholdUsd("0")).toMatch(/at least \$1/);
-    expect(validateThresholdUsd("0.99")).toMatch(/at least \$1/);
-    expect(validateThresholdUsd(String(THRESHOLD_MAX_USD + 1))).toMatch(/at most \$10,000,000/);
+  it("normal policy: refuses below $10,000 and above $100,000", () => {
+    expect(validateThresholdUsd("9,999.99")).toMatch(/at least \$10,000/);
+    expect(validateThresholdUsd("1000")).toMatch(/at least \$10,000/);
+    expect(validateThresholdUsd("50")).toMatch(/at least \$10,000/);
+    expect(validateThresholdUsd("100,000.01")).toMatch(/at most \$100,000/);
+    expect(validateThresholdUsd("10000000")).toMatch(/at most \$100,000/);
+  });
+
+  it("demo policy: accepts the SDK minimum of $1, the demo picks and the same maximum", () => {
+    for (const ok of [String(MIN_THRESHOLD_USD), "1", "50", "100", "1,000", "10000", "100000"]) {
+      expect(validateThresholdUsd(ok, DEMO), ok).toBeUndefined();
+    }
+    expect(validateThresholdUsd("0", DEMO)).toMatch(/at least \$1:/);
+    expect(validateThresholdUsd("0.99", DEMO)).toMatch(/at least \$1:/);
+    expect(validateThresholdUsd("100001", DEMO)).toMatch(/at most \$100,000/);
   });
 
   it("refuses an unparseable amount and an empty field", () => {
@@ -126,7 +143,7 @@ describe("previewLaunchInput", () => {
 
   it("returns the chain's own rejection when the threshold does not fit a u64 of quote raw units", () => {
     // A cheap quote asset turns a huge USD threshold into more raw units than a u64 holds.
-    const { preview, error } = previewLaunchInput(input(THRESHOLD_MAX_USD, 0.000001));
+    const { preview, error } = previewLaunchInput(input(THRESHOLD_MAX_USD, 0.0000001));
     expect(preview).toBeNull();
     expect(error).toMatch(/outside \(0, u64::MAX\]/);
   });
