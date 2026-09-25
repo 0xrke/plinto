@@ -263,11 +263,12 @@ e2e/                        local-fork end-to-end driver and page render check (
 - `lib/faucet/faucet.test.ts`: the localhost guard (mainnet URL, private IPs, `127.0.0.1.nip.io`,
   `localhost.evil.example`, credentials, other schemes refused without a probe; loopback non-surfnet
   refused), the request handler and the `/api/faucet` route module with stubbed env and fetch.
-- `lib/launchForm.test.ts`: the threshold field (parsing, the `MIN_THRESHOLD_USD` and `THRESHOLD_MAX_USD`
-  bounds) and `previewLaunchInput` (the floor scales with the threshold, max loss does not; a threshold
+- `lib/launchForm.test.ts`: the threshold field (parsing, the policy bounds: $10,000–`THRESHOLD_MAX_USD`
+  normally, `MIN_THRESHOLD_USD`–`THRESHOLD_MAX_USD` with `NEXT_PUBLIC_DEMO_THRESHOLDS=1`) and `previewLaunchInput` (the floor scales with the threshold, max loss does not; a threshold
   the chain would reject comes back as the chain's own message).
-- `components/create/CreateLaunchForm.test.tsx`: the threshold presets and the custom field move the
-  preview, an out-of-range threshold disables Launch, the chosen threshold is what reaches the action,
+- `components/create/CreateLaunchForm.test.tsx`: the threshold presets of both policies (default $10,000; demo
+  $1,000) and the custom field move the preview, the vault share slider stays within 30–60% with its split
+  caption, the preview shows the floor per $100 at listing, the price move and the fee lines, an out-of-range threshold disables Launch, the chosen threshold is what reaches the action,
   the parameters are frozen after a launch and while a retry is pending, and the metadata JSON URL reaches
   the SDK input as the token `uri` while never being rendered as an `<img>`.
 - `lib/chain/{cluster,errors,metadata,prices}.test.ts`, `components/token/TradePanels.test.tsx` (the buy

@@ -10,15 +10,16 @@ unchanged, it cannot go to zero. (Those two conditions are real: see
 **What that means for a buyer, phase by phase:**
 
 - **During the presale** the money sits in the bonding curve. You can sell back into it at close to what you
-  paid: the curve moves 1.2× from its first price to its last, and each trade pays a 1% fee. Nobody — not the
-  creator, not us — can take that money out.
+  paid: the curve moves 1.01× (flat, the default) or 1.2× (gentle) from its first price to its last, and each
+  trade pays a 0.25% fee. Nobody — not the creator, not us — can take that money out.
 - **When the curve completes, the protection changes in one transaction.** Half the raise becomes the
-  redeemable floor and the rest becomes permanently locked liquidity, so cover drops from "almost what you
-  paid" to the floor: **31.3% of the opening price at the defaults**. Anyone can complete the curve, so a
+  redeemable floor, 40% becomes permanently locked liquidity and 10% is paid out (5% to the platform, 5% to the
+  creator), so cover drops from "almost what you paid" to the floor: **35.6% of the opening price at the
+  defaults** — $34.88 back for every $100 bought at the listing price, after the 2% exit fee. Anyone can complete the curve, so a
   buyer late in the presale should expect that switch at any moment.
-- **After that the floor only rises.** 0.8% of every trade on the DAMM v2 pool and the 2% kept from every
-  redemption go to the vault. On a $1,000 raise (a $500 vault), $100,000 of lifetime volume adds roughly $800
-  — the floor per token more than doubles.
+- **After that the floor only rises.** 0.24% of every trade on the DAMM v2 pool (30% of the LP fee) and the
+  2% kept from every redemption go to the vault. On a $10,000 raise (a $5,000 vault), $100,000 of lifetime
+  volume adds roughly $240.
 
 The floor is a fixed amount per token, not a percentage of what you paid. A buyer at 12× the floor still
 loses about 92%, which is why every buy button prints the maximum loss before you press it.
@@ -124,13 +125,13 @@ because the metadata is immutable (`isMutable: 0`, update authority cleared) nei
 The DBC configuration *is* the product here, not packaging around it:
 
 1. **The partner migration fee is routed into an admin-less PDA vault** that any holder can redeem against, instead of
-   being platform revenue — [Where the money goes](#where-the-money-goes).
+   being platform revenue (all of it except a fixed 5% + 5% of the raise to the platform and the creator) — [Where the money goes](#where-the-money-goes).
 2. **One dedicated config per launch**, whose `fee_claimer` and `leftover_receiver` are a **program PDA** that signs
    the DBC CPIs — proven on the fork and with a mainnet precedent — [Why Solana](#why-solana).
 3. **An equity-like constant-liquidity curve quoted in a stock token** (SPYx), not a memecoin curve —
    [Phase 1](#phase-1-presale-on-the-dbc-bonding-curve).
-4. **100% of migrated liquidity permanently locked in DAMM v2** with quote-only fee collection, so LP fees can only
-   raise the floor — [Phase 2](#phase-2-graduation).
+4. **100% of migrated liquidity permanently locked in DAMM v2** with a pinned 1% fee and quote-only fee collection,
+   so the vault's 30% of LP fees can only raise the floor — [Phase 2](#phase-2-graduation).
 5. **`create_launch` enforces that whole shape on-chain**, so a `Launch` account is a fact, not a UI promise —
    [The DBC configuration is the product](#the-dbc-configuration-is-the-product).
 
@@ -173,60 +174,60 @@ The DBC configuration *is* the product here, not packaging around it:
   and Meteora's bounty asks for DBC launch mechanics tuned for equity-like assets that outlast the
   meme-stock meta.
 
-**StockFloor's answer:** a share of the raise (30–70%, default 50%) is locked in SPYx at graduation. Every
+**StockFloor's answer:** a share of the raise (30–60%, default 50%) is locked in SPYx at graduation. Every
 holder can redeem against it pro rata, at any time, forever. No admin can withdraw it.
 
 **Who it is for.** Communities, creators and projects launching a token that is meant to outlive the week it
 was launched in. Buyers get a floor held in real stock exposure and can see their maximum loss before they
 buy.
 
-**What it is not.** It is not a fundraising round. The creator receives no part of the raise, no allocation
-and no vesting — the whole raise splits between the vault and locked liquidity, and the creator's only income
-is 30% of the curve trading fee (see [Who pays for this](#who-pays-for-this)). This is a community token with
-a floor, and a creator who needs the proceeds to fund work should not use StockFloor as it stands.
+**What it is not.** It is not a fundraising round. The creator receives no allocation and no vesting, and
+only a one-off 5% of the raise at graduation; the rest of the raise, apart from the platform's 5%, splits
+between the vault and locked liquidity. After graduation the creator earns half of the LP fees (see
+[Who pays for this](#who-pays-for-this)). This is a community token with a floor, and a creator who needs the
+proceeds to fund work should not use StockFloor as it stands.
 
 ---
 
 ## Who pays for this
 
-The money has to come from somewhere, and today it does not come from us or from the creator. Here is the
-whole picture, because the arithmetic is small enough to check.
+The money has to come from somewhere. Here is the whole picture, because the arithmetic is small enough to
+check.
 
-**What the creator earns.** 30% of the non-protocol curve trading fee. With the default 1% curve fee, DBC
-takes 20% for itself and the creator takes 30% of the rest: **0.24% of curve volume**, paid in SPYx. The
-creator gets no free tokens, no allocation and no share of the raise, and after graduation nothing at all —
-DAMM v2 fees are collected in the quote asset only and the position belongs to a program PDA, so every
-post-graduation fee goes to the vault.
+> **Which fee model.** This section describes **launch v3**, the fee model on branch `feat/fee-model`
+> (2026-09-25). The deployed mainnet program and the demo launch SFDEMO are **launch v2**: there, every curve,
+> migration and LP fee went into the vault and neither the creator nor the platform earned anything. v2
+> launches keep that promise after any upgrade; the program routes each harvest by `launch.version`.
 
-On a $1,000 raise (the default threshold), with curve volume above the raise coming from buyers selling back
-and rebuying before graduation:
+| Fee | Rate | Where it goes | Instruction |
+|---|---|---|---|
+| Presale (curve) fee | **0.25%** of each curve trade (the DBC minimum) | Meteora DBC keeps 20%; the other 80% (**0.2% of curve volume**) goes to the StockFloor platform treasury, whether or not the presale graduates. The creator and the vault get none of it | `harvest_curve_fees` |
+| Graduation fee | **10% of the raise**, once | **5% to the platform, 5% to the creator** (a one-off bonus), out of the DBC partner migration fee; the rest of that fee — the vault share, 30–60% of the raise — goes into the vault | `harvest_migration_fee` |
+| Trading fee (DAMM v2) | **1%** pool fee, fixed on chain | Meteora keeps 20%; of the LP share, **creator 50%, floor vault 30%, platform 20%** (0.4% / 0.24% / 0.16% of volume) | `harvest_lp_fees` |
+| Exit fee | **2%** of each redemption | Stays in the vault and raises the floor for everyone else | `redeem` |
 
-| Curve volume | Creator (0.24%) | Vault from curve fees (0.56%) | Vault from the migration fee (50% of a $1,000 raise) |
-|---:|---:|---:|---:|
-| $1,000 (the raise, bought once) | $2.40 | $5.60 | $500 |
-| $10,000 | $24 | $56 | $500 |
-| $100,000 | $240 | $560 | $500 |
+Every split pays the vault last and gives it every rounding unit. If the creator's or the platform's account
+cannot receive (closed, frozen, memo-locked), that share goes to the vault instead, so nobody can stall the
+harvest that opens redemptions.
 
-A bigger *raise* scales the migration fee with it: a $10,000 threshold puts $5,000 in the vault.
+On the default $10,000 raise at the default 50% vault share:
 
-So on a default launch a creator earns about the price of a coffee. That is a deliberate trade — the same
-fee that a normal launchpad pays out is what makes the floor real — but it is also the honest answer to "why
-would a creator pick this": **for a raise you intend to keep working on, not for fee revenue.** A creator who
-wants a fee-maximising launch should not use StockFloor.
+| | Platform | Creator | Floor vault | Locked pool |
+|---|---:|---:|---:|---:|
+| At graduation | $500 | $500 | $5,000 | $4,000 (minus DBC's 0.2%) |
+| $100,000 of post-graduation volume | $160 | $400 | $240 | — |
+| $100,000 of curve volume before graduation | $200 | $0 | $0 | — |
 
-**What StockFloor earns: nothing.** There is no protocol fee anywhere in the design. The whole partner share
-of curve fees, the whole partner migration fee and all DAMM v2 LP fees go into the vault; the exit fee stays
-in the vault too. That is not modesty, it is what makes the vault credible: there is no instruction that pays
-anyone but a redeeming holder.
+(Post-graduation shares assume the locked position is the whole pool liquidity.)
 
-**So who funds it after the hackathon?** Two levers exist that do not touch the vault or weaken anything
-`create_launch` enforces. Neither is implemented:
+**Why a creator would pick this.** 5% of the raise up front and half of the pool's fees for as long as the
+token trades, with no allocation to sell and no vesting to manage — in exchange for handing 30–60% of the raise
+to a floor that holders can redeem against. It is built for a raise you intend to keep working on.
 
-1. **A flat launch fee in SOL**, taken in the create transaction outside the DBC config. It never enters the
-   curve, the vault or the floor arithmetic.
-2. **A platform slice of the creator's 30%**, by making the DBC pool creator a splitter program that pays the
-   human creator and the platform. `create_launch` already caps the creator trading share at 30%, so the
-   guarantees are unchanged.
+**What StockFloor earns, and what it cannot touch.** The platform earns the presale fee, 5% of each raise and
+20% of LP fees. All of it is paid to a fixed treasury key (`78tRFS255ADZT2oMSXi5xjHt7Y2SVDLdDEBz759eQsqJ`,
+compiled into the program as `PLATFORM_TREASURY`). The treasury is only ever a destination: the program has no
+admin, withdraw or sweep instruction, and quote leaves the vault only through `redeem`.
 
 **And who runs the crank?** Harvests and migration are permissionless — the destinations are fixed by the
 program, so anyone can pay for a crank and nobody can redirect it. In practice we run it: the repo's cranker
@@ -261,23 +262,25 @@ Every token goes through three phases.
   SPYx directly.
 - The curve is equity-like, not a memecoin curve. It has one constant-liquidity segment whose last price is
   1.2× the first (`gentle`) or 1.01× the first (`flat`).
-- No floor and no AMM market exist yet. The partner share of curve trading fees already flows into the vault
-  through `harvest_curve_fees`.
+- No floor and no AMM market exist yet. The partner share of the 0.25% curve trading fee goes to the platform
+  treasury through `harvest_curve_fees` (launch v2: into the vault).
 
 ### Phase 2: graduation
 
-When the curve's quote reserve reaches the migration threshold (default ≈ $1,000 in SPYx):
+When the curve's quote reserve reaches the migration threshold (default ≈ $10,000 in SPYx):
 
 1. **The curve completes.** The final buy uses DBC `swap2` in PartialFill mode, because DBC 0.2.1 rejects an
    exact-in buy that crosses the migration price.
-2. **The partner migration fee goes to the vault.** DBC computes it from the threshold `T` as
-   `T − ceil(T × (100 − pct) / 100)`, with `pct` = 50 by default. Our program claims it with
-   `harvest_migration_fee` (a PDA-signed CPI into DBC `withdraw_migration_fee`) straight into the vault.
+2. **The partner migration fee funds the vault.** DBC computes it from the threshold `T` as
+   `T − ceil(T × (100 − mf) / 100)`, with `mf` = vault share + 10 (60 by default). Our program claims it with
+   `harvest_migration_fee` (a PDA-signed CPI into DBC `withdraw_migration_fee`) and splits it in the same
+   instruction: 5% of `T` to the platform, 5% of `T` to the creator, and the rest — the vault share — into the
+   vault.
 3. **The rest of the raise migrates.** It moves, together with base tokens, into a **Meteora DAMM v2** pool
    (permissionless `migration_damm_v2`). DBC burns the unsold base tokens.
 4. **The liquidity is locked for good.** 100% of the migrated liquidity is **permanently locked** in one
-   position whose NFT is owned by our PDA. Nobody can ever remove it. Only its fees can be claimed, and they go
-   to the vault.
+   position whose NFT is owned by our PDA. Nobody can ever remove it. Only its fees can be claimed: 50% to the
+   creator, 30% to the vault, 20% to the platform. The pool fee is pinned at 1% with no dynamic fee.
 
 ### Phase 3: free market with a floor
 
@@ -290,7 +293,7 @@ When the curve's quote reserve reaches the migration threshold (default ≈ $1,0
   whenever the market price is below `floor × (1 − 0.02) × (1 − 0.01) ≈ 0.970 × floor`, before price impact
   and transaction costs. **The effective hard bid is therefore about 97% of the floor, not the floor itself**
   — we would rather name that discount than let a reader find it.
-- **The floor never decreases through the program.** It rises from LP fees, curve fees, retained exit fees,
+- **The floor never decreases through the program.** It rises from its share of LP fees, retained exit fees,
   burned base tokens and donations. SPYx dividends raise its USD value through the Token-2022 ScaledUiAmount
   multiplier.
 
@@ -305,7 +308,7 @@ flowchart LR
   end
   subgraph P2["Phase 2: graduation"]
     C -->|yes| D["Curve complete"]
-    D --> E["harvest_migration_fee:<br/>pct% of threshold into the vault"]
+    D --> E["harvest_migration_fee:<br/>5% platform, 5% creator,<br/>vault share into the vault"]
     D --> F["migration_damm_v2:<br/>rest seeds DAMM v2,<br/>100% of LP permanently locked"]
   end
   subgraph P3["Phase 3: free market with a floor"]
@@ -313,7 +316,7 @@ flowchart LR
     F --> G
     G --> H["Trading on DAMM v2"]
     G --> I["Any holder: burn N,<br/>receive N / supply × vault − exit fee"]
-    H --> J["harvest_lp_fees<br/>raises the floor"]
+    H --> J["harvest_lp_fees<br/>30% to the vault<br/>raises the floor"]
   end
 ```
 
@@ -322,18 +325,28 @@ flowchart LR
 ```mermaid
 flowchart LR
   buyers["Buyers"] -->|SPYx| reserve["DBC virtual pool<br/>quote reserve"]
-  reserve -->|1% curve fee| split["Curve fee split<br/>20% protocol<br/>24% creator<br/>56% partner"]
-  split -->|partner 56%<br/>harvest_curve_fees| vault(("Floor vault<br/>SPYx account of the<br/>vault-authority PDA"))
-  reserve -->|at threshold T<br/>partner migration fee = pct% of T<br/>harvest_migration_fee| vault
-  reserve -->|T minus migration fee<br/>minus 0.2% protocol fee| damm["DAMM v2 pool<br/>one position, 100% permanently locked<br/>NFT owner = claimer PDA"]
-  damm -->|LP fees in SPYx only<br/>harvest_lp_fees| vault
+  reserve -->|0.25% curve fee| split["Curve fee split<br/>20% Meteora<br/>80% partner"]
+  split -->|partner 80%<br/>harvest_curve_fees| platform["Platform treasury<br/>SPYx ATA"]
+  reserve -->|at threshold T<br/>partner migration fee = mf% of T<br/>harvest_migration_fee| transit["Claimer transit ATA<br/>split in the same instruction"]
+  transit -->|5% of T| platform
+  transit -->|5% of T| creator["Creator<br/>SPYx ATA"]
+  transit -->|the rest = vault share of T| vault(("Floor vault<br/>SPYx account of the<br/>vault-authority PDA"))
+  reserve -->|T minus migration fee<br/>minus 0.2% protocol fee| damm["DAMM v2 pool, 1% fee<br/>one position, 100% permanently locked<br/>NFT owner = claimer PDA"]
+  damm -->|LP fees in SPYx only<br/>harvest_lp_fees| lpsplit["Claimer transit ATA"]
+  lpsplit -->|50%| creator
+  lpsplit -->|20%| platform
+  lpsplit -->|30% and all rounding| vault
   holders["Holders"] -->|redeem: burn N tokens| vault
   vault -->|net = gross minus exit fee<br/>the fee stays in the vault| holders
 ```
 
 ### One launch with real numbers (mainnet fork)
 
-These numbers come from `tests/integration/c1-lifecycle.test.ts`, a $1,000 SPYx launch using the default
+These numbers were recorded with the launch v2 fee model (every fee into the vault, 1% curve fee, creator
+trading share 30%), the model of the mainnet deployment. `tests/integration/c1-lifecycle.test.ts` now runs the
+v3 model and asserts the platform, creator and vault parts of each harvest instead.
+
+They come from `tests/integration/c1-lifecycle.test.ts`, a $1,000 SPYx launch using the then-default
 `gentle` preset, 50% vault share and 2% exit fee (details in [`docs/research/c1-evidence.md`](docs/research/c1-evidence.md)).
 SPYx has 8 decimals, the base token 6. Every amount is asserted to the raw unit against a value computed
 without the `stockfloor` program.
@@ -361,7 +374,8 @@ at the end of the run, while four holders redeemed.
 ### The DBC configuration is the product
 
 StockFloor turns the DBC **partner migration fee** into buyer protection. Normally that fee is platform
-revenue. Here it goes into an admin-less PDA vault that anyone can redeem against. Every launch gets its own
+revenue. Here all of it except a fixed 10% of the raise (5% platform, 5% creator) goes into an admin-less PDA
+vault that anyone can redeem against. Every launch gets its own
 DBC config.
 
 | DBC setting | StockFloor value | Why | Enforced by |
@@ -369,18 +383,19 @@ DBC config.
 | Quote mint | **SPYx** (Token-2022, 8 decimals). UI allowlist: SPYx, QQQx, GLDx, NVDAx, AAPLx, MSFTx, GOOGLx, TSLAx | Floor held in an index tracker | UI allowlist. On-chain the vault mint must equal the config's quote mint |
 | DBC token badge | `["token_badge", SPYx]` = `D2THzeQLHaDeKBzzmTNuWEWw23WPM8vVhLvUmSPEpNeL`, remaining account 0 of `create_config` and pool init | DBC 0.2.1 requires a badge for Token-2022 quote mints with extensions (SPYx: Pausable, PermanentDelegate, ScaledUiAmount, TransferHook, …) | DBC |
 | `fee_claimer`, `leftover_receiver` | **our claimer PDA** `["authority", config]` | Partner fees and the migration fee can only go to the program | `create_launch` |
-| `migration_fee_percentage` | **50** (UI 30–70) | The vault share of the raise | `create_launch`: 30–99 (DBC max 99) |
-| `creator_migration_fee_percentage` | **0** | The whole migration fee goes to the vault | `create_launch` |
+| `migration_fee_percentage` | **60** = vault share 50 + 10 (UI vault share 30–60) | The vault share of the raise plus the 5% platform fee and the 5% creator bonus; the pool gets `90 − vault share` | `create_launch`: 40–70 |
+| `creator_migration_fee_percentage` | **0** | The whole migration fee reaches our program, which splits it | `create_launch` |
 | Liquidity distribution | **100% partner permanently locked**, all other buckets 0, no vesting | LP can never be pulled; the position NFT belongs to our PDA | `create_launch` |
-| `collect_fee_mode` (curve) | **QuoteToken** | Curve fees accrue in SPYx and go straight to the vault | `create_launch` |
-| Curve fee | **1%** constant fee scheduler | | `create_launch`: fee scheduler with cliff fee ≤ 20%, no dynamic fee; DBC: ≥ 0.25% |
-| `creator_trading_fee_percentage` | **30** | Creator revenue, capped so a config cannot divert the vault's share | `create_launch`: ≤ 30 |
-| Migration | **DAMM v2**, Customizable option (config `A8gMrEPJkacWkcb3DGwtJwTe16HktSEfvwtuDh2MCtck`), 1% pool fee, no dynamic fee | Flat, predictable post-graduation fee | `create_launch`: migration option DAMM v2 |
+| `collect_fee_mode` (curve) | **QuoteToken** | Curve fees accrue in SPYx and go to the platform treasury | `create_launch` |
+| Curve fee | **0.25%** constant fee scheduler (the DBC minimum) | | `create_launch`: fee scheduler with cliff fee ≤ 20%, no dynamic fee; DBC: ≥ 0.25% |
+| `creator_trading_fee_percentage` | **0** | The creator is paid at graduation and from LP fees instead | `create_launch`: must be 0 |
+| Migration | **DAMM v2**, Customizable option (config `A8gMrEPJkacWkcb3DGwtJwTe16HktSEfvwtuDh2MCtck`), 1% pool fee, no dynamic fee | Flat, predictable post-graduation fee | `create_launch`: migration option DAMM v2, `migration_fee_option` Customizable, `migrated_pool_fee_bps` 100, fixed base fee, no compounding fee, no migrated dynamic fee |
+| `enable_first_swap_with_min_fee` | **false** | The creator's bundled first swap would skip an anti-snipe fee schedule | `create_launch` |
 | `migrated_collect_fee_mode` | **QuoteToken** (DAMM v2 `OnlyB`) | LP fees are SPYx only and never produce base tokens | `create_launch` |
 | Supply | **Dynamic**. Base token SPL, 6 decimals, ≈ 1B tokens at graduation | DBC burns unsold inventory at migration, so `mint.supply` is the true denominator | `create_launch` rejects fixed supply |
 | Token metadata | **Immutable** | | `create_launch` |
 | Pool creation fee, locked vesting | **0 / none** | Free allocations would drain buyers' money from the vault | `create_launch` |
-| Migration threshold | **≈ $1,000** by default (the create form offers $50 / $100 / $1,000 / $10,000 and a custom amount), converted at launch from Jupiter `usdPrice` and the ScaledUiAmount multiplier | Small raises are viable. Meteora keepers reportedly auto-migrate stock-quoted pools from about $750 (off-chain policy, not verified); `migration_damm_v2` is permissionless, so our crank can migrate too | SDK/UI (≥ $1); `create_launch` rejects a threshold so small that the partner migration fee rounds to 0 (`MigrationQuoteThresholdTooSmall`) |
+| Migration threshold | **≈ $10,000** by default (the create form offers $10,000 / $25,000 / $50,000 and a custom amount up to $100,000; a build with `NEXT_PUBLIC_DEMO_THRESHOLDS=1` offers $50 / $100 / $1,000 and a $1 minimum), converted at launch from Jupiter `usdPrice` and the ScaledUiAmount multiplier | Small raises are viable. Meteora keepers reportedly auto-migrate stock-quoted pools from about $750 (off-chain policy, not verified); `migration_damm_v2` is permissionless, so our crank can migrate too | UI ($10,000–$100,000, or ≥ $1 with the demo flag), SDK (≥ $1); `create_launch` rejects a threshold so small that the vault's part of the migration fee rounds to 0 (`MigrationQuoteThresholdTooSmall`) |
 
 Because `create_launch` checks all of the above on-chain, a `Launch` account means a StockFloor-shaped launch,
 not just a UI promise.
@@ -457,14 +472,14 @@ property-tested ([`docs/DECISIONS.md`](docs/DECISIONS.md)).
 
 | Source | Mechanism | Size |
 |---|---|---|
-| Partner migration fee | One-time `harvest_migration_fee` at graduation | `pct%` of the threshold (default 50%) |
-| Curve trading fees | `harvest_curve_fees` | 56% of the 1% curve fee: DBC takes 20%, then the creator 30% of the rest |
-| DAMM v2 LP fees | `harvest_lp_fees` on the permanently locked position | LP share = 80% of the 1% pool fee, pro rata to the position's share of pool liquidity |
+| Partner migration fee | One-time `harvest_migration_fee` at graduation | The vault share of the threshold (default 50%, 30–60%): the fee minus 5% of the raise to the platform and 5% to the creator |
+| DAMM v2 LP fees | `harvest_lp_fees` on the permanently locked position | 30% of the LP share (the LP share is 80% of the 1% pool fee, pro rata to the position's share of pool liquidity), plus every rounding unit and any share whose payee cannot receive |
 | Exit fee | Retained on every redemption | 2% default, 5% cap |
 | Burns | Base tokens that reach the program are burned (`S` falls) | Donations and dust |
 | Donations | Anyone can send SPYx to the vault | Any amount |
 | Dividends | SPYx ScaledUiAmount multiplier rises; raw `V` unchanged, USD value up | Per xStocks corporate action |
 | Surplus | `harvest_surplus` | Rounding dust in DBC 0.2.1 (swaps stop at the migration price) |
+| Curve trading fees (launch v2 only) | `harvest_curve_fees` | On v3 launches these go to the platform, not the vault |
 
 ### It protects from zero, not from loss
 
@@ -478,37 +493,42 @@ Z = 1 − floor / price
 A buyer at 12× the floor can lose 1 − 1/12 ≈ 91.7%. `Z` does not include the 2% exit fee or trading fees. A
 holder who exits by redeeming receives `floor × (1 − 2%)`, minus rounding. In USD the floor moves with the S&P 500.
 
-**How strong is the floor, really?** At the defaults it is 31.3% of the opening price — so a buyer at the open
-can still lose 68.7%, and we say so on the buy button. The comparison that matters is not with a perfect
+**How strong is the floor, really?** At the defaults (flat curve, 50% vault share) it is 35.6% of the opening
+price — so a buyer at the open can still lose 64.4%, and we say so on the buy button. The create form shows the
+same thing as **"Floor per $100 at listing": $34.88** (after the 2% exit fee). The comparison that matters is not with a perfect
 instrument, it is with the launch this replaces:
 
 | At the moment the market opens | Floor | Maximum loss | Who holds the raise |
 |---|---:|---:|---|
 | pump.fun-style launch | $0 | 100% | Market liquidity and creator revenue |
-| **StockFloor, `gentle` curve, 50% vault share** | **31.3% of the opening price** | **68.7%** | An admin-less PDA vault, redeemable pro rata, forever |
-| StockFloor, `flat` curve, 70% vault share | 53.6% | 46.4% | The same |
+| **StockFloor, `flat` curve, 50% vault share (default)** | **35.6% of the opening price** | **64.4%** | An admin-less PDA vault, redeemable pro rata, forever |
+| StockFloor, `flat` curve, 60% vault share | 46.0% | 54.0% | The same |
 
-And the floor only moves one way: every curve fee, LP fee, retained exit fee and burn raises it, and nothing in
-the program can lower it.
+And the floor only moves one way: every LP fee share, retained exit fee and burn raises it, and nothing in the
+program can lower it.
 
 **Floor at the opening price.** When the DAMM v2 market opens at the graduation price `p₁`, the floor is:
 
 ```
-floor / p₁ = f / (√r + 1 − f)          f = vault share, r = last/first curve price
+floor / p₁ = v / (√r + 1 − m)          v = vault share, m = v + 10% (migration fee), r = last/first curve price
+floor per $100 at listing = 100 × v / (√r + 1 − m) × (1 − 2% exit fee)
 ```
 
-The curve sells `T·√r / p₁` base for `T` quote along its constant-liquidity segment. DAMM v2 receives
-`(1 − f)·T` quote and `(1 − f)·T / p₁` base. The vault gets `f·T`. The formula ignores the 0.2% protocol
-migration fee, fees and rounding. The SDK test `max loss at graduation follows f / (sqrt(r) + 1 - f)` checks
-it against `previewLaunch`.
+The curve sells `T·√r / p₁` base for `T` quote along its constant-liquidity segment. DBC keeps the migration
+fee `m·T`, so DAMM v2 receives `(1 − m)·T` quote and `(1 − m)·T / p₁` base. Of the migration fee, 5% of `T`
+goes to the platform and 5% to the creator, so the vault gets `v·T`. The formula ignores the 0.2% protocol
+migration fee, trading fees and rounding. The SDK tests `max loss at graduation follows v / (sqrt(r) + 1 - m),
+m = v + 10% (pool = 1 - m)` and `floor per $100 at listing matches the founder table (flat 50/40 $34.88, gentle
+50/40 $32.77)` check it against `previewLaunch`. (Launch v2 had no cuts: `v = m`.)
 
-| Preset | Vault share 30% | 50% (default) | 70% |
+| Preset | Vault 30% / pool 60% | 50% / 40% (default) | 60% / 30% |
 |---|---|---|---|
-| `gentle` (r = 1.2) | floor 16.7% of price, max loss 83.3% | floor 31.3%, max loss 68.7% | floor 50.2%, max loss 49.8% |
-| `flat` (r = 1.01) | floor 17.6%, max loss 82.4% | floor 33.2%, max loss 66.8% | floor 53.6%, max loss 46.4% |
+| `flat` (r = 1.01), the default | floor 18.7% of price, max loss 81.3%, $18.32 per $100 | floor 35.6%, max loss 64.4%, $34.88 per $100 | floor 46.0%, max loss 54.0%, $45.06 per $100 |
+| `gentle` (r = 1.2) | floor 17.7%, max loss 82.3%, $17.34 per $100 | floor 33.4%, max loss 66.6%, $32.77 per $100 | floor 43.0%, max loss 57.0%, $42.14 per $100 |
 
 A higher vault share means a higher floor and a thinner market, and this trade-off is intended. The creator
-chooses the share in the create form, which previews the floor at graduation before launch.
+chooses the share in the create form (caption `Vault X% · Pool 90−X% · Platform 5% · Creator 5%`), which
+previews the split in dollars, the floor per $100 at listing and the price move of a $1,000 buy before launch.
 
 ---
 
@@ -536,6 +556,8 @@ and PDAs are constants that unit tests check against `find_program_address`.
 | **Vault authority PDA** | `["vault_authority", config]` | Owns the vault. **Signs only the payout transfer in `redeem`.** It never signs into an external program. |
 | Vault | ATA(vault authority, SPYx, Token-2022) | The floor backing |
 | Claimer base ATA | ATA(claimer, base mint, SPL Token) | Transit account for base tokens, always emptied (burned) in the same instruction |
+| Claimer quote ATA (launch v3) | ATA(claimer, SPYx, Token-2022) | Transit for the migration fee and LP fees: the claimer pays the platform, then the creator, then the vault takes the rest; always emptied in the same instruction |
+| Creator and platform quote ATAs (launch v3) | ATA(`launch.creator`, SPYx), ATA(`PLATFORM_TREASURY`, SPYx) | Payees of the fee split, created by `create_launch`, address-checked by every harvest |
 | DBC config | Keypair account, one per launch; signs `create_launch` | Curve, fee and migration parameters |
 | DBC virtual pool | DBC PDA `["pool", config, max(base, quote), min(base, quote)]` | Presale market, pinned in `Launch.pool` |
 | DAMM v2 pool and position | Created by `migration_damm_v2` | Market after graduation; position NFT owned by the claimer PDA |
@@ -580,18 +602,19 @@ More detail, including sequence diagrams of every instruction and the invariant-
 ## Instructions
 
 All harvest cranks are **permissionless**: any key can pay the transaction fee, and the destinations are
-fixed by the program.
+fixed by the program. Every v3 harvest also emits `FeesDistributed` with the received amount, each party's
+part and whether a payee fell back to the vault.
 
 | Instruction | Caller | What it does | Key guards (error names) |
 |---|---|---|---|
-| `create_launch(exit_fee_bps)` | Creator; **the DBC config keypair must sign** | Validates the DBC config shape, commits the base mint, creates `Launch` and the empty vault | `InvalidDbcConfig`, `FeeClaimerMismatch`, `LeftoverReceiverMismatch`, `MigrationFeePercentageOutOfRange`, `CreatorMigrationFeeNotZero`, `LiquidityNotFullyPartnerLocked`, `LiquidityVestingNotAllowed`, `LockedVestingNotAllowed`, `CollectFeeModeNotQuote`, `MigratedCollectFeeModeNotQuote`, `MigrationOptionNotDammV2`, `BaseTokenTypeNotSplToken`, `FixedTokenSupplyNotAllowed`, `CreatorTradingFeeTooHigh`, `CurveFeeTooHigh`, `DynamicFeeNotAllowed`, `TokenUpdateAuthorityNotImmutable`, `PoolCreationFeeNotZero`, `MigrationQuoteThresholdTooSmall`, `ExitFeeTooHigh`, `QuoteMintMismatch`, `InvalidBaseMint`, `VaultEncumbered` (pre-created vault) |
+| `create_launch(exit_fee_bps)` | Creator; **the DBC config keypair must sign** | Validates the DBC config shape, commits the base mint, creates `Launch` (version 3), the empty vault and the creator, platform and transit quote ATAs | `MigratedPoolFeeInvalid`, `MigratedDynamicFeeNotAllowed`, `FirstSwapWithMinFeeNotAllowed`, `PayeeAccountMismatch`, `ClaimerQuoteAccountEncumbered`, `InvalidDbcConfig`, `FeeClaimerMismatch`, `LeftoverReceiverMismatch`, `MigrationFeePercentageOutOfRange`, `CreatorMigrationFeeNotZero`, `LiquidityNotFullyPartnerLocked`, `LiquidityVestingNotAllowed`, `LockedVestingNotAllowed`, `CollectFeeModeNotQuote`, `MigratedCollectFeeModeNotQuote`, `MigrationOptionNotDammV2`, `BaseTokenTypeNotSplToken`, `FixedTokenSupplyNotAllowed`, `CreatorTradingFeeTooHigh`, `CurveFeeTooHigh`, `DynamicFeeNotAllowed`, `TokenUpdateAuthorityNotImmutable`, `PoolCreationFeeNotZero`, `MigrationQuoteThresholdTooSmall`, `ExitFeeTooHigh`, `QuoteMintMismatch`, `InvalidBaseMint`, `VaultEncumbered` (pre-created vault) |
 | `register_pool()` | Anyone | Records the one DBC pool of the committed base mint | `PoolAlreadyRegistered`, `InvalidDbcPool`, `PoolConfigMismatch`, `BaseMintMismatch`, `PoolTypeNotSplToken`, `BaseMintDecimalsMismatch`, `BaseMintAuthorityNotRevoked`, `BaseMintHasFreezeAuthority` |
-| `harvest_curve_fees()` | Anyone | CPI DBC `claim_trading_fee` (claimer signs): SPYx into the vault, any base burned | `PoolNotRegistered`, pinned pool/vault, `QuoteMintPaused`, `QuoteMintTransferHookUnsupported`, `VaultFrozen`, `VaultDecreased`, `VaultEncumbered` |
-| `harvest_migration_fee()` | Anyone, once | CPI DBC `withdraw_migration_fee(0)` into the vault. Opens redemption together with migration | `CurveNotComplete`, `MigrationFeeAlreadyHarvested`, plus the checks above |
+| `harvest_curve_fees()` | Anyone | CPI DBC `claim_trading_fee` (claimer signs): SPYx to the platform treasury ATA (v2: into the vault), any base burned | `PoolNotRegistered`, pinned pool/vault, `PayeeAccountMismatch`, `PlatformQuoteAccountUnavailable` (v3), `QuoteMintPaused`, `QuoteMintTransferHookUnsupported`; v2 also `VaultFrozen`, `VaultDecreased`, `VaultEncumbered` |
+| `harvest_migration_fee()` | Anyone, once | CPI DBC `withdraw_migration_fee(0)` into the transit, then 5% of `T` to the platform, 5% of `T` to the creator, the rest into the vault (v2: all into the vault). Opens redemption together with migration | `CurveNotComplete`, `MigrationFeeAlreadyHarvested`, `PayeeAccountMismatch`, `ClaimerQuoteAccountEncumbered`, `TransitNotEmptied`, `VaultBalanceMismatch`, plus the SPYx and vault checks |
 | `harvest_surplus()` | Anyone, once | CPI DBC `partner_withdraw_surplus` into the vault | `CurveNotComplete`, `SurplusAlreadyHarvested` |
 | `sync_migration()` | Anyone, idempotent | Latches `Launch.migrated` once DBC reports the migration, so `redeem` stops reading DBC state. Reads nothing when already latched | `PoolNotRegistered`, `InvalidDbcPool`, `MigrationNotComplete` |
 | `burn_claimer_base()` | Anyone | Burns whatever the claimer base ATA holds, for example donated base tokens. DBC `withdraw_leftover` never applies, because fixed supply is rejected | canonical claimer ATA, `BaseMintMismatch` |
-| `harvest_lp_fees()` | Anyone | CPI DAMM v2 `claim_position_fee` for a position whose NFT the claimer owns: SPYx into the vault, base burned | `InvalidDammPool`, `InvalidDammPosition`, `PositionPoolMismatch`, `DammPoolMintMismatch`, `PositionNftNotOwnedByClaimer`, vault checks |
+| `harvest_lp_fees()` | Anyone | CPI DAMM v2 `claim_position_fee` for a position whose NFT the claimer owns: SPYx into the transit, then creator 50%, platform 20%, vault the rest (v2: all into the vault); base burned | `InvalidDammPool`, `InvalidDammPosition`, `PositionPoolMismatch`, `DammPoolMintMismatch`, `PositionNftNotOwnedByClaimer`, payee and transit checks as above, vault checks |
 | `redeem(amount)` | Any holder | Burns `amount`, pays `net` from the vault (vault authority signs) | `MigrationNotComplete`, `MigrationFeeNotHarvested`, `ZeroAmount`, `InsufficientBaseBalance`, `NothingToRedeem`, `QuoteMintPaused`, `QuoteMintTransferHookUnsupported`, `VaultFrozen`, `DestinationIsVault`, post-conditions `VaultBalanceMismatch`, `SupplyMismatch`, `FloorDecreased` |
 | `floor()` | Anyone (simulate) | Returns `{vault_raw, supply, exit_fee_bps, floor_q64}` as return data and emits `FloorSnapshot` | `FloorAccountMismatch` |
 
@@ -615,7 +638,12 @@ can pay into — cannot make a `crank --loop` operator send a transaction every 
 - **Redemption is always open once the floor exists.** `redeem` is open to every holder after migration and
   the migration fee harvest. No StockFloor role can pause it. Only the SPYx issuer's controls can block it,
   plus our program's upgrade authority until it is revoked (see below).
-- **Harvests pay only into this launch's vault,** whoever sends them. Base tokens are burned.
+- **Harvests pay only to this launch's vault, the fixed platform treasury ATA and the launch creator's ATA,**
+  whoever sends them, in fixed shares; the vault always takes the remainder. Base tokens are burned.
+- **No payee can block the floor.** If the creator's or the platform's account cannot receive, its share of
+  the migration fee or LP fees goes to the vault, so `harvest_migration_fee` and with it `redeem` cannot be
+  stalled by either of them. (Presale fees are the one exception: they wait in DBC until the platform ATA can
+  receive again, and never enter the vault.)
 - **The creator cannot withhold the floor.** Registration is permissionless, and the committed base mint
   identifies the one pool.
 - **What is deliberately not on-chain:** the quote-asset allowlist and how large the raise is in fiat terms.
@@ -631,7 +659,8 @@ can pay into — cannot make a `crank --loop` operator send a transaction every 
 | **SPYx issuer** (xStocks) | Pause authority and freeze authority `JDq14…`; permanent delegate `5aMNN…`; authority to set a transfer hook `5aMNN…`; ScaledUiAmount authority `S7vYFF…` | **Yes.** The permanent delegate can move or burn tokens in any account, including the vault | Disclosed on every token page. Pause, frozen vault and active hook fail cleanly (`QuoteMintPaused`, `VaultFrozen`, `QuoteMintTransferHookUnsupported`) with no state change; retry after restore. UI-level allowlist only |
 | **Meteora** (DBC and DAMM v2 upgrade authorities; both programs are upgradeable, checked 2026-09-15) | A malicious or breaking upgrade | Not by design: the vault authority is a separate PDA that never signs into them. An upgrade could stop or divert fees that are not harvested yet. That includes an unharvested migration fee, which would keep redemption closed | Migration latch, post-CPI vault checks, strict account validation, two-PDA split (below) |
 | **stockfloor upgrade authority** | Upgrade our program | Yes, with a malicious upgrade | Revoke the upgrade authority before production. **Not revoked, and deliberately not revoked yet:** revoking makes two failures permanent — an issuer-enabled transfer hook on the quote mint (below) and any future DBC or DAMM v2 change that breaks a harvest CPI. The app reads the live upgrade authority from chain and shows it on every token page, so a holder can see exactly who holds this power and when it goes away |
-| Launch creator | Chooses parameters within on-chain bounds | No | `create_launch` enforces the shape; the base mint is committed |
+| Launch creator | Chooses parameters within on-chain bounds; can close or memo-lock its own payee ATA | No | `create_launch` enforces the shape; the base mint is committed; an unpayable creator ATA only sends the creator's share to the vault |
+| Platform treasury key (`78tRFS25…`, a hot key in `keys/`) | Receives platform fees; can close its own quote ATA | No — it is only ever a destination | A closed ATA stalls only the presale-fee harvest; the SDK crank re-creates it idempotently. Rotating the key needs a program upgrade |
 | Crankers, other users | Call any permissionless instruction | No | Destinations and pools are pinned; covered by adversarial tests |
 
 ### Mitigations against upgradeable dependencies
@@ -652,8 +681,10 @@ can pay into — cannot make a `crank --loop` operator send a transaction every 
 5. **Launch-level attacks, each covered by a fork test.** A rogue second pool on the same config. Front-running
    `create_launch`: the config keypair must sign. A creator withholding registration, including through a
    sock-puppet creator key. A random signer redirecting a harvest. A double harvest. Out-of-shape configs:
-   fixed supply, creator fee share above 30%, curve fee above 20%, dynamic fee, LP fees not in quote, mutable
-   metadata, pool creation fee, vesting, LP not 100% locked, creator migration fee. A base mint with a live
+   fixed supply, any creator trading fee share, curve fee above 20%, dynamic fee, LP fees not in quote, mutable
+   metadata, pool creation fee, vesting, LP not 100% locked, creator migration fee, a migration fee outside
+   40–70%, a migrated pool fee other than a fixed 1% (including Meteora's fixed tiers), a migrated dynamic fee,
+   a min-fee first swap. Substituted payee or transit accounts, and closed, frozen or memo-locked payees. A base mint with a live
    mint authority. A payout into the vault itself.
 
 ### Known limitations
@@ -672,7 +703,7 @@ can pay into — cannot make a `crank --loop` operator send a transaction every 
   trade-off.
 - **The denominator is conservative.** `mint.supply` includes base tokens sitting in the DAMM v2 pool and
   DBC's 0.2% protocol migration base fee, so the floor is computed conservatively. At the defaults that is
-  `(1 − f)/(√r + 1 − f)` ≈ 31.3% of the supply sitting inside the permanently locked position, backed by the
+  `(1 − m)/(√r + 1 − m)` ≈ 28.5% of the supply (flat curve, pool 40%) sitting inside the permanently locked position, backed by the
   vault but owned by no holder. It is not stranded: as holders redeem, supply falls and the floor per token
   rises, and once the floor exceeds the pool price net of the 1% pool fee and the 2% exit fee, buying those
   tokens out of the locked pool and redeeming them is profitable. Arbitrage drains the locked inventory the
@@ -702,17 +733,19 @@ noted. Rationale lives in [`docs/DECISIONS.md`](docs/DECISIONS.md).
 | Parameter | Default | Allowed | Enforced by |
 |---|---|---|---|
 | Quote asset | SPYx | UI allowlist: SPYx, QQQx, GLDx (calm); NVDAx, AAPLx, MSFTx, GOOGLx, TSLAx (volatile). Leveraged and hyper-volatile names excluded | UI / SDK |
-| Migration threshold | $1,000 | ≥ $1 (SDK/UI, ≤ $10M in the app); > 0 (DBC); on-chain, large enough that the partner migration fee is not 0 | SDK, DBC, `create_launch` |
-| Vault share (`migration_fee_percentage`) | 50% | UI 30–70%; on-chain 30–99% | UI, `create_launch` |
+| Migration threshold | $10,000 | App: $10,000–$100,000 (quick picks $10K / $25K / $50K); with `NEXT_PUBLIC_DEMO_THRESHOLDS=1`: $1–$100,000 (quick picks $50 / $100 / $1,000, default $1,000). SDK: ≥ $1. DBC: > 0. On-chain: large enough that the vault's part of the migration fee is not 0 | App, SDK, DBC, `create_launch` |
+| Vault share | 50% (`migration_fee_percentage` 60) | 30–60%; `migration_fee_percentage` = vault share + 10, on-chain 40–70 | UI/SDK, `create_launch` |
+| Platform graduation fee / creator bonus | 5% / 5% of the threshold | fixed in the program | `harvest_migration_fee` |
+| LP fee split | creator 50%, platform 20%, vault 30% (+ rounding) | fixed in the program | `harvest_lp_fees` |
 | Creator migration fee | 0% | must be 0 | `create_launch` |
 | Exit fee | 200 bps | 0–500 bps, immutable per launch | `create_launch` |
-| Curve preset | `gentle` (last price 1.2× first) | `gentle`, `flat` (1.01×); start price solved for ≈ 1B tokens at graduation | SDK |
-| Curve trading fee | 1% constant | fee scheduler (linear or exponential), cliff fee ≤ 20%, no dynamic fee; DBC minimum 0.25% | `create_launch`, DBC |
-| Creator trading fee share | 30% | ≤ 30% | `create_launch` |
+| Curve preset | `flat` in the create form (last price 1.01× first) | `gentle` (1.2×), `flat`; start price solved for ≈ 1B tokens at graduation | SDK / UI |
+| Curve trading fee | 0.25% constant, partner share to the platform | fee scheduler (linear or exponential), cliff fee ≤ 20%, no dynamic fee; DBC minimum 0.25% | `create_launch`, DBC |
+| Creator trading fee share | 0% | must be 0 | `create_launch` |
 | Curve fee collection | QuoteToken | must be QuoteToken | `create_launch` |
 | Base token | SPL Token, 6 decimals, immutable metadata | SPL only, Immutable, decimals must match the config; no mint or freeze authority at registration | `create_launch`, `register_pool` |
 | Supply | Dynamic | fixed supply rejected | `create_launch` |
-| Migration target | DAMM v2, Customizable, 1% pool fee | must be DAMM v2; DBC allows 0.1–10% for Customizable | `create_launch`, DBC |
+| Migration target | DAMM v2, Customizable, 1% pool fee | must be DAMM v2, Customizable, fixed 1% fee, no dynamic or compounding fee, no min-fee first swap | `create_launch`, DBC |
 | Migrated LP fee collection | QuoteToken (DAMM v2 `OnlyB`) | must be QuoteToken | `create_launch` |
 | Migrated liquidity | 100% partner permanently locked | exactly 100% partner permanent; no liquidity vesting | `create_launch` |
 | Token allocations and vesting | none | locked vesting rejected | `create_launch` |
@@ -781,8 +814,13 @@ reads, so they are not part of the offline suite.
   - Exit fees of 0 and 500 bps, split redemptions, dust amounts, and redeeming the entire supply.
   - Out-of-shape configs, creator withholding, a grown or re-typed DBC pool after the latch, and an encumbered
     vault.
-- **SDK against chain.** The SDK presets × vault shares 30/50/70% produce exactly the config and graduation
-  amounts that DBC stores. Fifteen invalid configs fail in the SDK port and in the real DBC with the same error
+- **Fee model (launch v3).** `fee-model.test.ts`: the full v3 lifecycle with exact platform, creator and vault
+  parts on every harvest and a 1% DAMM v2 pool; the vault-share bounds; the F04/F05 config gaps rejected;
+  closed, frozen and memo-locked payees falling back to the vault; a paused SPYx; transit donations, delegates
+  and CPI Guard; `launch.creator` versus `pool.creator`; exact rounding; a version-2 launch still paying 100%
+  into the vault.
+- **SDK against chain.** The SDK presets × vault shares 30/50/60% produce exactly the config and graduation
+  amounts that DBC stores, and the preview's platform, creator and vault parts. Fifteen invalid configs fail in the SDK port and in the real DBC with the same error
   name.
 - **Properties.** Exact redeem formula, floor monotonicity, rounding direction, split bounds, and donations
   never hurting, in Rust and TypeScript.
@@ -918,7 +956,7 @@ by [the scan above](#the-problem)) we did not find the combination:**
 | StonkFun (stonkfun.xyz, $STONK, Solana, Raydium LaunchLab), Long.xyz (Robinhood Chain) | Launches paired against tokenized stocks | Pairing only. The stock sits in the pool, holders have no claim on it and there is no redemption. Checked 2026-09-17 |
 | **StockFloor** | **Raise-funded SPYx vault from day one, DBC partner migration fee → PDA vault, permissionless pro-rata redemption, 100% locked DAMM v2 LP, quote-only fees into the vault** | — |
 
-Fee-funded floors start at zero and fill with volume. Ours starts with 30–70% of the raise.
+Fee-funded floors start at zero and fill with volume. Ours starts with 30–60% of the raise.
 
 The table is a manual review; the reproducible part of the claim is the scan: of the 931 stock-quoted DBC
 configs on mainnet, 153 name an off-curve (program-controlled) `fee_claimer`, and **every one of those sets

@@ -11,6 +11,12 @@ instruction, the math, the on-chain checks, and each invariant with the tests th
   was first produced with the M1 layout at commit `3620335` and re-run on the M2 split. Every token amount is
   independent of the PDA split and of `sync_migration`. The C2 rehearsal on a live local Surfpool fork is in
   [`research/surfpool-e2e.md`](research/surfpool-e2e.md).
+- **Fee model (launch v3, branch `feat/fee-model`, 2026-09-25).** New launches are version 3: the presale fee
+  goes to the platform treasury, the graduation fee is split 5% of the raise to the platform, 5% to the creator
+  and the rest to the vault, and LP fees are split creator 50% / platform 20% / vault 30%. Version 2 launches
+  (the live mainnet demo SFDEMO) keep paying 100% of every harvest into the vault. The deployed mainnet program
+  is still the v2 binary. The fee routing is in §3.0; the decisions (D1–D13) are in
+  [`DECISIONS.md`](DECISIONS.md), "Fee model: implementation decisions".
 - **Test names.** They are taken from `tests/**/*.test.ts` and `programs/stockfloor/src/*.rs` at the time of
   writing. If they drift, `grep -rn "it(" tests/integration tests/sdk` and `cargo test -p stockfloor -- --list`
   show the current names.
@@ -56,6 +62,9 @@ flowchart TB
   subgraph TOK["Token accounts"]
     vault[("Vault<br/>ATA of vault authority for SPYx<br/>Token-2022")]
     cbase["Claimer base ATA<br/>ATA of claimer for the base mint<br/>SPL Token, always burned empty"]
+    transit["Transit (v3)<br/>ATA of claimer for SPYx<br/>always emptied by the split"]
+    cquote["Creator quote ATA (v3)<br/>ATA of launch.creator for SPYx"]
+    pquote["Platform quote ATA (v3)<br/>ATA of PLATFORM_TREASURY for SPYx"]
   end
   subgraph DBCX["Meteora DBC"]
     config["PoolConfig<br/>keypair account, one per launch"]
@@ -75,6 +84,10 @@ flowchart TB
   launch -->|vault| vault
   vauth -->|owner| vault
   claimer -->|owner| cbase
+  claimer -->|owner| transit
+  transit -->|split: platform, creator, rest| vault
+  transit --> cquote
+  transit --> pquote
   claimer -->|owner| nft
   pool --> dbcvaults
   pool -->|migration_damm_v2| dpool
@@ -91,25 +104,32 @@ flowchart TB
 | Vault authority PDA | `["vault_authority", config]` | none (never allocated) | — | Owns the vault; signs only the `redeem` payout |
 | Vault | ATA(vault authority, quote mint, quote token program) | Token-2022 | `create_launch` (`init_if_needed`, rejected if pre-created and encumbered) | Floor backing |
 | Claimer base ATA | ATA(claimer, base mint, SPL Token) | SPL Token | `init_if_needed` by `harvest_curve_fees` and `harvest_lp_fees` | Transit for base tokens; burned in the same instruction |
+| Claimer quote ATA ("transit", v3) | ATA(claimer, quote mint, quote token program) | Token-2022 | `create_launch` (`init_if_needed`, rejected if encumbered) | Receives the migration fee and LP fees of a v3 launch; the claimer pays it out to the platform, the creator and the vault in the same instruction, so it always ends at 0 |
+| Creator quote ATA (v3) | ATA(`launch.creator`, quote mint, quote token program) | Token-2022 | `create_launch` (`init_if_needed`) | Receives the creator's graduation bonus and LP share |
+| Platform quote ATA (v3) | ATA(`PLATFORM_TREASURY`, quote mint, quote token program) | Token-2022 | `create_launch` (`init_if_needed`); the SDK crank re-creates it idempotently before a v3 `harvest_curve_fees` | Receives the presale fees, the platform's graduation fee and LP share. `PLATFORM_TREASURY = 78tRFS255ADZT2oMSXi5xjHt7Y2SVDLdDEBz759eQsqJ`, a plain key (no PDA, no admin instruction); changing it needs a program upgrade |
 | DBC config | Keypair (signs `create_config` and `create_launch`) | DBC | DBC `create_config` | Curve, fees, migration parameters. No DBC instruction mutates it |
 | DBC VirtualPool | `["pool", config, max(base, quote), min(base, quote)]` under DBC | DBC | DBC `initialize_virtual_pool_with_spl_token` (base mint keypair signs) | Presale market |
 | DAMM v2 pool | `["pool", damm_config, max(mintA, mintB), min(mintA, mintB)]` under DAMM v2 | DAMM v2 | DBC `migration_damm_v2` | Post-graduation market |
 | Position and NFT account | `["position", nft_mint]`, `["position_nft_account", nft_mint]` under DAMM v2 | DAMM v2 / Token-2022 | DBC `migration_damm_v2` | Permanently locked LP; NFT account owner set to the claimer |
 
-**Canonical ATAs.** Both the vault and the claimer base ATA are canonical associated token accounts.
+**Canonical ATAs.** The vault, the claimer base ATA and the three v3 quote ATAs are canonical associated token accounts.
 Their addresses derive from the owner, the mint and the token program. A third party can pre-create them,
 but cannot substitute a different account. SPYx ATAs carry `ImmutableOwner`.
 
-### 2.3 `Launch` fields (M2)
+### 2.3 `Launch` fields (M2, v3 counters)
 
-`version: u8`, `bump: u8`, `claimer_bump: u8`, `vault_authority_bump: u8`, `exit_fee_bps: u16`,
-`migration_fee_harvested: bool`, `surplus_harvested: bool`, `migrated: bool`, `config`, `creator`,
+`version: u8` (3 for new launches; 2 for launches created before the fee model), `bump: u8`,
+`claimer_bump: u8`, `vault_authority_bump: u8`, `exit_fee_bps: u16`, `migration_fee_harvested: bool`, `surplus_harvested: bool`, `migrated: bool`, `config`, `creator`,
 `pool` (default until `register_pool`), `base_mint` (committed by `create_launch`), `quote_mint`,
 `quote_token_program`, `vault`, `created_at: i64`, and the informational saturating counters
 `total_harvested_quote`, `total_burned_base`, `total_redeemed_base`, `total_redeemed_quote`,
-`total_exit_fees` (`u64`). Then `reserved: [u8; 62]`.
+`total_exit_fees` (`u64`), and since v3 `total_platform_quote` and `total_creator_quote` (`u64`, offsets 289 and
+297). Then `reserved: [u8; 46]` (offset 305). The account size is unchanged at 343 bytes, so a v2 account decodes
+with both new counters at 0.
 
-The counters are never used for access control or math. A donation straight to the vault is not counted.
+The counters are never used for access control or math. A donation straight to the vault is not counted. Since
+v3, `total_harvested_quote` counts only quote that entered the vault (0 for v3 curve fees).
+`Launch::fee_split_enabled()` is `version >= 3` and selects the fee routing of every harvest.
 
 ### 2.4 Signer scope
 
@@ -118,10 +138,11 @@ can sign in this program.
 
 | Signer | Instruction | Signs | Into | Destinations (constrained by stockfloor) |
 |---|---|---|---|---|
-| Claimer PDA | `harvest_curve_fees` | DBC `claim_trading_fee(u64::MAX, u64::MAX)` | DBC | token B → `launch.vault`; token A → canonical claimer base ATA |
-| Claimer PDA | `harvest_migration_fee` | DBC `withdraw_migration_fee(flag = 0)` | DBC | `token_quote_account` → `launch.vault` |
+| Claimer PDA | `harvest_curve_fees` | DBC `claim_trading_fee(u64::MAX, u64::MAX)` | DBC | token B → `launch.vault` (v2) or the platform quote ATA (v3); token A → canonical claimer base ATA |
+| Claimer PDA | `harvest_migration_fee` | DBC `withdraw_migration_fee(flag = 0)` | DBC | `token_quote_account` → `launch.vault` (v2) or the transit (v3) |
 | Claimer PDA | `harvest_surplus` | DBC `partner_withdraw_surplus` | DBC | `token_quote_account` → `launch.vault` |
-| Claimer PDA | `harvest_lp_fees` | DAMM v2 `claim_position_fee` | DAMM v2 | token B → `launch.vault`; token A → canonical claimer base ATA |
+| Claimer PDA | `harvest_lp_fees` | DAMM v2 `claim_position_fee` | DAMM v2 | token B → `launch.vault` (v2) or the transit (v3); token A → canonical claimer base ATA |
+| Claimer PDA | `harvest_migration_fee`, `harvest_lp_fees` (v3) | Token-2022 `transfer_checked` | Token-2022 | From the transit only, to the platform quote ATA, the creator quote ATA and `launch.vault` (in that order); the transit ends at 0 |
 | Claimer PDA | `harvest_curve_fees`, `harvest_lp_fees`, `burn_claimer_base` | SPL `burn` | SPL Token | From its own base ATA only |
 | **Vault authority PDA** | `redeem` | Token-2022 `transfer_checked(net)` | Token-2022 | From `launch.vault` to the holder's quote account (never the vault itself) |
 | Holder | `redeem` | SPL `burn(amount)` | SPL Token | From the holder's own base account |
@@ -136,9 +157,54 @@ delegate (for SPYx, the issuer). The vault authority never
 signs those CPIs, and the vault never has a delegate (checked after every CPI). So a malicious upgrade of DBC
 or DAMM v2 cannot debit the vault inside a harvest.
 
+The claimer owns the v3 transit, so a malicious DBC or DAMM v2 upgrade could debit what is in the transit
+during the CPI — that is, fees not yet split, which it could equally withhold. It still cannot reach the vault.
+The transit is checked after every CPI (owner = claimer, no delegate, close authority, CPI Guard or required
+memo: `ClaimerQuoteAccountEncumbered`), and any balance left in it is swept to the vault by the next split.
+
 ---
 
 ## 3. Instruction flows
+
+### 3.0 Fee flows by launch version
+
+Every harvest routes by `launch.version` (`fee_split_enabled()`). `T` is the DBC `migration_quote_threshold`,
+`mf` the DBC `migration_fee_percentage`, `v = mf − 10` the vault share of the raise.
+
+| Fee | Payer and size (SDK defaults) | v3 routing | v2 routing (unchanged) |
+|---|---|---|---|
+| Presale (curve) fee | 0.25% of each curve trade (`cliffFeeNumerator` 2,500,000, the DBC minimum); DBC keeps 20%; creator trading share 0 | `harvest_curve_fees`: the partner share (0.2% of curve volume) straight to the platform quote ATA; the vault is not touched. Before or after migration, graduated or not | Partner share into the vault |
+| Graduation (partner migration fee) | DBC pays `received = T − ceil(T × (100 − mf) / 100)`, `mf ∈ [40, 70]` | `harvest_migration_fee` into the transit, then `graduation_split(T, received)`: platform `⌊T × 5%⌋`, creator `⌊T × 5%⌋`, vault the rest (≈ `v%` of T) | Whole fee into the vault |
+| Surplus | DBC `partner_withdraw_surplus` (rounding dust) | Into the vault | Into the vault |
+| Post-graduation trading | DAMM v2 pool fee 1% (pinned), DAMM keeps 20%, the LP share is quote-only | `harvest_lp_fees` into the transit, then `lp_fee_split(q)`: creator `⌊q × 50%⌋`, platform `⌊q × 20%⌋`, vault the rest (≥ 30%) | Whole LP fee into the vault |
+| Exit fee | `exit_fee_bps` of each redemption (200 in the SDK/UI, ≤ 500 on chain) | Stays in the vault | Stays in the vault |
+
+Rules shared by the v3 splits (`instructions/fee_split.rs`):
+- **Order and exactness.** The claimer pays the platform, then the creator, then the vault takes everything left
+  in the transit: its share, every rounding unit, every fallback and any balance the transit held before the
+  harvest (a donation is swept, not split). The transit must end at 0 (`TransitNotEmptied`) and the vault must
+  grow by exactly its part (`VaultBalanceMismatch`), or the instruction rolls back. `platform + creator + vault
+  == received + swept`.
+- **Payees can never block the floor.** Before paying the platform or the creator the program runs
+  `is_payable_token_account`: token-program owner, valid token account, matching mint and owner, `Initialized`
+  (not frozen), no required incoming memo, and non-confidential credits allowed (SPYx carries the
+  confidential-transfer mint extension). A share whose payee fails is paid to the vault instead
+  (`platform_fallback` / `creator_fallback` in the event). So a creator who closes, freezes or memo-locks their
+  ATA cannot stall `harvest_migration_fee` and with it `redeem`.
+- **Presale fees are the exception.** An unpayable platform ATA fails v3 `harvest_curve_fees` with
+  `PlatformQuoteAccountUnavailable`; the fees stay claimable in DBC. They never fall back to the vault, so a
+  config cannot make presale fees enter the vault (audit F08). The SDK crank re-creates the treasury ATA
+  idempotently in the same transaction.
+- **Payee identity.** The creator payee is `launch.creator` (the key that signed `create_launch`), not
+  `pool.creator`, which DBC lets differ. The platform payee is the fixed `PLATFORM_TREASURY`. Every payee and the
+  transit are address-checked against the derived ATA (`PayeeAccountMismatch`) for every launch version. The
+  treasury cannot be a launch creator: its ATA would be passed twice as a mutable account, and Anchor rejects
+  `create_launch` with `ConstraintDuplicateMutableAccount`.
+- **Events.** The existing harvest events are unchanged; their `quote_amount` is the part that entered the vault
+  (0 for v3 curve fees). Every v3 harvest also emits `FeesDistributed { launch, source (0 curve, 1 migration,
+  2 LP), received, platform_amount, creator_amount, vault_amount, platform_fallback, creator_fallback }`.
+- **Counters.** v3 harvests add to `total_platform_quote` and `total_creator_quote`; `total_harvested_quote` counts
+  the vault part only.
 
 ### 3.1 Launch creation
 
@@ -162,12 +228,18 @@ sequenceDiagram
   App->>SF: create_launch(exit_fee_bps), payer, creator and config keypair sign, base mint committed
   SF->>SF: decode PoolConfig (owner, discriminator, size) and validate the StockFloor shape
   SF->>ATA: create the vault ATA of the vault authority if missing
-  SF->>SF: vault unencumbered, init Launch, emit LaunchCreated
+  SF->>ATA: create the creator, platform treasury and claimer (transit) quote ATAs if missing, payer pays
+  SF->>SF: vault and transit unencumbered, init Launch (version 3, counters 0), emit LaunchCreated
   App->>SF: register_pool(), any signer
   SF->>SF: pool.config == config, pool.base_mint == committed mint, SPL pool type
   SF->>SF: base mint decimals match, no mint authority, no freeze authority
   SF->>SF: Launch.pool = pool, emit PoolRegistered
 ```
+
+**Why `create_launch` creates the payee ATAs.** The harvests take the creator, platform and transit accounts as
+unchecked accounts with an address check, so a harvest never pays rent and `harvest_migration_fee` needs no
+payer. With the accounts created up front, nobody can grief a harvest by leaving an ATA uncreated; a payee that
+later closes its ATA only loses its share to the vault (§3.0).
 
 **Why the config keypair signs `create_launch`.** Nothing in a DBC config identifies its creator. Without the
 signature, anyone could front-run `create_launch` for a freshly created config.
@@ -186,16 +258,22 @@ sequenceDiagram
   actor Cranker as Any key
   participant DBC as Meteora DBC
   participant SF as stockfloor
-  participant Vault as Vault (SPYx)
+  participant Platform as Platform ATA (SPYx)
   Buyer->>DBC: swap2 buy with SPYx
-  DBC->>DBC: fee = ceil(in × 1%), protocol = floor(fee × 20%), creator = floor(rest × 30%), partner = rest − creator
+  DBC->>DBC: fee = ceil(in × 0.25%), protocol = floor(fee × 20%), creator = 0, partner = rest
   Cranker->>SF: harvest_curve_fees()
-  SF->>SF: pool == launch.pool, SPYx not paused, no active hook, vault not frozen
-  SF->>DBC: claim_trading_fee, claimer PDA signs, token B = vault, token A = claimer base ATA
-  DBC->>Vault: partner_quote_fee
+  SF->>SF: pool == launch.pool, platform ATA address, SPYx not paused, no active hook
+  SF->>SF: v3: platform ATA payable, else PlatformQuoteAccountUnavailable
+  SF->>DBC: claim_trading_fee, claimer PDA signs, token B = platform ATA, token A = claimer base ATA
+  DBC->>Platform: partner_quote_fee
   SF->>SF: burn the claimer base ATA balance (0 with quote collect mode)
-  SF->>SF: reload vault, fail if it decreased or is encumbered, emit CurveFeesHarvested
+  SF->>SF: total_platform_quote += received, emit CurveFeesHarvested (quote_amount 0) and FeesDistributed
 ```
+
+The diagram shows v3 (participant `Platform` is the platform treasury's quote ATA). A v3 curve harvest does not
+read or write the vault, so it runs even while the vault is frozen. A v2 launch keeps the old path: it checks
+the vault is not frozen, passes the vault as token B and reloads it afterwards, failing if it decreased
+(`VaultDecreased`) or came back encumbered (`VaultEncumbered`).
 
 `harvest_curve_fees` can run at any time. The completing buy accrues partner fees after earlier claims, so the
 crank calls it again after completion.
@@ -214,19 +292,25 @@ sequenceDiagram
   DBC->>DBC: quote_reserve ≥ threshold, migration_progress = LockedVesting, unfilled input stays with the buyer
   Cranker->>SF: harvest_curve_fees(), for the fee of the completing buy
   Cranker->>SF: harvest_migration_fee()
-  SF->>SF: flag not set, curve complete (decoded), SPYx and vault checks
-  SF->>DBC: withdraw_migration_fee(flag 0), claimer PDA signs, destination = vault
-  DBC->>Vault: T − ceil(T × (100 − pct) / 100)
-  SF->>SF: set migration_fee_harvested, latch migrated if DBC is migrated, vault checks
+  SF->>SF: flag not set, curve complete (decoded), SPYx and vault checks, payee addresses
+  SF->>DBC: withdraw_migration_fee(flag 0), claimer PDA signs, destination = transit
+  DBC->>SF: received = T − ceil(T × (100 − mf) / 100) into the transit
+  SF->>SF: transit unencumbered, graduation_split(T, received)
+  SF->>Vault: claimer pays platform ⌊T/20⌋, creator ⌊T/20⌋ (or the vault on fallback), vault the rest
+  SF->>SF: transit = 0, vault grew by its part, set migration_fee_harvested, latch migrated if DBC is migrated
   Cranker->>SF: harvest_surplus(), once, rounding dust in DBC 0.2.1
   Cranker->>DBC: migration_damm_v2, permissionless
-  DBC->>DAMM: pool with ceil(T × (100 − pct) / 100) minus 0.2% SPYx and the migration base amount
+  DBC->>DAMM: pool with ceil(T × (100 − mf) / 100) minus 0.2% SPYx and the migration base amount
   DBC->>DBC: burn unsold base, is_migrated = 1, migration_progress = CreatedPool
   Note over DAMM: one position, permanent_locked_liquidity = pool liquidity, NFT account owner = claimer PDA
   Cranker->>SF: sync_migration()
   SF->>SF: decode VirtualPool once, require migrated, Launch.migrated = true, emit MigrationLatched
   Note over SF: redeem opens once DBC is migrated AND migration_fee_harvested
 ```
+
+The diagram shows v3. A v2 launch passes the vault as the DBC destination and keeps the whole fee there.
+The migrated DAMM v2 pool of a v3 launch has a fixed 1% fee with no dynamic fee, because `create_launch` pins
+every DBC field it is built from (§4.1).
 
 `harvest_migration_fee` needs only a complete curve, not a finished migration. DBC allows the withdrawal
 before migration. That is why `redeem` checks both conditions. It is also why `sync_migration` exists: the
@@ -245,14 +329,20 @@ sequenceDiagram
   participant DAMM as DAMM v2
   participant SF as stockfloor
   participant Vault as Vault (SPYx)
-  Trader->>DAMM: swap, 1% pool fee, LP share 80%, fees collected in SPYx only
+  Trader->>DAMM: swap, 1% pool fee (pinned), LP share 80%, fees collected in SPYx only
   Cranker->>SF: harvest_lp_fees()
   SF->>SF: DAMM pool decoded, token A = launch.base_mint, token B = launch.quote_mint
   SF->>SF: position decoded, position.pool == pool, NFT account mint == position.nft_mint, owner == claimer, amount == 1
-  SF->>DAMM: claim_position_fee, claimer PDA signs, token B = vault, token A = claimer base ATA
-  DAMM->>Vault: pending SPYx fees of the position
-  SF->>SF: burn base (0 with OnlyB), reload vault, fail if decreased or encumbered, emit LpFeesHarvested
+  SF->>DAMM: claim_position_fee, claimer PDA signs, token B = transit, token A = claimer base ATA
+  DAMM->>SF: q = pending SPYx fees of the position, into the transit
+  SF->>SF: transit unencumbered, lp_fee_split(q)
+  SF->>Vault: claimer pays creator ⌊q/2⌋, platform ⌊q/5⌋ (or the vault on fallback), vault the rest
+  SF->>SF: burn base (0 with OnlyB), transit = 0, vault grew by its part, emit LpFeesHarvested and FeesDistributed
 ```
+
+The diagram shows v3 (payment order platform, creator, vault; the vault's part is at least 30% and takes every
+rounding unit). A v2 launch passes the vault as token B, keeps the whole fee there and reloads the vault
+afterwards, failing if it decreased or came back encumbered.
 
 Any position whose NFT the claimer holds, on a DAMM v2 pool with mints (base, SPYx), qualifies. That covers
 the migrated position or a position someone donates. DBC does not store the DAMM v2 pool address, so the
@@ -322,7 +412,8 @@ Operational notes:
   stockfloor from yet another program is close to the limit.
 
 **Compute units** measured on the fork by `compute-budget.test.ts` (M2 program, six runs with random keys;
-`sync_migration` one run after the review fix). The test sends each transaction at (measured − 1) and at the
+`sync_migration` one run after the review fix; the rows marked v3 re-measured on the fee-model binary on
+2026-09-25, maximum of six runs). The SDK `CU_LIMITS` equal these limits (a unit test keeps them in sync). The test sends each transaction at (measured − 1) and at the
 limit, so the limits are enforced, not just recorded. A Surfpool surfnet with the mainnet token programs
 reports the same units ([`research/surfpool.md`](research/surfpool.md)).
 
@@ -330,17 +421,17 @@ reports the same units ([`research/surfpool.md`](research/surfpool.md)).
 |---|---|---|
 | DBC `create_config` (SPYx + badge) | 31,482 | 50,000 |
 | DBC `initialize_virtual_pool_with_spl_token` | 111,229–117,238 | 150,000 |
-| `create_launch` | 46,276–71,776 | 120,000 |
+| `create_launch` (v3, also creates up to three quote ATAs) | ≤ 163,053 | 200,000 |
 | `register_pool` | 7,282 | 20,000 |
 | DBC `swap2` curve buy / sell / PartialFill completion | 33,626–38,317 | 60,000 |
-| `harvest_curve_fees` (creates the claimer base ATA) | 68,203–72,703 | 100,000 |
-| `harvest_curve_fees` | 51,107–52,607 | 80,000 |
+| `harvest_curve_fees` (v3, creates the claimer base ATA) | ≤ 91,276 | 120,000 |
+| `harvest_curve_fees` (v3) | ≤ 59,180 | 85,000 |
 | DBC `migration_damm_v2` | 151,921–160,921 | 200,000 |
 | `sync_migration` | 5,684 | 20,000 |
-| `harvest_migration_fee` / `harvest_surplus` | 37,384 / 37,390 | 60,000 |
+| `harvest_migration_fee` (v3 split) / `harvest_surplus` | ≤ 69,817 / 37,390 | 100,000 / 60,000 |
 | `burn_claimer_base` (empty / after a transfer) | 11,791–15,233 | 40,000 / 45,000 |
 | DAMM v2 `swap2` | 17,796–18,364 | 40,000 |
-| `harvest_lp_fees` | 53,356–54,856 | 100,000 |
+| `harvest_lp_fees` (v3 split) | ≤ 90,551 | 120,000 |
 | `floor` (view) | 5,385 | 15,000 |
 | `redeem` | 25,977–25,978 | 40,000 |
 
@@ -360,8 +451,8 @@ The config is decoded only if all of these hold: owner = DBC, the `PoolConfig` d
 | `fee_claimer == claimer PDA` | `FeeClaimerMismatch` |
 | `leftover_receiver == claimer PDA` | `LeftoverReceiverMismatch` |
 | `creator_migration_fee_percentage == 0` | `CreatorMigrationFeeNotZero` |
-| `migration_fee_percentage ∈ [30, 99]` | `MigrationFeePercentageOutOfRange` |
-| partner migration fee `T − ceil(T × (100 − pct) / 100) > 0` (DBC allows any `T > 0`, and its rounding pays the partner nothing for a dust threshold) | `MigrationQuoteThresholdTooSmall` |
+| `migration_fee_percentage ∈ [40, 70]` (vault share 30–60%, pool 60–30%) | `MigrationFeePercentageOutOfRange` |
+| the vault's part at graduation `graduation_split(T, T − ceil(T × (100 − mf) / 100)).vault > 0` (DBC allows any `T > 0`, and its rounding pays the partner nothing for a dust threshold; for `T < 20` both 5% cuts are 0) | `MigrationQuoteThresholdTooSmall` |
 | partner permanent-locked liquidity = 100, partner unlocked = creator permanent = creator unlocked = 0 | `LiquidityNotFullyPartnerLocked` |
 | no partner or creator liquidity vesting | `LiquidityVestingNotAllowed` |
 | no locked vesting (amount per period, cliff unlock, number of periods all 0) | `LockedVestingNotAllowed` |
@@ -369,14 +460,26 @@ The config is decoded only if all of these hold: owner = DBC, the `PoolConfig` d
 | `migration_option == DammV2` | `MigrationOptionNotDammV2` |
 | `token_type == SplToken` | `BaseTokenTypeNotSplToken` |
 | `fixed_token_supply_flag == 0` | `FixedTokenSupplyNotAllowed` |
-| `creator_trading_fee_percentage ≤ 30` | `CreatorTradingFeeTooHigh` |
+| `creator_trading_fee_percentage == 0` (the whole partner share of curve fees goes to the platform) | `CreatorTradingFeeTooHigh` |
 | base fee mode is a fee scheduler (linear or exponential) and `cliff_fee_numerator ≤ 200,000,000` (20%) | `CurveFeeTooHigh` |
 | dynamic fee not initialized | `DynamicFeeNotAllowed` |
 | `migrated_collect_fee_mode == QuoteToken` | `MigratedCollectFeeModeNotQuote` |
+| `migration_fee_option == 6` (Customizable; the fixed tiers 0–5 inherit a static Meteora DAMM v2 config whose dynamic fee we cannot check), `migrated_pool_fee_bps == 100`, `migrated_pool_base_fee_mode == 0` (fixed fee), `migrated_compounding_fee_bps == 0`, `migrated_pool_base_fee_bytes == [0; 16]` | `MigratedPoolFeeInvalid` |
+| `migrated_dynamic_fee == 0` | `MigratedDynamicFeeNotAllowed` |
+| `enable_first_swap_with_min_fee == 0` (it would let the pool creator's first swap bypass an anti-snipe schedule) | `FirstSwapWithMinFeeNotAllowed` |
 | `token_update_authority == Immutable` | `TokenUpdateAuthorityNotImmutable` |
 | `pool_creation_fee == 0` | `PoolCreationFeeNotZero` |
 | committed base mint is not the default pubkey or the quote mint | `InvalidBaseMint` |
 | a pre-existing vault ATA has no delegate, close authority, CPI Guard or required memos | `VaultEncumbered` |
+| `platform_treasury == PLATFORM_TREASURY` | `PayeeAccountMismatch` |
+| creator, platform and transit quote ATAs are the canonical ATAs (created if missing) | Anchor ATA constraints |
+| the transit (a pre-existing claimer quote ATA) is owned by the claimer, with no delegate, close authority, CPI Guard or required memos | `ClaimerQuoteAccountEncumbered` |
+
+The last three rows and the migrated-pool rows are new in launch v3 (audit F04/F05/F08 closed on this branch).
+The error codes were appended after `MigrationQuoteThresholdTooSmall`, so no existing code was renumbered; only
+the messages of `MigrationFeePercentageOutOfRange`, `CreatorTradingFeeTooHigh` and
+`MigrationQuoteThresholdTooSmall` changed. The smallest accepted threshold per `mf` is tabulated by
+`external::tests::vault_dust_table`.
 
 The quote allowlist is intentionally UI-level, and so is the minimum raise in fiat terms ($1 in the SDK):
 both need a list or a price oracle that the program does not have. The on-chain threshold check is therefore
@@ -403,10 +506,15 @@ itself enforces the token badge, the fee minimum (0.25%), the curve shape and th
 |---|---|---|
 | SPYx mint not paused (Token-2022 Pausable) | every harvest that moves quote, `redeem` | `QuoteMintPaused` |
 | Transfer hook program id is null | same | `QuoteMintTransferHookUnsupported` |
-| Vault not frozen | same | `VaultFrozen` |
+| Vault not frozen | same, except v3 `harvest_curve_fees`, which does not touch the vault | `VaultFrozen` |
 | After the CPI: vault balance did not decrease | harvests | `VaultDecreased` |
 | After the CPI: vault owner = vault authority, no delegate, no close authority, no CPI Guard, no required memos | harvests, `create_launch` | `VaultEncumbered` |
 | Malformed Token-2022 mint or account data | helpers | `InvalidQuoteMintData`, `InvalidTokenAccountData` |
+| Transit, platform and creator accounts are the derived ATAs | `harvest_curve_fees` (platform), `harvest_migration_fee`, `harvest_lp_fees`; every launch version | `PayeeAccountMismatch` |
+| After the CPI into the transit: owner = claimer, no delegate, close authority, CPI Guard or required memo | v3 split harvests | `ClaimerQuoteAccountEncumbered` |
+| Platform ATA can receive (`is_payable_token_account`) | v3 `harvest_curve_fees` | `PlatformQuoteAccountUnavailable` |
+| Platform / creator ATA can receive, else its share goes to the vault | v3 split harvests | — (fallback, reported in `FeesDistributed`) |
+| After the split: transit = 0, vault grew by exactly its part | v3 split harvests | `TransitNotEmptied`, `VaultBalanceMismatch` |
 
 ### 4.3a `sync_migration`
 
@@ -450,23 +558,59 @@ runtime the program checks the cross product `V_after · S_before ≥ V_before �
   - in total, `T ≤ floor(V·A/S)`;
   - in total, `T ≤ V·(1 − ((S − A)/S)^(1 − f))`, via Bernoulli's inequality.
 
-**Floor at graduation.**
+**Fee splits (launch v3).** All in u64 with checked u128 intermediates; `bps_floor(x, b) = ⌊x·b / 10,000⌋`.
+
+```
+graduation_split(T, received):             T = migration_quote_threshold, received = partner migration fee
+  platform = min(⌊T × 500 / 10,000⌋, received)
+  creator  = min(⌊T × 500 / 10,000⌋, received − platform)
+  vault    = received − platform − creator
+
+lp_fee_split(q):
+  creator  = ⌊q × 5,000 / 10,000⌋
+  platform = ⌊q × 2,000 / 10,000⌋
+  vault    = q − creator − platform          ≥ ⌊3q / 10⌋, takes every rounding unit
+```
+
+The cuts are fixed shares of the raise, not of the fee. Because `mf ≥ 40`, `received ≥ 0.4·T − 1 ≥ 0.1·T` for
+`T ≥ 4`, so the `min` never binds on an accepted config; below `T = 20` both cuts are 0. The parts always sum to
+`received` (`math::tests::prop_graduation_split`, `prop_lp_fee_split`); the SDK's `graduationSplit` and
+`lpFeeSplit` use the same vectors.
+
+**Floor at graduation (launch v3).**
 - The curve is a single constant-liquidity segment from price `p₀` to `p₁ = r·p₀`. Buying it out costs
   `T = L(√p₁ − √p₀)` quote and yields `L(1/√p₀ − 1/√p₁) = T/√(p₀p₁) = T·√r/p₁` base.
-- DAMM v2 opens at `p₁` with `(1 − f)·T` quote and `(1 − f)·T/p₁` base.
-- The vault holds `f·T`.
+- DBC keeps the migration fee `m·T` (`m = mf / 100`) and migrates the rest: DAMM v2 opens at `p₁` with
+  `(1 − m)·T` quote and `(1 − m)·T/p₁` base.
+- Of the migration fee, 5% of T goes to the platform and 5% of T to the creator, so the vault holds
+  `v·T` with `v = m − 0.10`. The pool share is `1 − m = 0.90 − v`.
 
 Hence
 
 ```
-floor / p₁ = f·T / (T·√r/p₁ + (1 − f)·T/p₁) / p₁ = f / (√r + 1 − f)
+floor / p₁ = v·T / (T·√r/p₁ + (1 − m)·T/p₁) / p₁ = v / (√r + 1 − m),   m = v + 0.10
+floor per $100 at listing = 100 × v / (√r + 1 − m) × (1 − exit fee)
 ```
 
-This ignores the 0.2% protocol migration fee, trading fees and rounding. `gentle` (r = 1.2) at f = 0.5 gives
-0.313, so a buyer at the opening price has a maximum loss of about 68.7%. The SDK test `max loss at graduation
-follows f / (sqrt(r) + 1 - f)` asserts this to 5 decimals against `previewLaunch`. On the real programs,
-`sdk-presets-fork.test.ts` shows the vault equals the preview exactly and the supply is at most 1,000 raw
-below it.
+For v2 launches the vault holds the whole fee, `v = m`, which gives the earlier `f / (√r + 1 − f)`.
+
+This ignores the 0.2% protocol migration fee, trading fees and rounding. At the default vault share 50%
+(`mf` 60, pool 40%):
+
+| Preset | floor / p₁ | Max loss at the open | Floor per $100 at listing (2% exit fee) |
+|---|---:|---:|---:|
+| `flat` (r = 1.01), the default | 0.356 | 64.4% | $34.88 |
+| `gentle` (r = 1.2) | 0.334 | 66.6% | $32.77 |
+
+At the bounds, flat 30/60 gives $18.32 and flat 60/30 gives $45.06 per $100. The SDK tests `max loss at
+graduation follows v / (sqrt(r) + 1 - m), m = v + 10% (pool = 1 - m)` and `floor per $100 at listing matches the
+founder table (flat 50/40 $34.88, gentle 50/40 $32.77)` assert this against `previewLaunch`. On the real
+programs, `sdk-presets-fork.test.ts` shows the vault equals the preview's `vaultAtGraduation` exactly (the
+platform and creator parts too) and the supply is at most 1,000 raw below the preview.
+
+**Price sensitivity.** A buy of `X` quote into the full-range DAMM v2 pool holding `Q = (1 − m)·T` quote moves
+the price by `(1 + X/Q)² − 1` (pool fee ignored; SDK `priceImpactPct`). The create preview shows it for a $1,000
+buy: about +56% at the $10,000 default threshold and pool 40%.
 
 **Start price.** The SDK solves the start price so that the supply at graduation is about 1,000,000,000 base
 tokens (6 decimals). The curve liquidity is `ceil((T << 128) / (√p₁ − √p₀))` in Q64 sqrt-price units. The
@@ -484,23 +628,27 @@ Test file abbreviations:
 - `presets` = `tests/integration/sdk-presets-fork.test.ts`
 - `ie` = `tests/integration/instruction-errors.test.ts`, `va` = `tests/integration/vault-authority.test.ts`
 - `latch` = `tests/sdk/migration-latch.test.ts`, `lookup` = `tests/sdk/launch-lookup.test.ts`, `lp` = `tests/integration/lp-positions.test.ts`
+- `fee` = `tests/integration/fee-model.test.ts` (launch v3 fee model), `races` = `tests/sdk/crank-races.test.ts`, `flow` = `tests/sdk/product-flow.test.ts`
+- `sdk-crank` = `packages/sdk/test/crank-plan.test.ts`
 - `spike-life`, `spike-edge` = `tests/spike/lifecycle.test.ts`, `tests/spike/edge-cases.test.ts`
 - `sdk-math` = `packages/sdk/test/math.test.ts`, `sdk-presets` = `packages/sdk/test/presets.test.ts`
 - Rust tests are `module::tests::name` in `programs/stockfloor/src/`.
 
 `FloorTracker` (`tests/src/floor-invariants.ts`) runs its checks around every step of the lifecycle: 26
-tracked states in the C1 run.
+tracked states in the C1 run. Since the fee model it also tracks the platform, creator and transit balances:
+the transit must be 0 after every step, and on each harvest step the vault, platform and creator must move by
+exactly the declared parts.
 
 | # | Invariant | Enforcement | Proving tests |
 |---|---|---|---|
-| 1 | Quote leaves the vault only through `redeem`, and exactly the net amount | No other program-signed vault transfer; `VaultDecreased` after harvest CPIs; `VaultBalanceMismatch` in redeem | `life` › "12. floor invariants held after every step; Launch counters reconcile with the vault" (FloorTracker check 2); `adv` › FloorTracker self-check › "rejects quote leaving the vault outside redeem", "rejects a redeem whose vault outflow differs from the declared net, and a redeem declared as no-outflow" |
+| 1 | Quote leaves the vault only through `redeem`, and exactly the net amount | No other program-signed vault transfer (the v3 split pays from the transit, never from the vault); `VaultDecreased` after v2 harvest CPIs, exact vault delta after v3 splits; `VaultBalanceMismatch` in redeem | `fee` › every test (FloorTracker around each step); `life` › "12. floor invariants held after every step; Launch counters reconcile with the vault" (FloorTracker check 2); `adv` › FloorTracker self-check › "rejects quote leaving the vault outside redeem", "rejects a redeem whose vault outflow differs from the declared net, and a redeem declared as no-outflow" |
 | 2 | The floor `V/S` never decreases, and strictly rises on a redeem with a fee | Math; runtime `FloorDecreased` | `math::tests::prop_floor_monotonic`, `math::tests::donation_only_raises_floor`; `sdk-math` › "property: the floor never decreases after a redemption, and rises when a fee is charged", "property: over random sequences the floor is monotone and redeemers never get more than their starting pro-rata share"; `life` › "11. several holders redeem; each payout, fee and burn is exact and the floor rises"; `adv` › "rejects a floor decrease, a supply that does not reconcile, and base left at the Authority" |
 | 3 | Rounding never favours the redeemer | `gross` floors, `fee` ceils | `math::tests::gross_rounds_down`, `fee_rounds_up`, `fee_ceil_table`, `prop_formula_exact`, `prop_net_bounded_by_rational_pro_rata`, `overflow_safety_at_u64_max`; `sdk-math` › "property: rounding is exactly floor for gross and ceil for fee" |
 | 4 | Splitting: at 0 fee no split beats one redemption; with a fee every split stays within the fee-free share and the continuous limit | Math | `math::tests::many_tiny_redemptions_zero_fee_never_beat_one_large`, `prop_split_never_beats_single_without_fee`, `prop_split_never_beats_single_without_fee_small`, `many_tiny_redemptions_with_fee_bounded_by_continuous_limit`, `prop_split_with_fee_bounded`; `sdk-math` › "property: with a zero exit fee, many tiny redemptions never extract more than one large one", "documents that with an exit fee, splitting can return more than one large redemption (fee rebate), yet stays below the fee-less share"; `adv` › "exit fee 0: net = gross = floor(V*a/S); a redemption split into 10 parts never pays more than one redemption of the total" |
 | 5 | A redemption never burns tokens for nothing | `NothingToRedeem` when `net == 0` | `math::tests::zero_net_is_rejected`, `full_fee_bps_is_valid_but_pays_nothing`; `life` › 11 (1-raw redemption rejected) |
 | 6 | Redemption opens only after DBC migration **and** the migration fee harvest | `MigrationNotComplete`, `MigrationFeeNotHarvested` | `life` › "5a. adversarial: harvest_curve_fees for the rogue pool or into a non-vault account fails; redeem and harvest_migration_fee before completion fail", "6. a PartialFill buy completes the curve at the migration price; surplus = quote_reserve - threshold", "8a. adversarial: redeem after migration but before harvest_migration_fee is rejected"; `adv` › "fee harvested after completion but before migration: redeem stays closed until migration completes" |
 | 7 | `redeem` accepts only the launch's base mint and pays only from the launch's vault | `address =` constraints on the pool, base mint, vault and quote mint; launch PDA seeds | `adv` › "rogue pool fees, migration fee, surplus, leftover and LP position are unreachable; its tokens cannot redeem" |
-| 8 | Harvests pay only into the launch's vault, whoever signs | Pinned vault, canonical claimer ATA, PDA seeds, constant CPI program ids | `adv` › "harvest_curve_fees: substituted vault, base account, pool, config, launch or claimer are rejected", "harvest_migration_fee and harvest_surplus: substituted vault, pool, launch or claimer are rejected", "burn_claimer_base and harvest_lp_fees: substituted accounts and foreign positions are rejected", "direct DBC / DAMM v2 claims signed by the attacker fail: only the claimer PDA can claim", "cranking honestly, the attacker pays only SOL; every harvest pays exact amounts into the vault"; `spike-life` › "rejects a random signer claiming the partner trading fee directly from DBC", "rejects a random signer calling DBC withdraw_migration_fee(flag=0) directly" |
+| 8 | Harvests pay only to the launch's vault, the fixed platform treasury ATA and `launch.creator`'s ATA, whoever signs | Pinned vault, canonical claimer ATAs, payee ATAs derived and address-checked (`PayeeAccountMismatch`), PDA seeds, constant CPI program ids | `adv` › "harvest_migration_fee and harvest_lp_fees: substituted transit, creator or platform accounts are rejected"; `fee` › "a pool created by another wallet: the bonus and LP share reach launch.creator; the pool creator's ATA is rejected"; `adv` › "harvest_curve_fees: substituted vault, base account, pool, config, launch or claimer are rejected", "harvest_migration_fee and harvest_surplus: substituted vault, pool, launch or claimer are rejected", "burn_claimer_base and harvest_lp_fees: substituted accounts and foreign positions are rejected", "direct DBC / DAMM v2 claims signed by the attacker fail: only the claimer PDA can claim", "cranking honestly, the attacker pays only SOL; every harvest pays exact amounts into the vault"; `spike-life` › "rejects a random signer claiming the partner trading fee directly from DBC", "rejects a random signer calling DBC withdraw_migration_fee(flag=0) directly" |
 | 9 | The claimer never owns or controls the vault; the vault is the vault authority's SPYx ATA with no delegate or close authority | Vault derivation; `VaultEncumbered` in `create_launch` and after harvest CPIs | `adv` › FloorTracker self-check › "rejects a vault owned by the claimer, a vault with a delegate and a vault with a close authority"; `reg` › "delegate, close authority or a foreign owner on the vault: every harvest fails atomically; redeem still works"; `ie` › "swapped or foreign PDAs, a vault at the claimer's ATA, …" (a pre-created vault with a delegate or close authority fails with `VaultEncumbered`); `va` › "a transaction carrying the claimer's signature cannot transfer, burn, approve, set a close authority on, re-own or close the vault", "an empty vault (fresh launch, before any harvest) cannot be closed with the claimer's signature; …"; `token_utils::tests::clean_vault_passes`, `encumbered_vault_is_rejected` |
 | 10 | The vault's quote mint is the config's quote mint | `create_launch` `QuoteMintMismatch`; vault is the ATA for that mint | `external::tests::every_config_check_has_its_error`; `life` › "3a. create_launch validates the config, commits the base mint and creates the Launch registry and the empty floor vault" |
 | 11 | Base tokens the program holds are burned in the same instruction; `mint.supply` equals the sum of all base accounts | `burn_all_signed` in every base-receiving instruction; `burn_claimer_base` | `life` › 12 (FloorTracker checks 3 and 4), "7. permissionless migration to DAMM v2 burns the unsold base; the claimer PDA owns the permanently locked position", "8f. burn_claimer_base: nothing to burn (DBC leftover never applies to dynamic supply), then burns a base donation to the claimer exactly"; `adv` › "rejects a floor decrease, a supply that does not reconcile, and base left at the Authority" |
@@ -508,19 +656,26 @@ tracked states in the C1 run.
 | 13 | The floor uses no price oracle; market trades cannot change it | Only `vault.amount` and `mint.supply` are read | `life` › "9. several wallets trade on the migrated DAMM v2 pool (quote-only fees)" (FloorTracker no-outflow step, vault unchanged by trading) |
 | 14 | A paused SPYx, a frozen vault or an active transfer hook fail cleanly, with no state change | Pre-checks; atomic transactions | `adv` › "each harvest and redeem fails with a clear error and no state change, works after restore; a multiplier change leaves raw math exact"; `token_utils::tests::paused_mint_is_rejected`, `active_transfer_hook_is_rejected_null_hook_passes`; `spike-edge` › "paused SPYx: curve trades and the PDA harvest fail atomically; after unpause the harvest succeeds" |
 | 15 | A ScaledUiAmount multiplier change never changes raw math | Raw units only | `adv` › the issuer-controls test above (multiplier set to 1.5, then 0.8); `spike-edge` › "ScaledUiAmount multiplier change mid-lifecycle leaves raw amounts unchanged" |
-| 16 | The migration fee (and surplus) is harvested once, for exactly the DBC formula amount | Program flags plus DBC status bits | `life` › "8b. harvest_migration_fee moves exactly the partner migration fee into the vault", "8c. adversarial: harvest_migration_fee twice is rejected and leaves the vault unchanged", "8e. harvest_surplus moves exactly 80% x (100 - 30)% of the surplus (DBC formula) and only once"; `adv` › "pays exactly floor(floor(surplus * 80%) * (100 - 30)%) of DBC's surplus into the vault" |
-| 17 | Curve and LP fee harvests move exactly the partner / position amounts | DBC and DAMM v2 state | `life` › "5b. harvest_curve_fees by a random key moves exactly the partner share into the vault", "8d. harvest_curve_fees again collects exactly the completing buy's partner fee", "10. harvest_lp_fees moves exactly the position's pending quote fee into the vault; base side is zero" |
-| 18 | Only StockFloor-shaped DBC configs become launches | `validate_launch_config` | `reg` › "the real DBC accepts each out-of-shape config; create_launch rejects it and creates nothing", "a fixed-supply config really leaves DBC leftover base in the supply after migration (why it is rejected)", "the brief's anti-snipe schedule (exponential 20% -> ~1%, creator share 30%) is accepted at the bound", "the committed base mint must be a real candidate: default pubkey or the quote mint are rejected"; `external::tests::valid_config_passes`, `every_config_check_has_its_error` |
+| 16 | The migration fee (and surplus) is harvested once, for exactly the DBC formula amount, and split exactly | Program flags plus DBC status bits; `graduation_split` | `life` › "8b. harvest_migration_fee splits the partner migration fee: 5% of T to the platform, 5% of T to the creator, the rest into the vault", "8c. adversarial: harvest_migration_fee twice is rejected and leaves the vault unchanged", "8e. harvest_surplus moves exactly 80% x (100 - 0)% of the surplus (DBC formula) into the vault, and only once"; `adv` › "pays exactly floor(floor(surplus * 80%) * (100 - 0)%) of DBC's surplus into the vault (no creator trading share)" |
+| 17 | Curve and LP fee harvests move exactly the partner / position amounts, to the right payees | DBC and DAMM v2 state | `life` › "5b. harvest_curve_fees by a random key moves exactly the partner share to the platform treasury; the vault does not move", "8d. harvest_curve_fees again collects exactly the completing buy's partner fee", "10. harvest_lp_fees moves exactly the position's pending quote fee into the vault; base side is zero" (v3: split 50/20/30); `adv` › "cranking honestly, the attacker pays only SOL; every harvest pays exact amounts to the vault, the platform and the creator"; `flow` › "runCrank harvests exactly the partner curve fees into the platform treasury; the vault is not touched" |
+| 18 | Only StockFloor-shaped DBC configs become launches (v3: `mf` 40–70, creator trading 0, migrated pool fixed at 1% with no dynamic fee, no min-fee first swap) | `validate_launch_config` | `fee` › "vault shares 30% and 60% (migration fee 40% and 70%) are accepted; 39% and 71% are accepted by DBC and rejected by create_launch", "the real DBC accepts each config; create_launch rejects it with the named error and creates nothing" (audit F04/F05 regression); `reg` › "the real DBC accepts each out-of-shape config; create_launch rejects it and creates nothing", "a fixed-supply config really leaves DBC leftover base in the supply after migration (why it is rejected)", "the brief's anti-snipe schedule (exponential 20% -> ~1%, creator share 30%) is accepted at the bound", "the committed base mint must be a real candidate: default pubkey or the quote mint are rejected"; `external::tests::valid_config_passes`, `every_config_check_has_its_error` |
 | 19 | No rogue pool can be registered, and the creator cannot withhold registration | Committed base mint; permissionless `register_pool` | `life` › "3b. adversarial: a second pool on the same config can never be registered, whoever sends register_pool", "3c. register_pool by a random key (permissionless) records the canonical pool; floor invariants tracking starts"; `reg` › "the creator never registers; a random wallet registers, harvests the migration fee and holders redeem", "a creator who creates the committed pool under another creator key still cannot block registration", "create_launch can commit the base mint before the pool exists; registration works once DBC creates it" |
 | 20 | A second pool on the same config never feeds or drains the vault | Every instruction pins `launch.pool` and the base mint | `adv` › "rogue pool fees, migration fee, surplus, leftover and LP position are unreachable; its tokens cannot redeem"; `spike-edge` › "anyone can create a second pool on the same DBC config (fee claimer PDA is shared)" |
 | 21 | Once migration is latched, `redeem` does not depend on DBC state, and the crank latches it right after the migration | `Launch.migrated`; `sync_migration` | `reg` › "after harvest_migration_fee latches Launch.migrated, a grown or re-typed DBC VirtualPool cannot lock redemptions", "without the latch (fee harvested before migration) the first redeem decodes DBC, then latches"; `latch` › "runCrank latches the migration with sync_migration; a re-typed DBC pool afterwards cannot block redeem", "control, pre-fix crank order without sync_migration: …", "sync_migration rejects an unregistered pool, a launch that has not migrated and a substituted pool; nothing changes" |
 | 22 | External accounts are decoded safely | Owner, discriminator and minimum length checks; offsets cross-checked | `external::tests::decoders_check_owner_discriminator_and_size`, `dbc_layout_matches_idl`, `damm_layout_matches_idl`, `dbc_offsets_match_vendored_layout`, `generated_sizes_match_vendored_sources`, `migration_and_curve_predicates`; `constants::tests::external_pdas_are_correct`, `external_ids_match_declared_programs` |
 | 23 | Edge redemptions: entire supply, maximum exit fee | Math and runtime checks | `adv` › "redeeming the entire supply (cheatcode: one holder owns all base) pays vault minus fee and leaves only the fee", "exit fee 500 bps (the cap): fee = ceil(gross * 5%) stays in the vault"; `math::tests::redeeming_entire_supply` |
 | 24 | A PDA works as DBC partner `fee_claimer` and DAMM v2 NFT owner with a badged Token-2022 quote | `invoke_signed` | `spike-life` › "claims the partner trading fee via spike CPI (PDA signer) into the PDA SPYx ATA", "withdraws the partner migration fee via spike CPI into the PDA SPYx ATA (exact amount)", "withdraws the partner surplus via spike CPI (80% x (100 - 30)% of surplus; rounding-only here)", "stretch: claims DAMM v2 LP fees for the PDA-owned position via spike CPI" |
-| 25 | The SDK config equals what DBC stores, and the vault equals the preview | SDK port of DBC math | `presets` › "${preset} / ${share}%: DBC stores what the SDK port predicts; the vault gets the preview amount at graduation" (parametrized over gentle and flat × 30, 50 and 70%), "each mutated SDK config fails in the port and on-chain with the same PoolError name"; `sdk-presets` › "max loss at graduation follows f / (sqrt(r) + 1 - f)" |
+| 25 | The SDK config equals what DBC stores, and the vault equals the preview | SDK port of DBC math | `presets` › "${preset} / ${share}%: DBC stores what the SDK port predicts; the vault gets the preview amount at graduation" (parametrized over gentle and flat × 30, 50 and 60%; the vault, platform and creator parts equal the preview), "each mutated SDK config fails in the port and on-chain with the same PoolError name"; `sdk-presets` › "max loss at graduation follows v / (sqrt(r) + 1 - m), m = v + 10% (pool = 1 - m)", "floor per $100 at listing matches the founder table (flat 50/40 $34.88, gentle 50/40 $32.77)" |
 | 26 | The floor view is consistent | `floor_q64 = (V << 64) / S` | `reg` › "floor_q64 = (vault << 64) / supply, 0 before registration and with an empty vault"; `math::tests::prop_floor_q64_consistent` |
 | 27 | (Client) A base mint resolves to the launch that owns its DBC pool, whatever else commits the mint | SDK `resolveLaunchByBaseMint` (a pool-less duplicate `Launch` is possible on-chain, see program-design §4.2) | `lookup` › "a fake pool-less Launch for a live launch's mint never wins, in either RPC order", "an existing but unregistered canonical pool also identifies the real launch" |
 | 28 | (Client) Every claimer-held position is found; the crank harvests only the launch pool by default | SDK `findClaimerPositions`, `planCrank` limits | `lp` › "the SDK finds every claimer position (the NFT in the claimer's ATA included); …"; `packages/sdk/test/crank-plan.test.ts` › "LP harvest limits: …" |
+| 29 | (v3) Split amounts are exact; the vault gets every remainder, fallback and swept balance; `platform + creator + vault == received (+ sweep)` | `graduation_split`, `lp_fee_split`; `distribute` checks the vault delta | `math::tests::graduation_split_vectors`, `lp_fee_split_vectors`, `prop_graduation_split`, `prop_graduation_split_at_accepted_mf`, `prop_lp_fee_split`; `sdk-math` › "graduationSplit (platform 5% of T, creator 5% of T, vault the rest)", "lpFeeSplit (creator 50%, platform 20%, vault the rest)"; `fee` › "thresholds T = 20k + r (r = 0, 1, 7, 13, 19): platform and creator get exactly floor(T/20), the vault the rest", "LP fees q = 1, 2, 3, 9, 11 raw (position fee patched): creator floor(q/2), platform floor(q/5), vault the rest" |
+| 30 | (v3) The transit ends at 0 after every instruction and is never encumbered | `TransitNotEmptied`; `ClaimerQuoteAccountEncumbered` after each CPI and at `create_launch` | `fee` › "a donation to the transit is swept into the vault by the next split (migration fee, LP fees); the transit ends empty", "a delegate or an enabled CPI Guard on the transit (cheatcodes) fails the split harvests with ClaimerQuoteAccountEncumbered; nothing changes"; `token_utils::tests::transit_check_uses_its_own_error`; FloorTracker transit check |
+| 31 | (v3) No payee can block `harvest_migration_fee` or `redeem`: an unpayable platform or creator ATA falls back to the vault | `is_payable_token_account` | `fee` › "creator ATA closed, frozen or requiring memos: the creator's shares go to the vault; harvests and redeem succeed", "platform ATA frozen: migration and LP platform shares go to the vault; presale fees fail with PlatformQuoteAccountUnavailable and stay in DBC"; `token_utils::tests::payable_account_checks`, `payable_account_checks_the_program_owner` |
+| 32 | (v3) Presale fees never enter the vault (audit F08); the platform treasury is only ever a destination, with no admin, withdraw or sweep instruction | v3 `harvest_curve_fees` pays the platform ATA or fails; no instruction takes the treasury as a signer | `life` › 5b; `fee` › "platform ATA frozen: …"; `races` › "re-creates a closed platform treasury quote ATA before harvesting the presale fees (v3)"; `fee` › "the platform treasury key cannot be a launch creator (its payee ATA would be passed twice), so no launch can make the two payees collide"; `constants::tests::platform_treasury_is_the_agreed_key` |
+| 33 | (v3) The migrated DAMM v2 pool has a 1% fee and no dynamic fee | `create_launch` migrated-pool checks | `fee` › "presale fees to the platform, graduation 5/5/rest, 1% DAMM v2 pool, LP fees 50/20/30, redeem; the floor never decreases" (decodes the pool fees) |
+| 34 | Launch v2 accounts keep their original promise: every harvest pays 100% into the vault | `fee_split_enabled()` = `version >= 3` | `fee` › "every harvest pays 100% into the vault; the platform, the creator and the transit are untouched"; `state::tests::v2_account_decodes_with_zero_counters`, `fee_split_is_enabled_from_version_3`, `v3_layout_offsets`, `launch_size_is_stable`; `sdk-crank` › "harvest_migration_fee carries the v3 split; a v2 launch expects everything in the vault" |
+| 35 | A paused SPYx stops every v3 harvest atomically, and the exact split resumes after unpause | Pre-checks; atomic transactions | `fee` › "SPYx paused: every harvest fails with QuoteMintPaused and changes nothing; after unpause they pay the exact split" |
 
 Covered since the first version of this table: many small redemptions at 200 bps
 (`tests/integration/redeem-splits.test.ts`), a fork property test over random action sequences
@@ -528,7 +683,8 @@ Covered since the first version of this table: many small redemptions at 200 bps
 sequence on a live Surfpool mainnet fork ([`research/surfpool-e2e.md`](research/surfpool-e2e.md)).
 
 **Not tested yet:**
-- migration through a fixed-fee DAMM v2 config (the Meteora keeper path);
+- migration through a fixed-fee DAMM v2 config (the Meteora keeper path; since launch v3 `create_launch`
+  rejects the fixed tiers, so it applies only to v2 launches);
 - a substitute malicious DBC or DAMM v2 binary (the tests forge the signer privilege such a program would
   receive, see `va`);
 - a quote mint with an active transfer hook program (only the clean `QuoteMintTransferHookUnsupported` failure
@@ -551,6 +707,10 @@ sequence on a live Surfpool mainnet fork ([`research/surfpool-e2e.md`](research/
 - **Cheatcodes** (`tests/src/token.ts` and the test files): token balances and mint supply, `setMintPaused`,
   `setScaledUiMultiplier`, frozen accounts, transfer-hook program id, account patching, clock warp.
 - **Builders.** `tests/src/dbc.ts`, `damm.ts` and `stockfloor.ts` build instructions from the IDLs.
+  `stockfloor.ts` derives the platform, creator and transit ATAs (`derivePlatformQuote`, `deriveCreatorQuote`,
+  `deriveClaimerQuote`) and remembers each config's launch creator for the harvest builders.
+  `tests/src/fee-model.ts` holds the independent split math and `expectFeeModelV3`, which checks that
+  SDK-built parameters carry the v3 fee fields.
   `anchor.ts` decodes events, including `emit_cpi!` events taken only from the inner instructions of the given
   program.
 - **Independent expected values.** Every expected amount comes from DBC or DAMM v2 source formulas, events,
@@ -573,4 +733,9 @@ In short:
 - a dust-sized unlocked creator position can appear at migration in rounding edge cases;
 - LiteSVM is not a validator;
 - the code is unaudited;
-- the upgrade authority is still held by the deployer after the mainnet deploy of 2026-09-16; whether to revoke it is the user's decision at C3.
+- the upgrade authority is still held by the deployer after the mainnet deploy of 2026-09-16; whether to revoke it is the user's decision at C3;
+- the platform treasury is a hot key in `keys/` (gitignored); rotating it, or moving it to a hardware or
+  multisig key, needs a program upgrade;
+- the deployed mainnet program is still the v2 binary; the v3 SDK and app must not be used against it until
+  the program is upgraded (a hard stop; the `.so` grew from 459,064 to 537,568 bytes, so the upgrade may need
+  `solana program extend`).

@@ -1,43 +1,51 @@
-# Status — 2026-09-16 (04:00 ET)
+# Status — 2026-09-25 (ET)
 
 ## Current milestone
-**C2 done: StockFloor is live on Solana mainnet.** What remains is C3 (hosting the app, the video, the submission)
-and a handful of decisions only the user can make.
-
-## Fee model, branch `feat/fee-model` (2026-09-25, in progress, not merged)
-- **Program part done** (docs/DECISIONS.md, "Fee model: implementation decisions"): launch v3 with presale fees to
-  the platform treasury, the 5% / 5% / rest graduation split, the 50 / 20 / 30 LP split through the claimer's transit
-  account, payee fallbacks to the vault, the F04/F05 config checks, v2 launches unchanged.
-- **SDK, scripts and crank done** (docs/DECISIONS.md, "implementation notes (SDK, scripts, crank)"): IDL synced, v3
-  builders and decoder, presets (25 bps presale fee, creator trading 0, vault 30–60%, DBC migration fee = vault + 10,
-  default threshold $10,000), the create_launch config mirror, the graduation split in the preview with "floor per $100
-  at listing" and the 1%-buy price sensitivity, the crank's migration split and platform ATA re-creation, `CU_LIMITS`
-  from the fork measurements. tx1 still fits (1,175 bytes worst case).
-- **Tests:** `cargo test -p stockfloor --lib` 58 passed; `pnpm --filter @stockfloor/sdk test` 310 passed; fork suite
-  (`pnpm --filter @stockfloor/tests exec vitest run --exclude 'integration/audit-poc/**'`) **129 passed, 0 failed**
-  (the C1 lifecycle, `fee-model`, `sdk-presets-fork` and the SDK-only product flow included); SDK, tests and app
-  type-check clean.
-- **App done (C13–C15)** (docs/DECISIONS.md, "implementation notes (app)"): threshold policy (min $10,000, picks
-  $10K default / $25K / $50K, max $100K; `NEXT_PUBLIC_DEMO_THRESHOLDS=1` restores $50 / $100 / $1,000 and a $1
-  minimum), flat curve by default, vault share slider 30–60% with the "Vault X% · Pool 90−X% · Platform 5% · Creator
-  5%" caption, preview with the graduation split in dollars, floor per $100 at listing and the price move of a $1,000
-  buy, fee copy everywhere (create form, token page, disclosures, crank, home, waitlist), token page floor per $100
-  next to the vault share, v2/v3-aware vault share and fee wording. `pnpm --filter @stockfloor/app test` **242
-  passed**; app type-check clean; `next build` OK; local-fork e2e (`pnpm e2e:local`, fresh surfnet with the v3
-  binary) **11 + 4 passed**.
-- **Not done yet:** the architecture / README fee docs (C16) and the independent review.
-- **The deployed mainnet program is still the old binary.** The SDK and app must not ship v3 account lists against it
-  without a program upgrade (a hard stop; the `.so` grew from 459,064 to 537,568 bytes, so it may need
-  `solana program extend`).
-- **Untracked audit PoCs** (`tests/integration/audit-poc/*.test.ts`, `programs/stockfloor/tests/audit_poc_*.rs`): they
-  pass when a bug exists and encode the v2 fee model, so `pnpm test` (which runs them) reports failures: on
-  2026-09-25 39 fork PoC tests in 20 files (F01, F02, F04, F05, F07–F13, F19–F21: the bugs this branch fixes, curve
-  fees no longer entering the vault, mf 30 now rejected, the new split amounts and `FeesDistributed` event; F19's
-  failure is an IDL name lookup in the PoC itself) and the 4 tests of `audit_poc_f04_fable.rs`. Everything else in
-  `pnpm test` passes. The founder should decide whether to delete the PoCs or turn them
-  into regression tests.
+**C2 done: StockFloor is live on Solana mainnet** (launch v2 fee model). **The launch v3 fee model is implemented
+on branch `feat/fee-model`** (program, SDK, CLI/crank, app, docs; all gated suites green), not merged and not
+deployed. What remains is the founder's review of the branch, C3 (hosting the app, the video, the submission)
+and the decisions below.
 
 ## Done (with test results)
+- **Fee model, branch `feat/fee-model` (2026-09-25, not merged).** Decisions D1–D13 and implementation notes in
+  `docs/DECISIONS.md`; mechanics in `docs/architecture.md` §3.0, §4.1, §5, §6; user-facing tables in the README
+  ("Who pays for this", "The floor math", "Parameters").
+  - **Program (launch v3):** presale fee 0.25%, its partner share (80%) to the platform treasury
+    `78tRFS255ADZT2oMSXi5xjHt7Y2SVDLdDEBz759eQsqJ`; graduation split 5% of T to the platform, 5% of T to
+    `launch.creator`, the rest (vault share 30–60%) to the vault; LP fees creator 50% / platform 20% / vault 30%
+    through the claimer's transit ATA; unpayable payees fall back to the vault; `create_launch` creates the
+    three quote ATAs and now requires `mf` 40–70, creator trading 0, a Customizable migrated pool at a fixed 1%
+    with no dynamic or compounding fee, and no min-fee first swap (audit F04/F05/F08 closed); v2 launches keep
+    paying 100% into the vault; `FeesDistributed` event; seven errors appended, none renumbered; `Launch` size
+    unchanged (343).
+  - **SDK / CLI / crank:** IDL synced, v3 builders and decoder, presets (25 bps, creator 0, vault 30–60%,
+    `mf` = vault + 10, default threshold $10,000), a mirror of the `create_launch` checks, split-aware preview
+    (floor per $100 at listing: flat 50/40 $34.88, gentle 50/40 $32.77), crank split and idempotent re-creation
+    of the treasury ATA before a v3 curve harvest, `CU_LIMITS` from fork measurements; tx1 still fits (1,175
+    bytes worst case).
+  - **App:** threshold policy (normal $10K default / $25K / $50K, min $10,000, max $100,000;
+    `NEXT_PUBLIC_DEMO_THRESHOLDS=1` gives $50 / $100 / $1,000 and a $1 minimum), flat curve by default, vault
+    slider 30–60% with the split caption, split in dollars, floor per $100, price move of a $1,000 buy, fee copy
+    everywhere, v2/v3-aware token page.
+  - **Tests (gated commands, all run on 2026-09-25):**
+
+    | Command | Result |
+    |---|---|
+    | `cargo test -p stockfloor --lib` | 58 passed |
+    | `pnpm --filter @stockfloor/sdk test` | 310 passed |
+    | `pnpm --filter @stockfloor/tests exec vitest run --exclude 'integration/audit-poc/**'` | **129 passed, 0 failed** (18 files; `fee-model.test.ts` 14/14) |
+    | `pnpm --filter @stockfloor/app test` | 242 passed (26 files) |
+    | SDK, tests and app `tsc --noEmit` | clean |
+    | `pnpm build:local` + `pnpm e2e:local` (fresh Surfpool fork, v3 binary) | 11 + 4 passed |
+    | `pnpm test` (whole repo) | fails only on the untracked audit PoCs (below); everything else passes |
+    | `pnpm lint` | fails repo-wide on 109 files that were already unformatted (not `app/`); unchanged by this branch |
+
+  - **Compute units (v3, max of six runs → limit):** `create_launch` 163,053 → 200,000; `harvest_curve_fees`
+    91,276 → 120,000 (creating the claimer base ATA) / 59,180 → 85,000; `harvest_migration_fee` 69,817 → 100,000;
+    `harvest_lp_fees` 90,551 → 120,000. The `.so` grew from 459,064 to 537,568 bytes.
+  - **Review:** the workflow's review and fix step reported no fixes needed, and the recheck reported nothing
+    open. The program, SDK and app parts were each self-reviewed by the implementing session; no separate
+    adversarial audit of the branch has been done.
 - **M0–M5** repo, program, SDK, CLI, web app, docs, screenshots — see `docs/DECISIONS.md`.
 - **C1** full lifecycle on a LiteSVM mainnet fork (`docs/research/c1-evidence.md`).
 - **C2 — the mainnet run, 2026-09-16** (`scripts/c2/reports/c2-20260916T071644Z.md`, 15 transactions plus a
@@ -56,7 +64,27 @@ and a handful of decisions only the user can make.
 - **Test run (`pnpm test`, own verification, rebuilt binaries): 577 tests, all steps passed** — Rust 44, SDK 217,
   LiteSVM fork 113, web app 203. Also from a fresh clone with no `keys/`.
 
+## In progress
+- Nothing is running. The fee-model branch waits for the founder's review; the optional C17 (platform ATA as
+  the DBC referral account on UI curve swaps) was not started.
+
 ## Blocked on user
+0. **Fee model (branch `feat/fee-model`):**
+   - **Merge or not.** Everything is on the branch; `main` still carries the v2 model.
+   - **Mainnet program upgrade** before the v3 SDK or app can talk to mainnet (a hard stop; the deployed binary
+     speaks the v2 account lists). The `.so` grew by 78,504 bytes, so the upgrade may need `solana program
+     extend` (costs SOL; the deployer holds about 2.747 SOL). Existing v2 launches, SFDEMO included, keep paying
+     100% into the vault after the upgrade.
+   - **Treasury key.** `keys/platform-treasury.json` is a hot key that receives all platform income; replace it
+     with a hardware or multisig key before the upgrade if wanted (changing it later needs another upgrade).
+   - **Untracked audit PoCs** (`tests/integration/audit-poc/*.test.ts`, `programs/stockfloor/tests/audit_poc_*.rs`):
+     they pass when a bug exists and encode the v2 fee model, so `pnpm test` reports them failing: 39 fork PoC
+     tests in 20 files (F01, F02, F04, F05, F07–F13, F19–F21; F19's failure is an IDL name lookup in the PoC
+     itself) and the 4 tests of `audit_poc_f04_fable.rs`. Delete them, or turn them into regression tests?
+   - **PoC formatting.** An early `cargo fmt -p stockfloor` also reformatted 6 of the 7 untracked Rust PoCs
+     (layout only). The originals were rebuilt and are in the session scratchpad
+     (`/private/tmp/claude-501/-Users-rk-Projects-stockfloor/a96026aa-ad2e-4ab1-8817-66f7d23901d5/scratchpad/poc_restore/`);
+     copy them back or keep the reformatted files.
 1. **Host the app** so a judge can click through the live mainnet launch. Hosting is publishing, so it needs the OK,
    the env of `app/README.md` ("Deploying the app") and a mainnet RPC for the browser bundle.
 2. **Record the video** — `docs/demo-script.md` now carries the real links and numbers.
@@ -94,9 +122,24 @@ and a handful of decisions only the user can make.
    the old name.
 
 ## Next (local)
-- Nothing is blocking. Remaining work is the app deploy and the recording, both of which need the decisions above.
+- Fee model, small leftovers: the test title "the brief's anti-snipe schedule (exponential 20% -> ~1%, creator
+  share 30%) …" in `tests/integration/review-regressions.test.ts` still names a creator share of 30% (the config
+  now uses 0); the optional C17 referral account; optionally require `exit_fee_bps == 200` on chain (D9).
+- Out of scope of the fee model, still open from the audit: F11 (the migration harvest accepts any delta), F10
+  (floor minimum above 1 raw), F21 (zero-value events).
+- The README's C1 numbers and the 2026-09-16 screenshots show the v2 model; re-record them once the branch is
+  merged (the README says so next to the numbers).
+- Remaining C3 work is the app deploy and the recording, both of which need the decisions above.
 
 ## Risks / surprises
+- **The fee model changes what the app and SDK send.** After a merge, the SDK and app build v3 account lists; the
+  mainnet program is still the v2 binary, so the app must not be deployed against mainnet before the program
+  upgrade.
+- **Presale fees depend on the treasury ATA.** If the treasury key closes its quote ATA, v3 curve harvests fail
+  (`PlatformQuoteAccountUnavailable`) until it is re-created; the SDK crank re-creates it idempotently, at up to
+  35k extra CU. The fees wait in DBC meanwhile and never reach the vault.
+- **The price move of a $1,000 buy is large at the $10,000 default** (about +56% into a pool holding 40% of
+  the raise); the create form shows it. It is the thin-market side of a large vault share.
 - **StonkFun (stonkfun.xyz, $STONK) already pairs new Solana tokens with tokenized stocks** (Raydium LaunchLab;
   STONK rose to about $140M market cap on 2026-09-06 per The Block). "Tokens quoted in stocks" is therefore not our
   differentiator any more. The pitch has to lead with the redeemable floor funded at graduation and with DBC.
