@@ -252,3 +252,7 @@ Format: date — decision · alternatives · reason.
   natively as `creator_permanent_locked_liquidity_percentage` 50 / partner 50 (relax the 100%-partner-LP check), with
   our program splitting the partner position's quote fees vault 60% / platform 40%; or all LP to the partner and a
   three-way split in `harvest_lp_fees`.
+- **Exit fee (founder decision, 2026-09-25):** 2% on every redemption, all of it stays in the vault, the same for
+  every token (no creator choice, no platform share). · 1%; a platform share; a creator-chosen range · Every exit
+  thickens the floor for the holders who stay, and one rule for all tokens is easy to explain and compare. Matches
+  the program today (no change needed).
