@@ -435,7 +435,12 @@ const ls = (q: bigint) => {
 
 describe("graduationSplit (platform 5% of T, creator 5% of T, vault the rest)", () => {
   it("fee constants match the program", () => {
-    expect([PLATFORM_GRADUATION_FEE_BPS, CREATOR_GRADUATION_BONUS_BPS, LP_FEE_CREATOR_BPS, LP_FEE_PLATFORM_BPS]).toEqual([500, 500, 5_000, 2_000]);
+    expect([
+      PLATFORM_GRADUATION_FEE_BPS,
+      CREATOR_GRADUATION_BONUS_BPS,
+      LP_FEE_CREATOR_BPS,
+      LP_FEE_PLATFORM_BPS,
+    ]).toEqual([500, 500, 5_000, 2_000]);
   });
 
   it("matches the Rust vectors", () => {
@@ -448,10 +453,22 @@ describe("graduationSplit (platform 5% of T, creator 5% of T, vault the rest)", 
     expect(gs(39n, fee60(39n))).toEqual([1n, 1n, 21n]);
     expect(gs(40n, fee60(40n))).toEqual([2n, 2n, 20n]);
     expect(fee60(6_548_266n)).toBe(3_928_959n);
-    expect(gs(6_548_266n, fee60(6_548_266n))).toEqual([327_413n, 327_413n, 3_274_133n]);
-    expect(gs(131_346_320n, fee60(131_346_320n))).toEqual([6_567_316n, 6_567_316n, 65_673_160n]);
+    expect(gs(6_548_266n, fee60(6_548_266n))).toEqual([
+      327_413n,
+      327_413n,
+      3_274_133n,
+    ]);
+    expect(gs(131_346_320n, fee60(131_346_320n))).toEqual([
+      6_567_316n,
+      6_567_316n,
+      65_673_160n,
+    ]);
     const cut = U64_MAX / 20n;
-    expect(gs(U64_MAX, fee60(U64_MAX))).toEqual([cut, cut, fee60(U64_MAX) - 2n * cut]);
+    expect(gs(U64_MAX, fee60(U64_MAX))).toEqual([
+      cut,
+      cut,
+      fee60(U64_MAX) - 2n * cut,
+    ]);
     // Received below the two cuts: the platform is paid first, then the creator, vault 0.
     expect(gs(1_000n, 100n)).toEqual([50n, 50n, 0n]);
     expect(gs(1_000n, 99n)).toEqual([50n, 49n, 0n]);
@@ -465,13 +482,19 @@ describe("graduationSplit (platform 5% of T, creator 5% of T, vault the rest)", 
 
   it("property: the parts sum to received, each cut is at most T/20, the vault gets the rest", () => {
     fc.assert(
-      fc.property(fc.bigInt({ min: 0n, max: U64_MAX }), fc.bigInt({ min: 0n, max: U64_MAX }), (t, r) => {
-        const s = graduationSplit(t, r);
-        expect(s.platform + s.creator + s.vault).toBe(r);
-        expect(s.platform <= t / 20n && s.creator <= t / 20n).toBe(true);
-        expect(s.vault >= (r > 2n * (t / 20n) ? r - 2n * (t / 20n) : 0n)).toBe(true);
-        if (s.creator > 0n) expect(s.platform).toBe(t / 20n);
-      }),
+      fc.property(
+        fc.bigInt({ min: 0n, max: U64_MAX }),
+        fc.bigInt({ min: 0n, max: U64_MAX }),
+        (t, r) => {
+          const s = graduationSplit(t, r);
+          expect(s.platform + s.creator + s.vault).toBe(r);
+          expect(s.platform <= t / 20n && s.creator <= t / 20n).toBe(true);
+          expect(
+            s.vault >= (r > 2n * (t / 20n) ? r - 2n * (t / 20n) : 0n),
+          ).toBe(true);
+          if (s.creator > 0n) expect(s.platform).toBe(t / 20n);
+        },
+      ),
       { numRuns: 2_000 },
     );
   });
@@ -494,7 +517,11 @@ describe("lpFeeSplit (creator 50%, platform 20%, vault the rest)", () => {
     expect(ls(10n)).toEqual([5n, 2n, 3n]);
     expect(ls(11n)).toEqual([5n, 2n, 4n]);
     expect(ls(1_000_000n)).toEqual([500_000n, 200_000n, 300_000n]);
-    expect(ls(U64_MAX)).toEqual([U64_MAX / 2n, U64_MAX / 5n, U64_MAX - U64_MAX / 2n - U64_MAX / 5n]);
+    expect(ls(U64_MAX)).toEqual([
+      U64_MAX / 2n,
+      U64_MAX / 5n,
+      U64_MAX - U64_MAX / 2n - U64_MAX / 5n,
+    ]);
   });
 
   it("property: sum, creator = floor(q/2), platform = floor(q/5), vault >= floor(3q/10)", () => {
@@ -519,14 +546,19 @@ describe("floorPer100AtListing and priceImpactPct", () => {
     expect(floorPer100AtListing(0.3, 0.4, 1.01, 200)).toBeCloseTo(18.32, 2);
     expect(floorPer100AtListing(0.6, 0.7, 1.01, 200)).toBeCloseTo(45.06, 2);
     expect(floorPer100AtListing(0.5, 0.6, 1.2, 200)).toBeCloseTo(32.77, 2);
-    expect(floorPer100AtListing(0.5, 0.6, 1.01, 0)).toBeCloseTo(34.88 / 0.98, 2);
+    expect(floorPer100AtListing(0.5, 0.6, 1.01, 0)).toBeCloseTo(
+      34.88 / 0.98,
+      2,
+    );
   });
 
   it("rejects percentages passed where fractions are expected", () => {
     expect(() => floorPer100AtListing(50, 60, 1.01, 200)).toThrow(RangeError);
     expect(() => floorPer100AtListing(0.5, 0.4, 1.01, 200)).toThrow(RangeError);
     expect(() => floorPer100AtListing(0.5, 0.6, 0.9, 200)).toThrow(RangeError);
-    expect(() => floorPer100AtListing(0.5, 0.6, 1.01, 10_001)).toThrow(RangeError);
+    expect(() => floorPer100AtListing(0.5, 0.6, 1.01, 10_001)).toThrow(
+      RangeError,
+    );
   });
 
   it("price impact of a buy into a full-range pool: (1 + X / Q)^2 - 1, in percent", () => {

@@ -301,10 +301,12 @@ export interface FeeSplit {
 }
 
 function assertU64(value: bigint, what: string): void {
-  if (value < 0n || value > U64_MAX_BIG) throw new RangeError(`${what} must be a u64`);
+  if (value < 0n || value > U64_MAX_BIG)
+    throw new RangeError(`${what} must be a u64`);
 }
 
-const bpsFloor = (amount: bigint, bps: number) => (amount * BigInt(bps)) / MAX_BPS;
+const bpsFloor = (amount: bigint, bps: number) =>
+  (amount * BigInt(bps)) / MAX_BPS;
 const minBig = (a: bigint, b: bigint) => (a < b ? a : b);
 
 /**
@@ -317,11 +319,20 @@ const minBig = (a: bigint, b: bigint) => (a < b ? a : b);
  *
  * The cuts are shares of the raise, not of the fee, so the vault gets every rounding unit.
  */
-export function graduationSplit(thresholdRaw: bigint, receivedRaw: bigint): FeeSplit {
+export function graduationSplit(
+  thresholdRaw: bigint,
+  receivedRaw: bigint,
+): FeeSplit {
   assertU64(thresholdRaw, "thresholdRaw");
   assertU64(receivedRaw, "receivedRaw");
-  const platform = minBig(bpsFloor(thresholdRaw, PLATFORM_GRADUATION_FEE_BPS), receivedRaw);
-  const creator = minBig(bpsFloor(thresholdRaw, CREATOR_GRADUATION_BONUS_BPS), receivedRaw - platform);
+  const platform = minBig(
+    bpsFloor(thresholdRaw, PLATFORM_GRADUATION_FEE_BPS),
+    receivedRaw,
+  );
+  const creator = minBig(
+    bpsFloor(thresholdRaw, CREATOR_GRADUATION_BONUS_BPS),
+    receivedRaw - platform,
+  );
   return { platform, creator, vault: receivedRaw - platform - creator };
 }
 
@@ -349,10 +360,20 @@ export function lpFeeSplit(receivedRaw: bigint): FeeSplit {
  * the rounding, the vault's growth after graduation and the price moving after listing. Not a
  * guarantee: the UI calls it "Floor per $100 at listing".
  */
-export function floorPer100AtListing(v: number, m: number, r: number, exitFeeBps: number): number {
-  if (!(v > 0 && v <= 1)) throw new RangeError("v (vault share) must be a fraction in (0, 1]");
-  if (!(m >= v && m < 1)) throw new RangeError("m (migration fee share) must be a fraction in [v, 1)");
-  if (!(Number.isFinite(r) && r >= 1)) throw new RangeError("r (price ratio) must be >= 1");
+export function floorPer100AtListing(
+  v: number,
+  m: number,
+  r: number,
+  exitFeeBps: number,
+): number {
+  if (!(v > 0 && v <= 1))
+    throw new RangeError("v (vault share) must be a fraction in (0, 1]");
+  if (!(m >= v && m < 1))
+    throw new RangeError(
+      "m (migration fee share) must be a fraction in [v, 1)",
+    );
+  if (!(Number.isFinite(r) && r >= 1))
+    throw new RangeError("r (price ratio) must be >= 1");
   if (!Number.isInteger(exitFeeBps) || exitFeeBps < 0 || exitFeeBps > 10_000) {
     throw new RangeError("exitFeeBps must be an integer in [0, 10000]");
   }
@@ -364,8 +385,10 @@ export function floorPer100AtListing(v: number, m: number, r: number, exitFeeBps
  * pool holding `poolQuoteUsd` of quote, fee ignored: `((1 + X / Q)^2 - 1) * 100` percent.
  */
 export function priceImpactPct(tradeUsd: number, poolQuoteUsd: number): number {
-  if (!(Number.isFinite(tradeUsd) && tradeUsd >= 0)) throw new RangeError("tradeUsd must be non-negative");
-  if (!(Number.isFinite(poolQuoteUsd) && poolQuoteUsd > 0)) throw new RangeError("poolQuoteUsd must be positive");
+  if (!(Number.isFinite(tradeUsd) && tradeUsd >= 0))
+    throw new RangeError("tradeUsd must be non-negative");
+  if (!(Number.isFinite(poolQuoteUsd) && poolQuoteUsd > 0))
+    throw new RangeError("poolQuoteUsd must be positive");
   const x = tradeUsd / poolQuoteUsd;
   return ((1 + x) * (1 + x) - 1) * 100;
 }

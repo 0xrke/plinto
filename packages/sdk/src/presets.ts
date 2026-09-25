@@ -131,13 +131,24 @@ export function poolSharePctForVaultShare(vaultSharePct: number): number {
  * Vault share of an on-chain launch from its DBC `migrationFeePercentage`: `mf - 10` for launch v3,
  * `mf` for v2 launches (their whole migration fee went into the vault).
  */
-export function vaultSharePctFromMigrationFeePct(migrationFeePct: number, launchVersion: number): number {
-  return launchVersion >= 3 ? migrationFeePct - GRADUATION_CUTS_PCT : migrationFeePct;
+export function vaultSharePctFromMigrationFeePct(
+  migrationFeePct: number,
+  launchVersion: number,
+): number {
+  return launchVersion >= 3
+    ? migrationFeePct - GRADUATION_CUTS_PCT
+    : migrationFeePct;
 }
 
 function assertVaultShare(vaultSharePct: number): void {
-  if (!Number.isInteger(vaultSharePct) || vaultSharePct < VAULT_SHARE_MIN_PCT || vaultSharePct > VAULT_SHARE_MAX_PCT) {
-    throw new LaunchInputError(`vaultSharePct must be an integer in [${VAULT_SHARE_MIN_PCT}, ${VAULT_SHARE_MAX_PCT}]`);
+  if (
+    !Number.isInteger(vaultSharePct) ||
+    vaultSharePct < VAULT_SHARE_MIN_PCT ||
+    vaultSharePct > VAULT_SHARE_MAX_PCT
+  ) {
+    throw new LaunchInputError(
+      `vaultSharePct must be an integer in [${VAULT_SHARE_MIN_PCT}, ${VAULT_SHARE_MAX_PCT}]`,
+    );
   }
 }
 

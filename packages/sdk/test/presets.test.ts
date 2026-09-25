@@ -265,21 +265,36 @@ describe("curve presets", () => {
         expect(result.partnerMigrationFee).toBe(curve.partnerMigrationFee);
         expect(result.creatorMigrationFee).toBe(0n);
         // The partner fee is split at graduation: platform 5% of T, creator 5% of T, vault the rest.
-        const split = graduationSplit(curve.thresholdQuoteRaw, curve.partnerMigrationFee);
+        const split = graduationSplit(
+          curve.thresholdQuoteRaw,
+          curve.partnerMigrationFee,
+        );
         expect(curve.platformGraduationFee).toBe(split.platform);
         expect(curve.creatorGraduationBonus).toBe(split.creator);
         expect(curve.vaultAtGraduation).toBe(split.vault);
         expect(curve.platformGraduationFee).toBe(curve.thresholdQuoteRaw / 20n);
-        expect(curve.creatorGraduationBonus).toBe(curve.thresholdQuoteRaw / 20n);
+        expect(curve.creatorGraduationBonus).toBe(
+          curve.thresholdQuoteRaw / 20n,
+        );
         // The vault is the chosen share of the raise, to one rounding unit per part.
         const want = (curve.thresholdQuoteRaw * BigInt(vaultSharePct)) / 100n;
-        expect(curve.vaultAtGraduation - want <= 2n && want - curve.vaultAtGraduation <= 2n).toBe(true);
+        expect(
+          curve.vaultAtGraduation - want <= 2n &&
+            want - curve.vaultAtGraduation <= 2n,
+        ).toBe(true);
         // The pool gets 90 - vault share of the raise.
         expect(curve.migrationQuoteAmount).toBe(
           (curve.thresholdQuoteRaw * BigInt(90 - vaultSharePct) + 99n) / 100n,
         );
         // And the program's create_launch checks accept it.
-        expect(() => validateLaunchConfigParams(params, { claimer: authority, feeClaimer: params.feeClaimer, leftoverReceiver: params.leftoverReceiver, exitFeeBps: 200 })).not.toThrow();
+        expect(() =>
+          validateLaunchConfigParams(params, {
+            claimer: authority,
+            feeClaimer: params.feeClaimer,
+            leftoverReceiver: params.leftoverReceiver,
+            exitFeeBps: 200,
+          }),
+        ).not.toThrow();
         expect(result.fixedTokenSupply).toBe(false);
         expect(result.lockedLiquidityBpsAtDay1).toBe(10_000);
         expect(result.initialBaseSupply <= U64_MAX).toBe(true);
@@ -426,7 +441,10 @@ describe("previewLaunch", () => {
           5,
         );
         // Floor per $100 at listing: the same ratio after the 2% exit fee.
-        expect(p.floorPer100AtListingUsd).toBeCloseTo(floorPer100AtListing(v, m, r, 200), 2);
+        expect(p.floorPer100AtListingUsd).toBeCloseTo(
+          floorPer100AtListing(v, m, r, 200),
+          2,
+        );
         expect(p.floorPer100AtListingUsd).toBeCloseTo(
           (100 * p.floorAtGraduationUsd * 0.98) / p.graduationPriceUsd,
           9,
@@ -436,14 +454,36 @@ describe("previewLaunch", () => {
   });
 
   it("floor per $100 at listing matches the founder table (flat 50/40 $34.88, gentle 50/40 $32.77)", () => {
-    const flat = previewLaunch(baseInput({ preset: "flat", vaultSharePct: 50 }));
+    const flat = previewLaunch(
+      baseInput({ preset: "flat", vaultSharePct: 50 }),
+    );
     expect(Math.abs(flat.floorPer100AtListingUsd - 34.88)).toBeLessThan(0.05);
-    expect(Math.abs(previewLaunch(baseInput({ preset: "flat", vaultSharePct: 30 })).floorPer100AtListingUsd - 18.32)).toBeLessThan(0.05);
-    expect(Math.abs(previewLaunch(baseInput({ preset: "flat", vaultSharePct: 60 })).floorPer100AtListingUsd - 45.06)).toBeLessThan(0.05);
-    expect(Math.abs(previewLaunch(baseInput({ preset: "gentle", vaultSharePct: 50 })).floorPer100AtListingUsd - 32.77)).toBeLessThan(0.05);
+    expect(
+      Math.abs(
+        previewLaunch(baseInput({ preset: "flat", vaultSharePct: 30 }))
+          .floorPer100AtListingUsd - 18.32,
+      ),
+    ).toBeLessThan(0.05);
+    expect(
+      Math.abs(
+        previewLaunch(baseInput({ preset: "flat", vaultSharePct: 60 }))
+          .floorPer100AtListingUsd - 45.06,
+      ),
+    ).toBeLessThan(0.05);
+    expect(
+      Math.abs(
+        previewLaunch(baseInput({ preset: "gentle", vaultSharePct: 50 }))
+          .floorPer100AtListingUsd - 32.77,
+      ),
+    ).toBeLessThan(0.05);
     // A higher exit fee lowers it proportionally.
-    const noFee = previewLaunch(baseInput({ preset: "flat", vaultSharePct: 50, exitFeeBps: 0 }));
-    expect(noFee.floorPer100AtListingUsd).toBeCloseTo(flat.floorPer100AtListingUsd / 0.98, 9);
+    const noFee = previewLaunch(
+      baseInput({ preset: "flat", vaultSharePct: 50, exitFeeBps: 0 }),
+    );
+    expect(noFee.floorPer100AtListingUsd).toBeCloseTo(
+      flat.floorPer100AtListingUsd / 0.98,
+      9,
+    );
   });
 
   it("pool share and the price sensitivity of a buy of 1% of the raise", () => {
@@ -463,7 +503,11 @@ describe("previewLaunch", () => {
   });
 
   it("vault share maps to the DBC migration fee percentage and back", () => {
-    expect([VAULT_SHARE_MIN_PCT, DEFAULT_VAULT_SHARE_PCT, VAULT_SHARE_MAX_PCT]).toEqual([30, 50, 60]);
+    expect([
+      VAULT_SHARE_MIN_PCT,
+      DEFAULT_VAULT_SHARE_PCT,
+      VAULT_SHARE_MAX_PCT,
+    ]).toEqual([30, 50, 60]);
     for (let v = VAULT_SHARE_MIN_PCT; v <= VAULT_SHARE_MAX_PCT; v++) {
       expect(migrationFeePctForVaultShare(v)).toBe(v + 10);
       expect(poolSharePctForVaultShare(v)).toBe(90 - v);
@@ -584,7 +628,15 @@ describe("validateLaunchConfigParams (port of the program's create_launch config
 
   it("accepts the presets for every vault share and the mf bounds 40..70", () => {
     for (const v of [30, 45, 60]) {
-      expect(() => validateLaunchConfigParams(buildDbcConfigParams(baseInput({ vaultSharePct: v }), authority, authority))).not.toThrow();
+      expect(() =>
+        validateLaunchConfigParams(
+          buildDbcConfigParams(
+            baseInput({ vaultSharePct: v }),
+            authority,
+            authority,
+          ),
+        ),
+      ).not.toThrow();
     }
     for (let mf = 40; mf <= 70; mf++) {
       const p = good();
@@ -594,32 +646,148 @@ describe("validateLaunchConfigParams (port of the program's create_launch config
   });
 
   const rows: Array<[string, (p: ReturnType<typeof good>) => void, string]> = [
-    ["mf 39", (p) => (p.migrationFee.feePercentage = 39), "MigrationFeePercentageOutOfRange"],
-    ["mf 71", (p) => (p.migrationFee.feePercentage = 71), "MigrationFeePercentageOutOfRange"],
-    ["creator migration fee share", (p) => (p.migrationFee.creatorFeePercentage = 1), "CreatorMigrationFeeNotZero"],
-    ["dust threshold: vault 0", (p) => (p.migrationQuoteThreshold = bn0(1)), "MigrationQuoteThresholdTooSmall"],
-    ["partner liquidity not locked", (p) => { p.partnerPermanentLockedLiquidityPercentage = 99; p.partnerLiquidityPercentage = 1; }, "LiquidityNotFullyPartnerLocked"],
-    ["partner liquidity vesting", (p) => (p.partnerLiquidityVestingInfo.vestingPercentage = 1), "LiquidityVestingNotAllowed"],
-    ["locked vesting", (p) => (p.lockedVesting.amountPerPeriod = bn0(1)), "LockedVestingNotAllowed"],
-    ["collect fee mode OutputToken", (p) => (p.collectFeeMode = 1), "CollectFeeModeNotQuote"],
-    ["migration to DAMM v1", (p) => (p.migrationOption = 0), "MigrationOptionNotDammV2"],
+    [
+      "mf 39",
+      (p) => (p.migrationFee.feePercentage = 39),
+      "MigrationFeePercentageOutOfRange",
+    ],
+    [
+      "mf 71",
+      (p) => (p.migrationFee.feePercentage = 71),
+      "MigrationFeePercentageOutOfRange",
+    ],
+    [
+      "creator migration fee share",
+      (p) => (p.migrationFee.creatorFeePercentage = 1),
+      "CreatorMigrationFeeNotZero",
+    ],
+    [
+      "dust threshold: vault 0",
+      (p) => (p.migrationQuoteThreshold = bn0(1)),
+      "MigrationQuoteThresholdTooSmall",
+    ],
+    [
+      "partner liquidity not locked",
+      (p) => {
+        p.partnerPermanentLockedLiquidityPercentage = 99;
+        p.partnerLiquidityPercentage = 1;
+      },
+      "LiquidityNotFullyPartnerLocked",
+    ],
+    [
+      "partner liquidity vesting",
+      (p) => (p.partnerLiquidityVestingInfo.vestingPercentage = 1),
+      "LiquidityVestingNotAllowed",
+    ],
+    [
+      "locked vesting",
+      (p) => (p.lockedVesting.amountPerPeriod = bn0(1)),
+      "LockedVestingNotAllowed",
+    ],
+    [
+      "collect fee mode OutputToken",
+      (p) => (p.collectFeeMode = 1),
+      "CollectFeeModeNotQuote",
+    ],
+    [
+      "migration to DAMM v1",
+      (p) => (p.migrationOption = 0),
+      "MigrationOptionNotDammV2",
+    ],
     ["Token-2022 base", (p) => (p.tokenType = 1), "BaseTokenTypeNotSplToken"],
-    ["fixed supply", (p) => (p.tokenSupply = { preMigrationTokenSupply: bn0(1), postMigrationTokenSupply: bn0(1) }), "FixedTokenSupplyNotAllowed"],
-    ["creator trading fee 1%", (p) => (p.creatorTradingFeePercentage = 1), "CreatorTradingFeeTooHigh"],
-    ["creator trading fee 30% (the v2 preset)", (p) => (p.creatorTradingFeePercentage = 30), "CreatorTradingFeeTooHigh"],
-    ["curve fee above 20%", (p) => (p.poolFees.baseFee.cliffFeeNumerator = bn0(200_000_001)), "CurveFeeTooHigh"],
-    ["rate limiter base fee mode", (p) => (p.poolFees.baseFee.baseFeeMode = 2), "CurveFeeTooHigh"],
-    ["dynamic curve fee", (p) => (p.poolFees.dynamicFee = {} as never), "DynamicFeeNotAllowed"],
-    ["migrated collect mode both tokens", (p) => (p.migratedPoolFee.collectFeeMode = 1), "MigratedCollectFeeModeNotQuote"],
-    ...[0, 1, 2, 3, 4, 5, 7].map((o) => [`migration fee option ${o}`, (p: ReturnType<typeof good>) => (p.migrationFeeOption = o), "MigratedPoolFeeInvalid"] as [string, (p: ReturnType<typeof good>) => void, string]),
-    ...[25, 99, 101, 1000].map((b) => [`migrated pool fee ${b} bps`, (p: ReturnType<typeof good>) => (p.migratedPoolFee.poolFeeBps = b), "MigratedPoolFeeInvalid"] as [string, (p: ReturnType<typeof good>) => void, string]),
-    ...[1, 2, 3, 4].map((m) => [`migrated base fee mode ${m}`, (p: ReturnType<typeof good>) => (p.migratedPoolBaseFeeMode = m), "MigratedPoolFeeInvalid"] as [string, (p: ReturnType<typeof good>) => void, string]),
-    ["compounding fee", (p) => (p.compoundingFeeBps = 1), "MigratedPoolFeeInvalid"],
-    ["market cap fee scheduler bytes", (p) => (p.migratedPoolMarketCapFeeSchedulerParams.numberOfPeriod = 1), "MigratedPoolFeeInvalid"],
-    ["migrated dynamic fee", (p) => (p.migratedPoolFee.dynamicFee = 1), "MigratedDynamicFeeNotAllowed"],
-    ["first swap with min fee", (p) => (p.enableFirstSwapWithMinFee = true), "FirstSwapWithMinFeeNotAllowed"],
-    ["mutable token", (p) => (p.tokenUpdateAuthority = 0), "TokenUpdateAuthorityNotImmutable"],
-    ["pool creation fee", (p) => (p.poolCreationFee = bn0(1)), "PoolCreationFeeNotZero"],
+    [
+      "fixed supply",
+      (p) =>
+        (p.tokenSupply = {
+          preMigrationTokenSupply: bn0(1),
+          postMigrationTokenSupply: bn0(1),
+        }),
+      "FixedTokenSupplyNotAllowed",
+    ],
+    [
+      "creator trading fee 1%",
+      (p) => (p.creatorTradingFeePercentage = 1),
+      "CreatorTradingFeeTooHigh",
+    ],
+    [
+      "creator trading fee 30% (the v2 preset)",
+      (p) => (p.creatorTradingFeePercentage = 30),
+      "CreatorTradingFeeTooHigh",
+    ],
+    [
+      "curve fee above 20%",
+      (p) => (p.poolFees.baseFee.cliffFeeNumerator = bn0(200_000_001)),
+      "CurveFeeTooHigh",
+    ],
+    [
+      "rate limiter base fee mode",
+      (p) => (p.poolFees.baseFee.baseFeeMode = 2),
+      "CurveFeeTooHigh",
+    ],
+    [
+      "dynamic curve fee",
+      (p) => (p.poolFees.dynamicFee = {} as never),
+      "DynamicFeeNotAllowed",
+    ],
+    [
+      "migrated collect mode both tokens",
+      (p) => (p.migratedPoolFee.collectFeeMode = 1),
+      "MigratedCollectFeeModeNotQuote",
+    ],
+    ...[0, 1, 2, 3, 4, 5, 7].map(
+      (o) =>
+        [
+          `migration fee option ${o}`,
+          (p: ReturnType<typeof good>) => (p.migrationFeeOption = o),
+          "MigratedPoolFeeInvalid",
+        ] as [string, (p: ReturnType<typeof good>) => void, string],
+    ),
+    ...[25, 99, 101, 1000].map(
+      (b) =>
+        [
+          `migrated pool fee ${b} bps`,
+          (p: ReturnType<typeof good>) => (p.migratedPoolFee.poolFeeBps = b),
+          "MigratedPoolFeeInvalid",
+        ] as [string, (p: ReturnType<typeof good>) => void, string],
+    ),
+    ...[1, 2, 3, 4].map(
+      (m) =>
+        [
+          `migrated base fee mode ${m}`,
+          (p: ReturnType<typeof good>) => (p.migratedPoolBaseFeeMode = m),
+          "MigratedPoolFeeInvalid",
+        ] as [string, (p: ReturnType<typeof good>) => void, string],
+    ),
+    [
+      "compounding fee",
+      (p) => (p.compoundingFeeBps = 1),
+      "MigratedPoolFeeInvalid",
+    ],
+    [
+      "market cap fee scheduler bytes",
+      (p) => (p.migratedPoolMarketCapFeeSchedulerParams.numberOfPeriod = 1),
+      "MigratedPoolFeeInvalid",
+    ],
+    [
+      "migrated dynamic fee",
+      (p) => (p.migratedPoolFee.dynamicFee = 1),
+      "MigratedDynamicFeeNotAllowed",
+    ],
+    [
+      "first swap with min fee",
+      (p) => (p.enableFirstSwapWithMinFee = true),
+      "FirstSwapWithMinFeeNotAllowed",
+    ],
+    [
+      "mutable token",
+      (p) => (p.tokenUpdateAuthority = 0),
+      "TokenUpdateAuthorityNotImmutable",
+    ],
+    [
+      "pool creation fee",
+      (p) => (p.poolCreationFee = bn0(1)),
+      "PoolCreationFeeNotZero",
+    ],
   ];
 
   it.each(rows)("%s -> %s", (_name, mutate, code) => {
@@ -638,7 +806,13 @@ describe("validateLaunchConfigParams (port of the program's create_launch config
     const { STOCKFLOOR_IDL } = await import("../src");
     const names = new Set((STOCKFLOOR_IDL.errors ?? []).map((e) => e.name));
     for (const [, , code] of rows) expect(names.has(code), code).toBe(true);
-    for (const code of ["ExitFeeTooHigh", "QuoteMintMismatch", "FeeClaimerMismatch", "LeftoverReceiverMismatch"]) expect(names.has(code), code).toBe(true);
+    for (const code of [
+      "ExitFeeTooHigh",
+      "QuoteMintMismatch",
+      "FeeClaimerMismatch",
+      "LeftoverReceiverMismatch",
+    ])
+      expect(names.has(code), code).toBe(true);
   });
 
   it("checks the accounts and the exit fee when given", () => {
@@ -652,10 +826,36 @@ describe("validateLaunchConfigParams (port of the program's create_launch config
         return (e as LaunchConfigError).code;
       }
     };
-    expect(code(() => validateLaunchConfigParams(p, { exitFeeBps: 501 }))).toBe("ExitFeeTooHigh");
-    expect(code(() => validateLaunchConfigParams(p, { exitFeeBps: 500 }))).toBeNull();
-    expect(code(() => validateLaunchConfigParams(p, { claimer: other, feeClaimer: p.feeClaimer }))).toBe("FeeClaimerMismatch");
-    expect(code(() => validateLaunchConfigParams(p, { claimer: authority, feeClaimer: authority, leftoverReceiver: other }))).toBe("LeftoverReceiverMismatch");
-    expect(code(() => validateLaunchConfigParams(p, { configQuoteMint: p.quoteMint, quoteMint: other }))).toBe("QuoteMintMismatch");
+    expect(code(() => validateLaunchConfigParams(p, { exitFeeBps: 501 }))).toBe(
+      "ExitFeeTooHigh",
+    );
+    expect(
+      code(() => validateLaunchConfigParams(p, { exitFeeBps: 500 })),
+    ).toBeNull();
+    expect(
+      code(() =>
+        validateLaunchConfigParams(p, {
+          claimer: other,
+          feeClaimer: p.feeClaimer,
+        }),
+      ),
+    ).toBe("FeeClaimerMismatch");
+    expect(
+      code(() =>
+        validateLaunchConfigParams(p, {
+          claimer: authority,
+          feeClaimer: authority,
+          leftoverReceiver: other,
+        }),
+      ),
+    ).toBe("LeftoverReceiverMismatch");
+    expect(
+      code(() =>
+        validateLaunchConfigParams(p, {
+          configQuoteMint: p.quoteMint,
+          quoteMint: other,
+        }),
+      ),
+    ).toBe("QuoteMintMismatch");
   });
 });
