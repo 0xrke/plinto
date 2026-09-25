@@ -336,6 +336,193 @@ export type Stockfloor = {
         {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "creatorQuoteAccount",
+          "docs": [
+            "Creator's payee account (graduation bonus, LP fee share). `init_if_needed`: it usually",
+            "exists already."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "creator"
+              },
+              {
+                "kind": "account",
+                "path": "quoteTokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "quoteMint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "platformTreasury",
+          "address": "78tRFS255ADZT2oMSXi5xjHt7Y2SVDLdDEBz759eQsqJ"
+        },
+        {
+          "name": "platformQuoteAccount",
+          "docs": [
+            "Platform's payee account (presale fees, graduation fee, LP fee share), shared by every",
+            "launch of this quote mint."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "platformTreasury"
+              },
+              {
+                "kind": "account",
+                "path": "quoteTokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "quoteMint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "claimerQuoteAccount",
+          "docs": [
+            "Transit account of the fee split: DBC / DAMM v2 pay into it, the claimer pays platform,",
+            "creator and vault out of it and leaves it empty."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "claimer"
+              },
+              {
+                "kind": "account",
+                "path": "quoteTokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "quoteMint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         }
       ],
       "args": [
@@ -401,7 +588,8 @@ export type Stockfloor = {
     {
       "name": "harvestCurveFees",
       "docs": [
-        "Permissionless: partner trading fees from the DBC curve into the vault."
+        "Permissionless: partner trading fees from the DBC curve; v3: to the platform treasury,",
+        "v2: into the vault."
       ],
       "discriminator": [
         118,
@@ -578,6 +766,13 @@ export type Stockfloor = {
         {
           "name": "dbcProgram",
           "address": "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN"
+        },
+        {
+          "name": "platformQuoteAccount",
+          "docs": [
+            "handler for v3 launches."
+          ],
+          "writable": true
         }
       ],
       "args": []
@@ -585,7 +780,8 @@ export type Stockfloor = {
     {
       "name": "harvestLpFees",
       "docs": [
-        "Permissionless: DAMM v2 LP fees; quote into the vault, base burned."
+        "Permissionless: DAMM v2 LP fees; base burned; quote v3: creator 50% / platform 20% / vault",
+        "the rest, v2: all into the vault."
       ],
       "discriminator": [
         153,
@@ -765,6 +961,21 @@ export type Stockfloor = {
         {
           "name": "dammProgram",
           "address": "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG"
+        },
+        {
+          "name": "claimerQuoteAccount",
+          "docs": [
+            "checked for encumbrances after the CPI."
+          ],
+          "writable": true
+        },
+        {
+          "name": "creatorQuoteAccount",
+          "writable": true
+        },
+        {
+          "name": "platformQuoteAccount",
+          "writable": true
         }
       ],
       "args": []
@@ -772,7 +983,8 @@ export type Stockfloor = {
     {
       "name": "harvestMigrationFee",
       "docs": [
-        "Permissionless: partner migration fee into the vault (once)."
+        "Permissionless: partner migration fee (once); v3: 5% of the threshold to the platform, 5%",
+        "to the creator, the rest into the vault; v2: all into the vault."
       ],
       "discriminator": [
         165,
@@ -867,6 +1079,21 @@ export type Stockfloor = {
         {
           "name": "dbcProgram",
           "address": "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN"
+        },
+        {
+          "name": "claimerQuoteAccount",
+          "docs": [
+            "checked for encumbrances after the CPI."
+          ],
+          "writable": true
+        },
+        {
+          "name": "creatorQuoteAccount",
+          "writable": true
+        },
+        {
+          "name": "platformQuoteAccount",
+          "writable": true
         }
       ],
       "args": []
@@ -1232,6 +1459,19 @@ export type Stockfloor = {
       ]
     },
     {
+      "name": "feesDistributed",
+      "discriminator": [
+        209,
+        24,
+        174,
+        200,
+        236,
+        90,
+        154,
+        55
+      ]
+    },
+    {
       "name": "floorSnapshot",
       "discriminator": [
         157,
@@ -1360,7 +1600,7 @@ export type Stockfloor = {
     {
       "code": 6004,
       "name": "migrationFeePercentageOutOfRange",
-      "msg": "DBC config migration_fee_percentage must be within [30, 99]"
+      "msg": "DBC config migration_fee_percentage must be within [40, 70]"
     },
     {
       "code": 6005,
@@ -1410,7 +1650,7 @@ export type Stockfloor = {
     {
       "code": 6014,
       "name": "creatorTradingFeeTooHigh",
-      "msg": "DBC config creator_trading_fee_percentage exceeds 30"
+      "msg": "DBC config creator_trading_fee_percentage must be 0"
     },
     {
       "code": 6015,
@@ -1630,7 +1870,42 @@ export type Stockfloor = {
     {
       "code": 6058,
       "name": "migrationQuoteThresholdTooSmall",
-      "msg": "DBC config migration_quote_threshold is too small: the partner migration fee (the whole initial floor) would round to zero"
+      "msg": "DBC config migration_quote_threshold is too small: the vault's part of the migration fee (the initial floor) would round to zero"
+    },
+    {
+      "code": 6059,
+      "name": "migratedPoolFeeInvalid",
+      "msg": "DBC config must use the Customizable migration fee option with a 1% migrated pool fee and no compounding or market-cap fee schedule"
+    },
+    {
+      "code": 6060,
+      "name": "migratedDynamicFeeNotAllowed",
+      "msg": "DBC config must not enable the dynamic fee of the migrated DAMM v2 pool"
+    },
+    {
+      "code": 6061,
+      "name": "firstSwapWithMinFeeNotAllowed",
+      "msg": "DBC config must not enable the creator's first swap with the minimum fee"
+    },
+    {
+      "code": 6062,
+      "name": "payeeAccountMismatch",
+      "msg": "Payee token account is not the expected associated token account"
+    },
+    {
+      "code": 6063,
+      "name": "platformQuoteAccountUnavailable",
+      "msg": "Platform quote account cannot receive transfers (closed, frozen, wrong owner or mint, or requires memos)"
+    },
+    {
+      "code": 6064,
+      "name": "claimerQuoteAccountEncumbered",
+      "msg": "Claimer quote (transit) account has a delegate, close authority, an owner other than the claimer, CPI guard or required memo"
+    },
+    {
+      "code": 6065,
+      "name": "transitNotEmptied",
+      "msg": "Claimer quote (transit) account was not emptied by the fee split"
     }
   ],
   "types": [
@@ -1681,6 +1956,54 @@ export type Stockfloor = {
           {
             "name": "vaultBalance",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "feesDistributed",
+      "docs": [
+        "Where a harvest's quote went (launch v3). Emitted next to the source-specific event.",
+        "",
+        "`source`: 0 = curve (presale) fees, 1 = partner migration fee, 2 = DAMM v2 LP fees.",
+        "`received` is what the harvest collected; `platform_amount + creator_amount + vault_amount`",
+        "equals `received` plus any pre-existing transit balance swept into the vault. A `*_fallback`",
+        "flag means that payee's account could not receive and its share went to the vault."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "launch",
+            "type": "pubkey"
+          },
+          {
+            "name": "source",
+            "type": "u8"
+          },
+          {
+            "name": "received",
+            "type": "u64"
+          },
+          {
+            "name": "platformAmount",
+            "type": "u64"
+          },
+          {
+            "name": "creatorAmount",
+            "type": "u64"
+          },
+          {
+            "name": "vaultAmount",
+            "type": "u64"
+          },
+          {
+            "name": "platformFallback",
+            "type": "bool"
+          },
+          {
+            "name": "creatorFallback",
+            "type": "bool"
           }
         ]
       }
@@ -1764,8 +2087,9 @@ export type Stockfloor = {
         "There is no admin field: nothing in this account can be changed by anyone",
         "except through the permissionless instructions of this program.",
         "",
-        "Layout version 2 (`8 + 343` bytes, unchanged in size from version 1: the vault authority bump",
-        "took one reserved byte)."
+        "Layout version 3 (`8 + 343` bytes, unchanged in size since version 1: the vault authority bump",
+        "took one reserved byte in version 2, the platform and creator counters 16 in version 3). The",
+        "version also selects the fee routing of the harvests: see `fee_split_enabled`."
       ],
       "type": {
         "kind": "struct",
@@ -1912,6 +2236,20 @@ export type Stockfloor = {
             "type": "u64"
           },
           {
+            "name": "totalPlatformQuote",
+            "docs": [
+              "Quote paid to the platform treasury by harvests (v3; informational, saturating)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "totalCreatorQuote",
+            "docs": [
+              "Quote paid to the launch creator by harvests (v3; informational, saturating)."
+            ],
+            "type": "u64"
+          },
+          {
             "name": "reserved",
             "docs": [
               "Reserved for future fields."
@@ -1919,7 +2257,7 @@ export type Stockfloor = {
             "type": {
               "array": [
                 "u8",
-                62
+                46
               ]
             }
           }
@@ -2165,6 +2503,18 @@ export type Stockfloor = {
           }
         ]
       }
+    }
+  ],
+  "constants": [
+    {
+      "name": "platformTreasury",
+      "docs": [
+        "Platform treasury (a plain key, not a PDA: a PDA would need an admin withdraw path). It is only",
+        "ever a payment destination, through its quote ATA `ATA(PLATFORM_TREASURY, quote_mint,",
+        "quote_token_program)`. Changing it needs a program upgrade."
+      ],
+      "type": "pubkey",
+      "value": "78tRFS255ADZT2oMSXi5xjHt7Y2SVDLdDEBz759eQsqJ"
     }
   ]
 };

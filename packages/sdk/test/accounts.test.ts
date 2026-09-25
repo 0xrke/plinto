@@ -1,5 +1,5 @@
 /**
- * Decoders: Launch v2 by offsets vs the Anchor coder of the IDL, FloorInfo, token accounts and the
+ * Decoders: Launch v3 (and v2) by offsets vs the Anchor coder of the IDL, FloorInfo, token accounts and the
  * real SPYx mint (Token-2022 extensions from the mainnet fixture), bytes helpers, base58.
  */
 import BN from "bn.js";
@@ -26,6 +26,7 @@ import {
   LAUNCH_ACCOUNT_SIZE,
   LAUNCH_DISCRIMINATOR,
   LAUNCH_OFFSETS,
+  LAUNCH_VERSION,
   readU128,
   readUintLE,
   returnDataFromLogs,
@@ -35,11 +36,11 @@ import {
 
 const FIXTURES = join(__dirname, "..", "..", "..", "tests", "fixtures", "accounts");
 
-function randomLaunch(seed: number) {
+function randomLaunch(seed: number, version = 3) {
   const r = (n: number) => (seed * 2654435761 + n * 40503) % 256;
   const key = () => Keypair.generate().publicKey;
   return {
-    version: 2,
+    version,
     bump: r(1),
     claimerBump: r(2),
     vaultAuthorityBump: r(3),
@@ -60,20 +61,36 @@ function randomLaunch(seed: number) {
     totalRedeemedBase: new BN(seed * 7),
     totalRedeemedQuote: new BN(seed * 11),
     totalExitFees: new BN(seed * 13),
-    reserved: new Array(62).fill(0),
+    totalPlatformQuote: new BN(seed * 17 + 1),
+    totalCreatorQuote: seed % 2 === 0 ? new BN("18446744073709551615") : new BN(seed * 19),
+    reserved: new Array(46).fill(0),
   };
 }
 
 describe("Launch decoder", () => {
+  it("v3 layout: 351 bytes, counters at 289 and 297, 46 reserved bytes at 305", () => {
+    expect(LAUNCH_VERSION).toBe(3);
+    expect(LAUNCH_ACCOUNT_SIZE).toBe(351);
+    expect(LAUNCH_OFFSETS.totalPlatformQuote).toBe(289);
+    expect(LAUNCH_OFFSETS.totalCreatorQuote).toBe(297);
+    expect(LAUNCH_OFFSETS.reserved).toBe(305);
+    expect(LAUNCH_OFFSETS.reserved + 46).toBe(LAUNCH_ACCOUNT_SIZE);
+  });
+
+
   it("matches the Anchor coder built from the IDL for random accounts", async () => {
     const coder = stockfloorProgram().coder.accounts;
     for (let seed = 1; seed <= 40; seed++) {
-      const l = randomLaunch(seed);
+      const version = seed % 3 === 0 ? 2 : 3;
+      const l = randomLaunch(seed, version);
       const data = await coder.encode("launch", l);
       expect(data.length).toBe(LAUNCH_ACCOUNT_SIZE);
       expect(Array.from(data.subarray(0, 8))).toEqual(Array.from(LAUNCH_DISCRIMINATOR));
       const d = decodeLaunch(data);
-      expect(d.version).toBe(2);
+      expect(d.version).toBe(version);
+      expect(d.feeSplitEnabled).toBe(version >= 3);
+      expect(d.totalPlatformQuote).toBe(BigInt(l.totalPlatformQuote.toString()));
+      expect(d.totalCreatorQuote).toBe(BigInt(l.totalCreatorQuote.toString()));
       expect([d.bump, d.claimerBump, d.vaultAuthorityBump, d.exitFeeBps]).toEqual([l.bump, l.claimerBump, l.vaultAuthorityBump, l.exitFeeBps]);
       expect([d.migrationFeeHarvested, d.surplusHarvested, d.migrated]).toEqual([l.migrationFeeHarvested, l.surplusHarvested, l.migrated]);
       for (const k of ["config", "creator", "pool", "baseMint", "quoteMint", "quoteTokenProgram", "vault"] as const) {
@@ -87,6 +104,9 @@ describe("Launch decoder", () => {
       );
       // Documented memcmp offsets.
       expect(new PublicKey(data.subarray(LAUNCH_OFFSETS.baseMint, LAUNCH_OFFSETS.baseMint + 32)).equals(l.baseMint)).toBe(true);
+      const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+      expect(view.getBigUint64(LAUNCH_OFFSETS.totalPlatformQuote, true)).toBe(d.totalPlatformQuote);
+      expect(view.getBigUint64(LAUNCH_OFFSETS.totalCreatorQuote, true)).toBe(d.totalCreatorQuote);
     }
   });
 

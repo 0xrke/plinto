@@ -42,8 +42,14 @@ import {
   STOCKFLOOR_PROGRAM_ID,
   stockfloorProgram,
   TOKEN_2022_PROGRAM_ID,
+  associatedTokenAddress,
   authorityPda,
+  claimerQuoteAccount,
+  creatorQuoteAccount,
   dbcPoolPda,
+  PLATFORM_TREASURY,
+  platformQuoteAccount,
+  type LaunchAccount,
   type LaunchKeys,
 } from "../src";
 
@@ -104,6 +110,19 @@ function expectMatchesIdl(
   return byName;
 }
 
+/** The fee-split payees of a v3 harvest: transit = ATA(claimer), creator = ATA(launch.creator), platform = ATA(treasury). */
+function expectFeeSplitAccounts(byName: Map<string, PublicKey>, k: LaunchKeys, creator: PublicKey) {
+  const prog = TOKEN_2022_PROGRAM_ID;
+  expect(byName.get("claimer_quote_account")!.equals(claimerQuoteAccount(k.config, SPYX, prog))).toBe(true);
+  expect(byName.get("claimer_quote_account")!.equals(associatedTokenAddress(authorityPda(k.config)[0], SPYX, prog))).toBe(true);
+  expect(byName.get("creator_quote_account")!.equals(creatorQuoteAccount(creator, SPYX, prog))).toBe(true);
+  expect(byName.get("creator_quote_account")!.equals(associatedTokenAddress(creator, SPYX, prog))).toBe(true);
+  expect(byName.get("platform_quote_account")!.equals(platformQuoteAccount(SPYX, prog))).toBe(true);
+  for (const n of ["claimer_quote_account", "creator_quote_account", "platform_quote_account"]) {
+    expect(byName.get(n)!.equals(byName.get("vault")!), `${n} is not the vault`).toBe(false);
+  }
+}
+
 const launchKeys = (): LaunchKeys => {
   const config = pk();
   const baseMint = pk();
@@ -113,10 +132,15 @@ const launchKeys = (): LaunchKeys => {
 describe("stockfloor instruction builders match target/idl/stockfloor.json", () => {
   const coder = () => stockfloorProgram().coder.instruction;
 
-  it("create_launch", () => {
+  it("create_launch (creates the creator, platform and transit quote ATAs)", () => {
     const k = launchKeys();
-    const ix = createLaunchIx({ payer: pk(), creator: pk(), config: k.config, baseMint: k.baseMint, quoteMint: SPYX, exitFeeBps: 200 });
-    expectMatchesIdl(STOCKFLOOR_IDL, "create_launch", ix);
+    const creator = pk();
+    const ix = createLaunchIx({ payer: pk(), creator, config: k.config, baseMint: k.baseMint, quoteMint: SPYX, exitFeeBps: 200 });
+    const byName = expectMatchesIdl(STOCKFLOOR_IDL, "create_launch", ix);
+    expect(byName.get("creator_quote_account")!.equals(creatorQuoteAccount(creator, SPYX, TOKEN_2022_PROGRAM_ID))).toBe(true);
+    expect(byName.get("platform_treasury")!.equals(PLATFORM_TREASURY)).toBe(true);
+    expect(byName.get("platform_quote_account")!.equals(platformQuoteAccount(SPYX, TOKEN_2022_PROGRAM_ID))).toBe(true);
+    expect(byName.get("claimer_quote_account")!.equals(claimerQuoteAccount(k.config, SPYX, TOKEN_2022_PROGRAM_ID))).toBe(true);
     expect(Buffer.from(ix.data).equals(coder().encode("createLaunch", { exitFeeBps: 200 }))).toBe(true);
     expect(() => createLaunchIx({ payer: pk(), creator: pk(), config: k.config, baseMint: k.baseMint, quoteMint: SPYX, exitFeeBps: 70_000 })).toThrow(RangeError);
   });
@@ -130,14 +154,26 @@ describe("stockfloor instruction builders match target/idl/stockfloor.json", () 
 
   it("harvest_curve_fees, harvest_migration_fee, harvest_surplus", () => {
     const k = launchKeys();
+    const creator = pk();
     const ctx = { "launch.config": k.config };
-    expectMatchesIdl(STOCKFLOOR_IDL, "harvest_curve_fees", harvestCurveFeesIx({ payer: pk(), keys: k }), ctx);
-    const m = harvestMigrationFeeIx({ keys: k });
+    const c = harvestCurveFeesIx({ payer: pk(), keys: k });
+    const cn = expectMatchesIdl(STOCKFLOOR_IDL, "harvest_curve_fees", c, ctx);
+    // v3 presale fees are paid straight to the platform treasury's quote ATA.
+    expect(cn.get("platform_quote_account")!.equals(platformQuoteAccount(SPYX, TOKEN_2022_PROGRAM_ID))).toBe(true);
+    expect(cn.get("platform_quote_account")!.equals(associatedTokenAddress(PLATFORM_TREASURY, SPYX, TOKEN_2022_PROGRAM_ID))).toBe(true);
+    const m = harvestMigrationFeeIx({ keys: k, creator });
     const s = harvestSurplusIx({ keys: k });
-    expectMatchesIdl(STOCKFLOOR_IDL, "harvest_migration_fee", m, ctx);
+    const mn = expectMatchesIdl(STOCKFLOOR_IDL, "harvest_migration_fee", m, ctx);
     expectMatchesIdl(STOCKFLOOR_IDL, "harvest_surplus", s, ctx);
     // The vault is the vault authority's quote ATA; the claimer is authorityPda.
     expect(m.keys[1]!.pubkey.equals(authorityPda(k.config)[0])).toBe(true);
+    expectFeeSplitAccounts(mn, k, creator);
+    // The creator comes from the argument or from `keys.creator` (launchKeysFromAccount fills it).
+    const viaKeys = harvestMigrationFeeIx({ keys: { ...k, creator } });
+    expect(viaKeys.keys.map((x) => x.pubkey.toBase58())).toEqual(m.keys.map((x) => x.pubkey.toBase58()));
+    expect(() => harvestMigrationFeeIx({ keys: k })).toThrow(/creator/);
+    // harvest_surplus keeps its v2 account list (100% to the vault, no payees).
+    expect(s.keys.length).toBe(11);
   });
 
   it("sync_migration (no payer, no signer: launch and the registered DBC pool)", () => {
@@ -153,11 +189,14 @@ describe("stockfloor instruction builders match target/idl/stockfloor.json", () 
     expectMatchesIdl(STOCKFLOOR_IDL, "burn_claimer_base", burnClaimerBaseIx({ config: k.config, baseMint: k.baseMint }), { "launch.config": k.config });
   });
 
-  it("harvest_lp_fees", () => {
+  it("harvest_lp_fees (transit, creator and platform quote ATAs appended)", () => {
     const k = launchKeys();
+    const creator = pk();
     const dammPool = dammV2PoolPda(DAMM_V2_CONFIG_CUSTOMIZABLE, k.baseMint, SPYX);
-    const ix = harvestLpFeesIx({ payer: pk(), keys: k, dammPool, position: pk(), positionNftAccount: pk() });
-    expectMatchesIdl(STOCKFLOOR_IDL, "harvest_lp_fees", ix, { "launch.config": k.config });
+    const ix = harvestLpFeesIx({ payer: pk(), keys: k, creator, dammPool, position: pk(), positionNftAccount: pk() });
+    const byName = expectMatchesIdl(STOCKFLOOR_IDL, "harvest_lp_fees", ix, { "launch.config": k.config });
+    expectFeeSplitAccounts(byName, k, creator);
+    expect(() => harvestLpFeesIx({ payer: pk(), keys: k, dammPool, position: pk(), positionNftAccount: pk() })).toThrow(/creator/);
   });
 
   it("redeem (amount encoded as u64 LE) and floor", () => {
@@ -174,11 +213,21 @@ describe("stockfloor instruction builders match target/idl/stockfloor.json", () 
     expect(f.keys[1]!.pubkey.equals(ix.keys[6]!.pubkey)).toBe(true);
   });
 
-  it("launchKeysFromAccount requires a registered pool unless one is given", () => {
+  it("launchKeysFromAccount requires a registered pool unless one is given, and carries the creator", () => {
     const k = launchKeys();
-    const launch = { config: k.config, baseMint: k.baseMint, quoteMint: SPYX, quoteTokenProgram: TOKEN_2022_PROGRAM_ID, pool: PublicKey.default, poolRegistered: false } as never;
+    const creator = pk();
+    const launch = { config: k.config, creator, baseMint: k.baseMint, quoteMint: SPYX, quoteTokenProgram: TOKEN_2022_PROGRAM_ID, pool: PublicKey.default, poolRegistered: false } as unknown as LaunchAccount;
     expect(() => launchKeysFromAccount(launch)).toThrow(/registered pool/);
-    expect(launchKeysFromAccount(launch, k.pool).pool.equals(k.pool)).toBe(true);
+    const keys = launchKeysFromAccount(launch, k.pool);
+    expect(keys.pool.equals(k.pool)).toBe(true);
+    expect(keys.creator!.equals(creator)).toBe(true);
+  });
+
+  it("PLATFORM_TREASURY is the program's #[constant]", () => {
+    const c = (STOCKFLOOR_IDL.constants ?? []).find((x) => x.name === "PLATFORM_TREASURY");
+    expect(c, "PLATFORM_TREASURY in the IDL").toBeDefined();
+    expect(c!.value).toBe(PLATFORM_TREASURY.toBase58());
+    expect(PLATFORM_TREASURY.toBase58()).toBe("78tRFS255ADZT2oMSXi5xjHt7Y2SVDLdDEBz759eQsqJ");
   });
 });
 

@@ -1,18 +1,26 @@
 /**
  * StockFloor account decoders (docs/research/program-design.md §3).
  *
- * `Launch` v2 is 351 bytes (Borsh, 8-byte discriminator). Decoding is done by fixed offsets with
- * DataView so it runs in browsers; test/stockfloor-accounts.test.ts cross-checks it against the
- * Anchor coder built from the IDL.
+ * `Launch` is 351 bytes (Borsh, 8-byte discriminator) in both v2 and v3: v3 took 16 of the 62
+ * reserved bytes for the platform and creator payout counters, which read 0 on a v2 account.
+ * Decoding is done by fixed offsets with DataView so it runs in browsers; test/accounts.test.ts
+ * cross-checks it against the Anchor coder built from the IDL.
+ *
+ * Fee routing depends on `version` (docs/DECISIONS.md D2): v3 splits the fees between the
+ * platform treasury, the creator and the vault; v2 launches (created before the fee model) keep
+ * paying every harvest 100% into the vault.
  */
 import { PublicKey } from "@solana/web3.js";
 import { bytesEqual, readBool, readI64, readPubkey, readU128, readU16, readU64, readU8 } from "../bytes";
 
 export const LAUNCH_DISCRIMINATOR = Uint8Array.from([144, 51, 51, 163, 206, 85, 213, 38]);
 export const LAUNCH_ACCOUNT_SIZE = 351;
-export const LAUNCH_VERSION = 2;
+/** Version written by the current program's `create_launch`. */
+export const LAUNCH_VERSION = 3;
+/** First launch version whose harvests split fees between platform, creator and vault. */
+export const LAUNCH_VERSION_FEE_SPLIT = 3;
 
-/** Raw offsets of `Launch` v2 fields (for getProgramAccounts memcmp filters). */
+/** Raw offsets of `Launch` fields (for getProgramAccounts memcmp filters). */
 export const LAUNCH_OFFSETS = {
   version: 8,
   bump: 9,
@@ -35,7 +43,9 @@ export const LAUNCH_OFFSETS = {
   totalRedeemedBase: 265,
   totalRedeemedQuote: 273,
   totalExitFees: 281,
-  reserved: 289,
+  totalPlatformQuote: 289,
+  totalCreatorQuote: 297,
+  reserved: 305,
 } as const;
 
 export interface LaunchAccount {
@@ -65,6 +75,12 @@ export interface LaunchAccount {
   totalRedeemedBase: bigint;
   totalRedeemedQuote: bigint;
   totalExitFees: bigint;
+  /** Quote paid to the platform treasury by this launch's harvests (v3; 0 on v2). Informational. */
+  totalPlatformQuote: bigint;
+  /** Quote paid to the launch creator by this launch's harvests (v3; 0 on v2). Informational. */
+  totalCreatorQuote: bigint;
+  /** v3 and later: harvests split fees between platform, creator and vault (v2: 100% to the vault). */
+  feeSplitEnabled: boolean;
 }
 
 export function isLaunchAccountData(data: Uint8Array): boolean {
@@ -75,8 +91,9 @@ export function decodeLaunch(data: Uint8Array): LaunchAccount {
   if (!isLaunchAccountData(data)) throw new Error("not a StockFloor Launch account (discriminator or size)");
   const o = LAUNCH_OFFSETS;
   const pool = readPubkey(data, o.pool);
+  const version = readU8(data, o.version);
   return {
-    version: readU8(data, o.version),
+    version,
     bump: readU8(data, o.bump),
     claimerBump: readU8(data, o.claimerBump),
     vaultAuthorityBump: readU8(data, o.vaultAuthorityBump),
@@ -98,6 +115,9 @@ export function decodeLaunch(data: Uint8Array): LaunchAccount {
     totalRedeemedBase: readU64(data, o.totalRedeemedBase),
     totalRedeemedQuote: readU64(data, o.totalRedeemedQuote),
     totalExitFees: readU64(data, o.totalExitFees),
+    totalPlatformQuote: readU64(data, o.totalPlatformQuote),
+    totalCreatorQuote: readU64(data, o.totalCreatorQuote),
+    feeSplitEnabled: version >= LAUNCH_VERSION_FEE_SPLIT,
   };
 }
 

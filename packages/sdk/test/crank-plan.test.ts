@@ -42,6 +42,7 @@ function scenario(over: {
   claimerBase?: bigint | null;
   positions?: Array<{ a: bigint; b: bigint; foreign?: boolean }>;
   launchMigratedLatch?: boolean;
+  version?: number;
 }): CrankInput {
   const config = key();
   const baseMint = key();
@@ -60,7 +61,10 @@ function scenario(over: {
   const registered = over.registered ?? true;
   const poolKey = dbcPoolPda(config, baseMint, SPYX);
   const launch = {
+    version: over.version ?? 3,
+    feeSplitEnabled: (over.version ?? 3) >= 3,
     config,
+    creator: key(),
     baseMint,
     quoteMint: SPYX,
     quoteTokenProgram: TOKEN_2022_PROGRAM_ID,

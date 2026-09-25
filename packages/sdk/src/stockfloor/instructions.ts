@@ -15,8 +15,12 @@ import {
   DBC_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
+  PLATFORM_TREASURY,
   associatedTokenAddress,
   claimerBaseAccount,
+  claimerQuoteAccount,
+  creatorQuoteAccount,
+  platformQuoteAccount,
   dammV2TokenVaultPda,
   dbcTokenVaultPda,
 } from "../addresses";
@@ -36,6 +40,11 @@ export interface LaunchKeys {
   quoteMint: PublicKey;
   /** Token program of the quote mint (Token-2022 for xStocks). */
   quoteTokenProgram: PublicKey;
+  /**
+   * The launch creator (`launch.creator`), whose quote ATA is the creator payee of
+   * harvest_migration_fee and harvest_lp_fees. Filled by `launchKeysFromAccount`.
+   */
+  creator?: PublicKey;
 }
 
 export function launchKeysFromAccount(launch: LaunchAccount, pool?: PublicKey): LaunchKeys {
@@ -47,7 +56,28 @@ export function launchKeysFromAccount(launch: LaunchAccount, pool?: PublicKey): 
     baseMint: launch.baseMint,
     quoteMint: launch.quoteMint,
     quoteTokenProgram: launch.quoteTokenProgram,
+    creator: launch.creator,
   };
+}
+
+/** The launch creator for the fee-split harvests: the explicit argument, else `keys.creator`. */
+function launchCreator(k: LaunchKeys, creator: PublicKey | undefined, name: string): PublicKey {
+  const c = creator ?? k.creator;
+  if (!c) throw new Error(`${name}: pass the launch creator (launch.creator) as \`creator\` or in \`keys.creator\``);
+  return c;
+}
+
+/**
+ * The three fee-split accounts appended to harvest_migration_fee and harvest_lp_fees, in program
+ * order: the transit (claimer quote ATA), the creator's quote ATA and the platform's quote ATA.
+ * The program checks each address, so the creator must be `launch.creator` (not `pool.creator`).
+ */
+function feeSplitAccounts(k: LaunchKeys, creator: PublicKey): AccountMeta[] {
+  return [
+    w(claimerQuoteAccount(k.config, k.quoteMint, k.quoteTokenProgram)),
+    w(creatorQuoteAccount(creator, k.quoteMint, k.quoteTokenProgram)),
+    w(platformQuoteAccount(k.quoteMint, k.quoteTokenProgram)),
+  ];
 }
 
 function discriminator(name: string): Uint8Array {
@@ -83,6 +113,11 @@ function ix(keys: AccountMeta[], bytes: Uint8Array): TransactionInstruction {
 
 // ------------------------------------------------------------------ create_launch
 
+/**
+ * create_launch also creates (init_if_needed, paid by `payer`) the creator's quote ATA, the
+ * platform treasury's quote ATA and the claimer's quote ATA (the fee-split transit), so no harvest
+ * ever needs a payer for them.
+ */
 export interface CreateLaunchIxArgs {
   payer: PublicKey;
   creator: PublicKey;
@@ -111,6 +146,10 @@ export function createLaunchIx(a: CreateLaunchIxArgs): TransactionInstruction {
       r(quoteTokenProgram),
       r(ASSOCIATED_TOKEN_PROGRAM_ID),
       r(SystemProgram.programId),
+      w(creatorQuoteAccount(a.creator, a.quoteMint, quoteTokenProgram)),
+      r(PLATFORM_TREASURY),
+      w(platformQuoteAccount(a.quoteMint, quoteTokenProgram)),
+      w(claimerQuoteAccount(a.config, a.quoteMint, quoteTokenProgram)),
     ],
     data("create_launch", u16(a.exitFeeBps)),
   );
@@ -127,6 +166,10 @@ export function registerPoolIx(a: { config: PublicKey; pool: PublicKey; baseMint
 
 // ------------------------------------------------------------------ harvests (permissionless)
 
+/**
+ * v3: the partner curve fees go straight from DBC to the platform treasury's quote ATA (the vault
+ * is not touched); v2: into the vault. Base fees are burned either way.
+ */
 export function harvestCurveFeesIx(a: { payer: PublicKey; keys: LaunchKeys }): TransactionInstruction {
   const k = a.keys;
   return ix(
@@ -149,37 +192,41 @@ export function harvestCurveFeesIx(a: { payer: PublicKey; keys: LaunchKeys }): T
       r(DBC_POOL_AUTHORITY),
       r(DBC_EVENT_AUTHORITY),
       r(DBC_PROGRAM_ID),
+      w(platformQuoteAccount(k.quoteMint, k.quoteTokenProgram)),
     ],
     data("harvest_curve_fees"),
   );
 }
 
-function harvestDbcQuoteIx(name: "harvest_migration_fee" | "harvest_surplus", k: LaunchKeys): TransactionInstruction {
-  return ix(
-    [
-      w(launchPda(k.config)[0]),
-      r(authorityPda(k.config)[0]),
-      r(k.config),
-      w(k.pool),
-      w(vaultAddress(k.config, k.quoteMint, k.quoteTokenProgram)),
-      w(dbcTokenVaultPda(k.pool, k.quoteMint)),
-      r(k.quoteMint),
-      r(k.quoteTokenProgram),
-      r(DBC_POOL_AUTHORITY),
-      r(DBC_EVENT_AUTHORITY),
-      r(DBC_PROGRAM_ID),
-    ],
-    data(name),
-  );
+function harvestDbcQuoteKeys(k: LaunchKeys): AccountMeta[] {
+  return [
+    w(launchPda(k.config)[0]),
+    r(authorityPda(k.config)[0]),
+    r(k.config),
+    w(k.pool),
+    w(vaultAddress(k.config, k.quoteMint, k.quoteTokenProgram)),
+    w(dbcTokenVaultPda(k.pool, k.quoteMint)),
+    r(k.quoteMint),
+    r(k.quoteTokenProgram),
+    r(DBC_POOL_AUTHORITY),
+    r(DBC_EVENT_AUTHORITY),
+    r(DBC_PROGRAM_ID),
+  ];
 }
 
-/** No payer account: any fee payer can send it. */
-export function harvestMigrationFeeIx(a: { keys: LaunchKeys }): TransactionInstruction {
-  return harvestDbcQuoteIx("harvest_migration_fee", a.keys);
+/**
+ * No payer account: any fee payer can send it. v3 splits the partner migration fee through the
+ * transit: platform 5% of the threshold, creator 5% of the threshold, the rest to the vault
+ * (`graduationSplit`); v2 pays it all into the vault. `creator` defaults to `keys.creator`.
+ */
+export function harvestMigrationFeeIx(a: { keys: LaunchKeys; creator?: PublicKey }): TransactionInstruction {
+  const creator = launchCreator(a.keys, a.creator, "harvestMigrationFeeIx");
+  return ix([...harvestDbcQuoteKeys(a.keys), ...feeSplitAccounts(a.keys, creator)], data("harvest_migration_fee"));
 }
 
+/** No payer account. The partner surplus goes 100% to the vault (every launch version). */
 export function harvestSurplusIx(a: { keys: LaunchKeys }): TransactionInstruction {
-  return harvestDbcQuoteIx("harvest_surplus", a.keys);
+  return ix(harvestDbcQuoteKeys(a.keys), data("harvest_surplus"));
 }
 
 /**
@@ -211,10 +258,17 @@ export interface HarvestLpFeesIxArgs {
   position: PublicKey;
   /** Token account holding the position NFT; its owner must be the claimer. */
   positionNftAccount: PublicKey;
+  /** The launch creator (`launch.creator`); defaults to `keys.creator`. */
+  creator?: PublicKey;
 }
 
+/**
+ * v3 splits the harvested quote fees through the transit: creator 50%, platform 20%, vault the
+ * rest (`lpFeeSplit`); v2 pays them all into the vault. Base fees are burned either way.
+ */
 export function harvestLpFeesIx(a: HarvestLpFeesIxArgs): TransactionInstruction {
   const k = a.keys;
+  const creator = launchCreator(k, a.creator, "harvestLpFeesIx");
   return ix(
     [
       w(a.payer, true),
@@ -236,6 +290,7 @@ export function harvestLpFeesIx(a: HarvestLpFeesIxArgs): TransactionInstruction 
       r(DAMM_V2_POOL_AUTHORITY),
       r(DAMM_V2_EVENT_AUTHORITY),
       r(DAMM_V2_PROGRAM_ID),
+      ...feeSplitAccounts(k, creator),
     ],
     data("harvest_lp_fees"),
   );

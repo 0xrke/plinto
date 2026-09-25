@@ -105,6 +105,32 @@ export function associatedTokenAddress(owner: PublicKey, mint: PublicKey, tokenP
   return getAssociatedTokenAddressSync(mint, owner, true, tokenProgram, ASSOCIATED_TOKEN_PROGRAM_ID);
 }
 
+/**
+ * Platform treasury (the program's `PLATFORM_TREASURY` #[constant]): a plain key, only ever a
+ * payment destination through its quote ATA. Presale fees, 5% of the raise at graduation and 20% of
+ * the LP fees of launch v3 go there. Changing it needs a program upgrade.
+ */
+export const PLATFORM_TREASURY = new PublicKey("78tRFS255ADZT2oMSXi5xjHt7Y2SVDLdDEBz759eQsqJ");
+
+/** Platform payee account: ATA(PLATFORM_TREASURY, quote mint, quote token program), shared by every launch. */
+export function platformQuoteAccount(quoteMint: PublicKey, quoteTokenProgram: PublicKey): PublicKey {
+  return associatedTokenAddress(PLATFORM_TREASURY, quoteMint, quoteTokenProgram);
+}
+
+/** Creator payee account: ATA(launch.creator, quote mint, quote token program). */
+export function creatorQuoteAccount(creator: PublicKey, quoteMint: PublicKey, quoteTokenProgram: PublicKey): PublicKey {
+  return associatedTokenAddress(creator, quoteMint, quoteTokenProgram);
+}
+
+/**
+ * Transit account of the v3 fee split: ATA(claimer PDA, quote mint, quote token program). DBC and
+ * DAMM v2 pay one lump into it; the same instruction pays the platform, the creator and the vault
+ * out of it, so it is empty between instructions.
+ */
+export function claimerQuoteAccount(config: PublicKey, quoteMint: PublicKey, quoteTokenProgram: PublicKey): PublicKey {
+  return associatedTokenAddress(authorityPda(config)[0], quoteMint, quoteTokenProgram);
+}
+
 /** Claimer base ATA: ATA(claimer PDA, base mint, SPL Token). Base fees and donations land here and are burned. */
 export function claimerBaseAccount(config: PublicKey, baseMint: PublicKey): PublicKey {
   return associatedTokenAddress(authorityPda(config)[0], baseMint, TOKEN_PROGRAM_ID);
