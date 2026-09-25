@@ -1,4 +1,8 @@
-# StockFloor
+# Plinto (formerly StockFloor)
+
+> **Plinto** is the product name: [plinto.xyz](https://plinto.xyz). The project was built under the working name
+> StockFloor, so the code, program and docs still use that name (`stockfloor` program, `@stockfloor/*`
+> packages). They are the same project.
 
 **A token launchpad on Meteora DBC where every token gets a hard price floor backed by tokenized S&P 500.**
 
