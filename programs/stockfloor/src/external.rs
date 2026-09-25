@@ -38,6 +38,11 @@ pub const DBC_BASE_FEE_MODE_FEE_SCHEDULER_EXPONENTIAL: u8 = 1;
 pub const DBC_MIGRATED_COLLECT_FEE_MODE_QUOTE_TOKEN: u8 = 0;
 /// DBC `TokenAuthorityOption::Immutable`.
 pub const DBC_TOKEN_AUTHORITY_IMMUTABLE: u8 = 1;
+/// DBC `DammV2DynamicFee::Disable` (`migrated_dynamic_fee`).
+pub const DBC_MIGRATED_DYNAMIC_FEE_DISABLE: u8 = 0;
+/// DAMM v2 `BaseFeeMode::FeeTimeSchedulerLinear` (`migrated_pool_base_fee_mode`). DBC builds it with
+/// no periods, i.e. a fixed fee of `migrated_pool_fee_bps`.
+pub const DAMM_V2_BASE_FEE_MODE_FEE_TIME_SCHEDULER_LINEAR: u8 = 0;
 
 /// Size of the zero-copy body (without the 8-byte discriminator), per vendored sources.
 pub const DBC_POOL_CONFIG_SIZE: usize = 1040;
@@ -131,15 +136,27 @@ pub fn partner_migration_fee(migration_quote_threshold: u64, migration_fee_perce
     (t - quote_amount) as u64
 }
 
+/// The vault's part of the partner migration fee of a StockFloor config at graduation (v3 split:
+/// `math::graduation_split` of `partner_migration_fee`). 0 on any arithmetic failure, which the
+/// caller treats as a rejection.
+pub fn vault_at_graduation(migration_quote_threshold: u64, migration_fee_percentage: u8) -> u64 {
+    let received = partner_migration_fee(migration_quote_threshold, migration_fee_percentage);
+    crate::math::graduation_split(migration_quote_threshold, received)
+        .map(|split| split.vault)
+        .unwrap_or(0)
+}
+
 /// Validation of a DBC config for a StockFloor launch (brief §4 and §5.3.1). Pure
 /// function over the decoded config so it can be unit tested.
 ///
 /// Besides the brief §5.3.1 list, it binds every config field that decides whether a
 /// launch really is StockFloor-shaped, so the `Launch` PDA stays a trustworthy marker:
-/// dynamic supply only, creator trading share <= 30%, a fee-scheduler base fee of at most
-/// 20% with no dynamic fee, quote-only LP fees after migration, immutable metadata and no
-/// pool creation fee, and a migration threshold large enough that the partner migration fee
-/// (the initial floor) does not round to zero.
+/// dynamic supply only, no creator share of curve fees (the partner share goes to the platform), a
+/// fee-scheduler base fee of at most 20% with no dynamic fee, a migrated DAMM v2 pool with a fixed
+/// 1% quote-only fee (Customizable option, no dynamic fee, no compounding, no market-cap schedule),
+/// no first swap at the minimum fee, immutable metadata and no pool creation fee, and a migration
+/// threshold large enough that the vault's part of the migration fee (the initial floor) does not
+/// round to zero.
 ///
 /// What it deliberately does not check: the quote mint allowlist, and how large the raise is
 /// in fiat terms. The latter needs a price oracle, which this program does not have, so the
@@ -172,13 +189,14 @@ pub fn validate_launch_config(
     {
         return Err(StockfloorError::MigrationFeePercentageOutOfRange);
     }
-    // The partner migration fee is the whole initial floor (`creator_migration_fee_percentage`
-    // is 0 above). DBC itself only requires `migration_quote_threshold > 0`, and its rounding
-    // (`get_migration_quote_amount`: quote_amount = ceil(T * (100 - pct) / 100), fee = T -
-    // quote_amount) makes the fee exactly 0 for a dust threshold — e.g. T <= 3 at pct = 30.
-    // Such a launch would reach the redeemable phase with a provably empty vault while carrying
-    // a `Launch` PDA, so reject it here.
-    if partner_migration_fee(
+    // The vault's part of the partner migration fee is the initial floor
+    // (`creator_migration_fee_percentage` is 0 above; the platform and creator cuts come out of
+    // the partner fee, `math::graduation_split`). DBC itself only requires
+    // `migration_quote_threshold > 0`, and its rounding (`get_migration_quote_amount`:
+    // quote_amount = ceil(T * (100 - pct) / 100), fee = T - quote_amount) makes the fee exactly 0
+    // for a dust threshold, e.g. T = 1 at pct = 40. Such a launch would reach the redeemable phase
+    // with a provably empty vault while carrying a `Launch` PDA, so reject it here.
+    if vault_at_graduation(
         config.migration_quote_threshold,
         config.migration_fee_percentage,
     ) == 0
@@ -233,6 +251,26 @@ pub fn validate_launch_config(
     }
     if config.migrated_collect_fee_mode != DBC_MIGRATED_COLLECT_FEE_MODE_QUOTE_TOKEN {
         return Err(StockfloorError::MigratedCollectFeeModeNotQuote);
+    }
+    // The migrated DAMM v2 pool: a fixed 1% fee (audit F04/F05). The fixed tiers 0-5 of
+    // `migration_fee_option` inherit a static Meteora DAMM v2 config (its dynamic fee and collect
+    // mode are not in this config), so only Customizable is accepted, and then every fee field that
+    // DBC copies into the DAMM v2 pool is pinned.
+    if config.migration_fee_option != DBC_MIGRATION_FEE_OPTION_CUSTOMIZABLE
+        || config.migrated_pool_fee_bps != REQUIRED_MIGRATED_POOL_FEE_BPS
+        || config.migrated_pool_base_fee_mode != DAMM_V2_BASE_FEE_MODE_FEE_TIME_SCHEDULER_LINEAR
+        || config.migrated_compounding_fee_bps != 0
+        || config.migrated_pool_base_fee_bytes != [0u8; 16]
+    {
+        return Err(StockfloorError::MigratedPoolFeeInvalid);
+    }
+    if config.migrated_dynamic_fee != DBC_MIGRATED_DYNAMIC_FEE_DISABLE {
+        return Err(StockfloorError::MigratedDynamicFeeNotAllowed);
+    }
+    // DBC lets the pool creator's bundled first swap pay the minimum fee, bypassing an anti-snipe
+    // fee schedule (audit F04).
+    if config.enable_first_swap_with_min_fee != 0 {
+        return Err(StockfloorError::FirstSwapWithMinFeeNotAllowed);
     }
     if config.token_update_authority != DBC_TOKEN_AUTHORITY_IMMUTABLE {
         return Err(StockfloorError::TokenUpdateAuthorityNotImmutable);
@@ -336,6 +374,13 @@ pub(crate) mod tests {
         assert_eq!(offset_of!(PoolConfig, creator_trading_fee_percentage), 237);
         assert_eq!(offset_of!(PoolConfig, token_update_authority), 238);
         assert_eq!(offset_of!(PoolConfig, migrated_collect_fee_mode), 352);
+        assert_eq!(offset_of!(PoolConfig, migration_fee_option), 235);
+        assert_eq!(offset_of!(PoolConfig, migrated_dynamic_fee), 353);
+        assert_eq!(offset_of!(PoolConfig, migrated_pool_fee_bps), 354);
+        assert_eq!(offset_of!(PoolConfig, migrated_pool_base_fee_mode), 356);
+        assert_eq!(offset_of!(PoolConfig, enable_first_swap_with_min_fee), 357);
+        assert_eq!(offset_of!(PoolConfig, migrated_compounding_fee_bps), 358);
+        assert_eq!(offset_of!(PoolConfig, migrated_pool_base_fee_bytes), 368);
         assert_eq!(offset_of!(PoolConfig, sqrt_start_price), 384);
         assert_eq!(offset_of!(PoolConfig, curve), 400);
 
@@ -517,6 +562,34 @@ pub(crate) mod tests {
                 "pool_creation_fee",
                 offset_of!(PoolConfig, pool_creation_fee),
             ),
+            (
+                "migration_fee_option",
+                offset_of!(PoolConfig, migration_fee_option),
+            ),
+            (
+                "migrated_dynamic_fee",
+                offset_of!(PoolConfig, migrated_dynamic_fee),
+            ),
+            (
+                "migrated_pool_fee_bps",
+                offset_of!(PoolConfig, migrated_pool_fee_bps),
+            ),
+            (
+                "migrated_pool_base_fee_mode",
+                offset_of!(PoolConfig, migrated_pool_base_fee_mode),
+            ),
+            (
+                "enable_first_swap_with_min_fee",
+                offset_of!(PoolConfig, enable_first_swap_with_min_fee),
+            ),
+            (
+                "migrated_compounding_fee_bps",
+                offset_of!(PoolConfig, migrated_compounding_fee_bps),
+            ),
+            (
+                "migrated_pool_base_fee_bytes",
+                offset_of!(PoolConfig, migrated_pool_base_fee_bytes),
+            ),
         ] {
             assert_eq!(cfg[field], off, "PoolConfig.{field}");
         }
@@ -625,17 +698,19 @@ pub(crate) mod tests {
         c.quote_mint = quote_mint;
         c.fee_claimer = claimer;
         c.leftover_receiver = claimer;
-        c.migration_fee_percentage = 50;
+        c.migration_fee_percentage = 60;
         c.creator_migration_fee_percentage = 0;
         c.partner_permanent_locked_liquidity_percentage = 100;
         c.collect_fee_mode = DBC_COLLECT_FEE_MODE_QUOTE_TOKEN;
         c.migration_option = DBC_MIGRATION_OPTION_DAMM_V2;
         c.token_type = DBC_TOKEN_TYPE_SPL_TOKEN;
         c.token_decimal = 6;
-        c.creator_trading_fee_percentage = 30;
+        c.creator_trading_fee_percentage = 0;
         c.migration_quote_threshold = 1_000_000_000;
-        c.pool_fees.base_fee.cliff_fee_numerator = 10_000_000; // 1%
+        c.pool_fees.base_fee.cliff_fee_numerator = 2_500_000; // 0.25%, the DBC minimum
         c.token_update_authority = DBC_TOKEN_AUTHORITY_IMMUTABLE;
+        c.migration_fee_option = crate::constants::DBC_MIGRATION_FEE_OPTION_CUSTOMIZABLE;
+        c.migrated_pool_fee_bps = crate::constants::REQUIRED_MIGRATED_POOL_FEE_BPS;
         c
     }
 
@@ -683,18 +758,18 @@ pub(crate) mod tests {
         assert_eq!(validate_launch_config(&c, &a, &q, 200), Ok(()));
         assert_eq!(validate_launch_config(&c, &a, &q, 0), Ok(()));
         assert_eq!(validate_launch_config(&c, &a, &q, 500), Ok(()));
-        for pct in [30u8, 70, 99] {
+        // Vault share 30-60% of the raise, pool 60-30%.
+        for pct in 40u8..=70 {
             let mut c2 = valid_config(a, q);
             c2.migration_fee_percentage = pct;
-            assert_eq!(validate_launch_config(&c2, &a, &q, 200), Ok(()));
+            assert_eq!(validate_launch_config(&c2, &a, &q, 200), Ok(()), "mf {pct}");
         }
         // Boundaries of the StockFloor-shape bounds are inclusive.
         let mut c3 = valid_config(a, q);
-        c3.creator_trading_fee_percentage = 0;
         c3.pool_fees.base_fee.cliff_fee_numerator = crate::constants::MAX_CURVE_FEE_NUMERATOR;
         c3.pool_fees.base_fee.base_fee_mode = DBC_BASE_FEE_MODE_FEE_SCHEDULER_EXPONENTIAL;
         assert_eq!(validate_launch_config(&c3, &a, &q, 200), Ok(()));
-        c3.creator_trading_fee_percentage = crate::constants::MAX_CREATOR_TRADING_FEE_PERCENTAGE;
+        c3.pool_fees.base_fee.base_fee_mode = 0; // linear scheduler (an anti-snipe schedule)
         assert_eq!(validate_launch_config(&c3, &a, &q, 200), Ok(()));
     }
 
@@ -718,7 +793,19 @@ pub(crate) mod tests {
                 StockfloorError::CreatorMigrationFeeNotZero,
             ),
             (
-                |c, _| c.migration_fee_percentage = 29,
+                |c, _| c.migration_fee_percentage = 39,
+                StockfloorError::MigrationFeePercentageOutOfRange,
+            ),
+            (
+                |c, _| c.migration_fee_percentage = 71,
+                StockfloorError::MigrationFeePercentageOutOfRange,
+            ),
+            (
+                |c, _| c.migration_fee_percentage = 30,
+                StockfloorError::MigrationFeePercentageOutOfRange,
+            ),
+            (
+                |c, _| c.migration_fee_percentage = 99,
                 StockfloorError::MigrationFeePercentageOutOfRange,
             ),
             (
@@ -791,7 +878,11 @@ pub(crate) mod tests {
                 StockfloorError::FixedTokenSupplyNotAllowed,
             ),
             (
-                |c, _| c.creator_trading_fee_percentage = 31,
+                |c, _| c.creator_trading_fee_percentage = 1,
+                StockfloorError::CreatorTradingFeeTooHigh,
+            ),
+            (
+                |c, _| c.creator_trading_fee_percentage = 30,
                 StockfloorError::CreatorTradingFeeTooHigh,
             ),
             (
@@ -830,6 +921,91 @@ pub(crate) mod tests {
                 |c, _| c.pool_creation_fee = 1_000_000,
                 StockfloorError::PoolCreationFeeNotZero,
             ),
+            // Migrated DAMM v2 pool (audit F04/F05).
+            (
+                |c, _| c.migration_fee_option = 0,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migration_fee_option = 1,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migration_fee_option = 2,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migration_fee_option = 3,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migration_fee_option = 4,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migration_fee_option = 5,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migration_fee_option = 7,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migrated_pool_fee_bps = 0,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migrated_pool_fee_bps = 25,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migrated_pool_fee_bps = 99,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migrated_pool_fee_bps = 101,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migrated_pool_fee_bps = 1_000,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migrated_pool_base_fee_mode = 1,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migrated_pool_base_fee_mode = 2,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migrated_pool_base_fee_mode = 3,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migrated_pool_base_fee_mode = 4,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migrated_compounding_fee_bps = 1,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migrated_pool_base_fee_bytes[0] = 1,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migrated_pool_base_fee_bytes[15] = 1,
+                StockfloorError::MigratedPoolFeeInvalid,
+            ),
+            (
+                |c, _| c.migrated_dynamic_fee = 1,
+                StockfloorError::MigratedDynamicFeeNotAllowed,
+            ),
+            (
+                |c, _| c.enable_first_swap_with_min_fee = 1,
+                StockfloorError::FirstSwapWithMinFeeNotAllowed,
+            ),
         ];
         for (i, (mutate, expected)) in cases.into_iter().enumerate() {
             let mut c = valid_config(a, q);
@@ -845,18 +1021,16 @@ pub(crate) mod tests {
             validate_launch_config(&c, &a, &q, 501),
             Err(StockfloorError::ExitFeeTooHigh)
         );
-        // A threshold whose partner migration fee rounds to zero (the initial floor would be
+        // A threshold whose vault part at graduation rounds to zero (the initial floor would be
         // empty) is rejected; the smallest threshold above it is accepted.
-        for pct in [
-            crate::constants::MIN_MIGRATION_FEE_PERCENTAGE,
-            50,
-            crate::constants::MAX_MIGRATION_FEE_PERCENTAGE,
-        ] {
+        for pct in crate::constants::MIN_MIGRATION_FEE_PERCENTAGE
+            ..=crate::constants::MAX_MIGRATION_FEE_PERCENTAGE
+        {
             let mut c = valid_config(a, q);
             c.migration_fee_percentage = pct;
             let smallest_ok = (1..=200u64)
-                .find(|t| partner_migration_fee(*t, pct) > 0)
-                .expect("some threshold pays a non-zero migration fee");
+                .find(|t| vault_at_graduation(*t, pct) > 0)
+                .expect("some threshold leaves the vault a non-zero part");
             for t in [0u64, smallest_ok - 1] {
                 c.migration_quote_threshold = t;
                 assert_eq!(
@@ -877,6 +1051,36 @@ pub(crate) mod tests {
             validate_launch_config(&c, &other, &q, 200),
             Err(StockfloorError::FeeClaimerMismatch)
         );
+    }
+
+    /// Smallest threshold (raw units) whose vault part at graduation is non-zero, per accepted mf.
+    /// Every accepted mf is at least 40, so T = 2 or 3 suffices: the cuts are 0 below T = 20.
+    #[test]
+    fn vault_dust_table() {
+        let smallest = |pct: u8| {
+            (0..=1_000u64)
+                .find(|t| vault_at_graduation(*t, pct) > 0)
+                .unwrap()
+        };
+        for pct in 40u8..=70 {
+            let t = smallest(pct);
+            assert!(t <= 3, "mf {pct}: smallest threshold {t}");
+            assert_eq!(vault_at_graduation(t, pct), partner_migration_fee(t, pct));
+            // Above T = 20 the cuts start and the vault still gets at least 30% of T minus 1.
+            for t in [20u64, 21, 39, 40, 1_000, 131_346_320] {
+                let v = vault_at_graduation(t, pct) as u128;
+                assert!(
+                    v * 100 + 100 >= t as u128 * 30,
+                    "mf {pct}, T {t}, vault {v}"
+                );
+            }
+        }
+        assert_eq!(smallest(40), 3);
+        assert_eq!(smallest(70), 2);
+        assert_eq!(vault_at_graduation(2, 40), 0);
+        assert_eq!(vault_at_graduation(0, 70), 0);
+        // The C1 threshold at the default vault share 50% (mf 60).
+        assert_eq!(vault_at_graduation(131_346_320, 60), 65_673_160);
     }
 
     fn account_bytes<T: bytemuck::Pod>(disc: &[u8], body: &T) -> Vec<u8> {
@@ -908,7 +1112,7 @@ pub(crate) mod tests {
             load_dbc_config(i).unwrap()
         });
         assert_eq!(decoded.fee_claimer, a);
-        assert_eq!(decoded.migration_fee_percentage, 50);
+        assert_eq!(decoded.migration_fee_percentage, 60);
 
         // Wrong owner.
         let mut data = account_bytes(PoolConfig::DISCRIMINATOR, &cfg);

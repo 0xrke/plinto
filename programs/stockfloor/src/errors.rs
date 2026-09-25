@@ -16,7 +16,7 @@ pub enum StockfloorError {
     LeftoverReceiverMismatch,
     #[msg("DBC config creator_migration_fee_percentage must be 0")]
     CreatorMigrationFeeNotZero,
-    #[msg("DBC config migration_fee_percentage must be within [30, 99]")]
+    #[msg("DBC config migration_fee_percentage must be within [40, 70]")]
     MigrationFeePercentageOutOfRange,
     #[msg("DBC config must lock 100% of migrated liquidity permanently for the partner")]
     LiquidityNotFullyPartnerLocked,
@@ -36,7 +36,7 @@ pub enum StockfloorError {
     QuoteMintMismatch,
     #[msg("DBC config must use dynamic token supply (fixed supply is not supported)")]
     FixedTokenSupplyNotAllowed,
-    #[msg("DBC config creator_trading_fee_percentage exceeds 30")]
+    #[msg("DBC config creator_trading_fee_percentage must be 0")]
     CreatorTradingFeeTooHigh,
     #[msg("DBC config base fee must be a fee scheduler with a cliff fee of at most 20%")]
     CurveFeeTooHigh,
@@ -138,9 +138,25 @@ pub enum StockfloorError {
     // Appended after `FloorAccountMismatch` on purpose: Anchor numbers these sequentially from
     // 6000, so a new variant goes at the end and never renumbers an existing error.
     #[msg(
-        "DBC config migration_quote_threshold is too small: the partner migration fee (the whole initial floor) would round to zero"
+        "DBC config migration_quote_threshold is too small: the vault's part of the migration fee (the initial floor) would round to zero"
     )]
     MigrationQuoteThresholdTooSmall,
+
+    // ----- fee model (launch v3); appended, never reordered -----
+    #[msg("DBC config must use the Customizable migration fee option with a 1% migrated pool fee and no compounding or market-cap fee schedule")]
+    MigratedPoolFeeInvalid,
+    #[msg("DBC config must not enable the dynamic fee of the migrated DAMM v2 pool")]
+    MigratedDynamicFeeNotAllowed,
+    #[msg("DBC config must not enable the creator's first swap with the minimum fee")]
+    FirstSwapWithMinFeeNotAllowed,
+    #[msg("Payee token account is not the expected associated token account")]
+    PayeeAccountMismatch,
+    #[msg("Platform quote account cannot receive transfers (closed, frozen, wrong owner or mint, or requires memos)")]
+    PlatformQuoteAccountUnavailable,
+    #[msg("Claimer quote (transit) account has a delegate, close authority, an owner other than the claimer, CPI guard or required memo")]
+    ClaimerQuoteAccountEncumbered,
+    #[msg("Claimer quote (transit) account was not emptied by the fee split")]
+    TransitNotEmptied,
 }
 
 impl From<MathError> for StockfloorError {

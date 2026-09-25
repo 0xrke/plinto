@@ -25,12 +25,12 @@ pub const MAX_EXIT_FEE_BPS: u16 = 500;
 /// that becomes the partner migration fee). Of that fee, 5% of the threshold goes to the platform,
 /// 5% to the creator and the rest to the vault (`math::graduation_split`), so the range [40, 70]
 /// is a vault share of 30-60% of the raise and a DAMM v2 pool of 60-30% of it.
-pub const MIN_MIGRATION_FEE_PERCENTAGE: u8 = 30;
-pub const MAX_MIGRATION_FEE_PERCENTAGE: u8 = 99;
+pub const MIN_MIGRATION_FEE_PERCENTAGE: u8 = 40;
+pub const MAX_MIGRATION_FEE_PERCENTAGE: u8 = 70;
 
 /// Maximum DBC `creator_trading_fee_percentage`: 0. The whole partner share of presale fees goes to
 /// the platform treasury (v3 `harvest_curve_fees`); the creator is paid at graduation instead.
-pub const MAX_CREATOR_TRADING_FEE_PERCENTAGE: u8 = 30;
+pub const MAX_CREATOR_TRADING_FEE_PERCENTAGE: u8 = 0;
 
 /// Platform treasury (a plain key, not a PDA: a PDA would need an admin withdraw path). It is only
 /// ever a payment destination, through its quote ATA `ATA(PLATFORM_TREASURY, quote_mint,
@@ -145,7 +145,13 @@ mod tests {
         LP_FEE_CREATOR_BPS as u64 + LP_FEE_PLATFORM_BPS as u64 + 3_000
             <= crate::math::BPS_DENOMINATOR
     );
+    // The smallest partner migration fee (40% of T) covers both graduation cuts (10% of T).
+    const _: () = assert!(
+        MIN_MIGRATION_FEE_PERCENTAGE as u64 * 100
+            >= PLATFORM_GRADUATION_FEE_BPS as u64 + CREATOR_GRADUATION_BONUS_BPS as u64 + 3_000
+    );
     const _: () = assert!(LAUNCH_VERSION >= LAUNCH_VERSION_FEE_SPLIT);
+    const _: () = assert!(MAX_CREATOR_TRADING_FEE_PERCENTAGE == 0);
 
     #[test]
     fn platform_treasury_is_the_agreed_key() {
