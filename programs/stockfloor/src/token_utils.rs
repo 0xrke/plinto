@@ -6,8 +6,9 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_2022::spl_token_2022::{
     self,
     extension::{
-        cpi_guard::CpiGuard, memo_transfer::MemoTransfer, pausable::PausableConfig,
-        transfer_hook::TransferHook, BaseStateWithExtensions, StateWithExtensions,
+        confidential_transfer::ConfidentialTransferAccount, cpi_guard::CpiGuard,
+        memo_transfer::MemoTransfer, pausable::PausableConfig, transfer_hook::TransferHook,
+        BaseStateWithExtensions, StateWithExtensions,
     },
     state::{Account as SplAccount, AccountState, Mint as SplMint},
 };
@@ -117,7 +118,11 @@ pub fn check_transit_account_data(
 
 /// `true` when a transfer of `mint` into `info` would succeed as far as the destination is
 /// concerned: the account is owned by `token_program`, unpacks as a token account of `mint` owned
-/// by `owner`, is `Initialized` (not frozen) and does not require incoming transfer memos.
+/// by `owner`, is `Initialized` (not frozen), does not require incoming transfer memos and has not
+/// opted out of non-confidential credits (SPYx has the `ConfidentialTransferMint` extension, so a
+/// holder can configure `ConfidentialTransferAccount` with `allow_non_confidential_credits` off).
+/// These are the destination checks of Token-2022 `process_transfer` (8.0.1); the mint-level ones
+/// (pause, transfer hook) are checked by `assert_quote_mint_transferable`.
 ///
 /// Used before paying the platform or the creator: an account that fails this is skipped and its
 /// share goes to the vault, so a payee can never block a harvest (and with it `redeem`).
@@ -147,6 +152,11 @@ pub fn check_payable_account_data(data: &[u8], owner: &Pubkey, mint: &Pubkey) ->
     }
     if let Ok(memo) = state.get_extension::<MemoTransfer>() {
         if bool::from(memo.require_incoming_transfer_memos) {
+            return false;
+        }
+    }
+    if let Ok(ct) = state.get_extension::<ConfidentialTransferAccount>() {
+        if !bool::from(ct.allow_non_confidential_credits) {
             return false;
         }
     }
@@ -536,6 +546,21 @@ mod tests {
         assert!(!check_payable_account_data(&uninit, &owner, &mint));
         assert!(!check_payable_account_data(&[0u8; 100], &owner, &mint));
         assert!(!check_payable_account_data(&[], &owner, &mint));
+        // Confidential-transfer account that refuses non-confidential credits.
+        let ct = |allow: bool| {
+            payee_with(
+                mint,
+                owner,
+                &[ExtensionType::ConfidentialTransferAccount],
+                |s| {
+                    s.init_extension::<ConfidentialTransferAccount>(true)
+                        .unwrap()
+                        .allow_non_confidential_credits = allow.into();
+                },
+            )
+        };
+        assert!(check_payable_account_data(&ct(true), &owner, &mint));
+        assert!(!check_payable_account_data(&ct(false), &owner, &mint));
         // Legacy SPL Token accounts.
         let ok = legacy_payee(mint, owner, AccountState::Initialized);
         assert!(check_payable_account_data(&ok, &owner, &mint));
