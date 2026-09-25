@@ -347,10 +347,41 @@ Format as above: **decision** · alternatives · why. D1–D13 refer to the impl
   audit F21 is out of scope). `total_harvested_quote` now counts only quote that entered the vault.
 - **Issuer controls stay the one way to stall the floor:** freezing the transit (like freezing the vault) makes the
   split harvests fail until the issuer unfreezes it. That is the same trust in the SPYx issuer as before.
-- **Fork harness pins the v3 fee fields** (`tests/src/fee-model.ts` `applyFeeModelV3`) on SDK-built parameters until
-  the SDK presets produce them; `integration/sdk-presets-fork` checks the SDK's own parameters and is the acceptance
-  test for the SDK part.
+- **Fork harness checks the v3 fee fields** (`tests/src/fee-model.ts` `expectFeeModelV3`) on SDK-built parameters and
+  uses them verbatim (it pinned them until the SDK presets produced them); `integration/sdk-presets-fork` checks the
+  SDK's own parameters and is the acceptance test for the SDK part.
 - **Measured compute units (six runs, 2026-09-25):** `create_launch` up to 163,053 (the first launch also creates the
   platform ATA), `harvest_curve_fees` 91,276 when it creates the claimer base ATA and 59,180 otherwise,
   `harvest_migration_fee` 69,817, `harvest_lp_fees` 90,551. Limits in `integration/compute-budget`: 200,000 /
   120,000 / 85,000 / 100,000 / 120,000; the SDK `CU_LIMITS` should follow.
+
+### Fee model: implementation notes (SDK, scripts, crank)
+
+- **The SDK mirrors the program's `create_launch` config checks** (`validateLaunchConfigParams`,
+  `packages/sdk/src/stockfloor/validateLaunch.ts`, each failure named after the program error) and
+  `buildDbcConfigParams` runs it, so a preset that drifts from what the program accepts fails in the SDK, before the
+  DBC config rent is paid. It checks the parameters DBC derives the stored fields from (market-cap scheduler params
+  for `migrated_pool_base_fee_bytes`, all-zero liquidity vesting infos), which is slightly stricter than the program.
+  · Alternative: rely on the fork tests only.
+- **Fee-split harvest builders take the launch creator** (`creator` argument or `LaunchKeys.creator`, which
+  `launchKeysFromAccount` and `fetchLaunchState` fill from `launch.creator`) and throw without one, rather than guess
+  `pool.creator` (D5). The platform and transit ATAs are derived.
+- **The crank re-creates the platform treasury's quote ATA before every v3 `harvest_curve_fees`** (an idempotent ATA
+  create in the same transaction, rent only when it is missing). The v3 curve fee harvest fails while that ATA does
+  not exist (D4), and the treasury key can close it, which would stall platform income until someone re-created it.
+  A frozen treasury ATA still fails the harvest by design (the fees stay in DBC). · Alternatives: fetch the ATA in
+  `LaunchState` and create it only when missing (one more account per fetch, a wider `LaunchState`); leave it to the
+  operator.
+- **`harvest_migration_fee` crank action:** `expectedQuote` is the partner fee DBC pays out; `platform`, `creator`,
+  `vault` are its split (`graduationSplit` for v3, all `vault` for v2). A pre-existing transit balance is swept to
+  the vault on top of `vault` and is not predicted.
+- **Launch composer:** tx1 (`create_config` + `create_launch` with the four new accounts) still fits: 1,175 bytes at
+  the worst case measured (maximum metadata, separate payer, priority fee), so `create_launch` stays in tx1 and the
+  plan's fallback (a separate transaction) is not needed. tx1's compute limit is 250,000 (50,000 + 200,000).
+- **Preview:** `LaunchPreview` adds the graduation split in raw and USD (vault, pool, platform, creator), the vault,
+  pool and DBC migration fee percentages, `floorPer100AtListingUsd` (`100 × floor / listing price × (1 − exit fee)`
+  from the exact curve numbers, equal to the closed form `floorPer100AtListing(v, m, r, exit)` to rounding) and
+  `priceImpact1PctRaise` as a fraction (0.0506 = 5.06%). `vaultAtGraduationQuoteRaw` is now the vault's part after the
+  two cuts; `LaunchCurve.partnerMigrationFee` stays the whole partner fee.
+- **`DEFAULT_THRESHOLD_USD` is $10,000** in the SDK too (the UI policy's default); `MIN_THRESHOLD_USD` stays $1 and the
+  CLI and demo scripts keep passing their thresholds explicitly ($1,000 CLI default, $50 C2 demo).

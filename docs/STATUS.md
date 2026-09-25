@@ -7,19 +7,30 @@ and a handful of decisions only the user can make.
 ## Fee model, branch `feat/fee-model` (2026-09-25, in progress, not merged)
 - **Program part done** (docs/DECISIONS.md, "Fee model: implementation decisions"): launch v3 with presale fees to
   the platform treasury, the 5% / 5% / rest graduation split, the 50 / 20 / 30 LP split through the claimer's transit
-  account, payee fallbacks to the vault, the F04/F05 config checks, v2 launches unchanged. Tests:
-  `cargo test -p stockfloor --lib` 58 passed; fork suite (`pnpm --filter @stockfloor/tests exec vitest run --exclude
-  'integration/audit-poc/**'`) 104 passed, 24 failed. **All 24 failures need the SDK part (C9/C10):**
-  `tests/sdk/*` (the SDK builders still use the old account lists: `AccountNotEnoughKeys`),
-  `integration/sdk-presets-fork` (checks the SDK's own presets: creator trading 30 and migration fee = vault share are
-  now rejected) and the SDK `runCrank` case in `integration/lp-positions`.
-- **Not done yet:** SDK (IDL sync, builders, presets, preview, crank, `CU_LIMITS`, tx1 size), app, docs.
+  account, payee fallbacks to the vault, the F04/F05 config checks, v2 launches unchanged.
+- **SDK, scripts and crank done** (docs/DECISIONS.md, "implementation notes (SDK, scripts, crank)"): IDL synced, v3
+  builders and decoder, presets (25 bps presale fee, creator trading 0, vault 30–60%, DBC migration fee = vault + 10,
+  default threshold $10,000), the create_launch config mirror, the graduation split in the preview with "floor per $100
+  at listing" and the 1%-buy price sensitivity, the crank's migration split and platform ATA re-creation, `CU_LIMITS`
+  from the fork measurements. tx1 still fits (1,175 bytes worst case).
+- **Tests:** `cargo test -p stockfloor --lib` 58 passed; `pnpm --filter @stockfloor/sdk test` 310 passed; fork suite
+  (`pnpm --filter @stockfloor/tests exec vitest run --exclude 'integration/audit-poc/**'`) **129 passed, 0 failed**
+  (the C1 lifecycle, `fee-model`, `sdk-presets-fork` and the SDK-only product flow included); SDK, tests and app
+  type-check clean.
+- **Not done yet:** the app (C13–C15) and the architecture / README fee docs (C16). `pnpm --filter @stockfloor/app
+  test` has 3 failures that wait for C13–C15 (vault share slider 30–70 → 30–60 in `CreateLaunchForm.test.tsx`;
+  `chain.ts` reads the vault share as `migrationFeePercentage` instead of `vaultSharePctFromMigrationFeePct(mf,
+  version)` in `chain.test.ts`).
 - **The deployed mainnet program is still the old binary.** The SDK and app must not ship v3 account lists against it
   without a program upgrade (a hard stop; the `.so` grew from 459,064 to 537,568 bytes, so it may need
   `solana program extend`).
 - **Untracked audit PoCs** (`tests/integration/audit-poc/*.test.ts`, `programs/stockfloor/tests/audit_poc_*.rs`): they
-  pass when a bug exists, so F04, F05 and F08 (probably F09) now fail by design and `pnpm test` (which runs them)
-  reports failures. The founder should decide whether to delete them or turn them into regression tests.
+  pass when a bug exists and encode the v2 fee model, so `pnpm test` (which runs them) reports failures: on
+  2026-09-25 39 fork PoC tests in 20 files (F01, F02, F04, F05, F07–F13, F19–F21: the bugs this branch fixes, curve
+  fees no longer entering the vault, mf 30 now rejected, the new split amounts and `FeesDistributed` event; F19's
+  failure is an IDL name lookup in the PoC itself) and the 4 tests of `audit_poc_f04_fable.rs`. Everything else in
+  `pnpm test` passes except the 3 app tests above. The founder should decide whether to delete the PoCs or turn them
+  into regression tests.
 
 ## Done (with test results)
 - **M0–M5** repo, program, SDK, CLI, web app, docs, screenshots — see `docs/DECISIONS.md`.
