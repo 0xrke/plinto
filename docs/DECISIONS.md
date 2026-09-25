@@ -217,3 +217,13 @@ Format: date — decision · alternatives · reason.
   a new metadata field, form input and storage a day before the deadline; the automatic cover works for every
   token, including ones already launched. An uploaded cover can replace it later.
 - **"floor" in headlines sits on the brand underline** (a bar whose top edge rises to the right, like the mark).
+
+## 2026-09-25 — Presale fees stay out of the vault until graduation (to implement)
+
+- **The partner share of curve (presale) fees is not harvested into the vault before migration.** It stays
+  claimable in the DBC pool and is harvested into the vault once the pool has migrated. · Harvest any time (the
+  current behaviour of the crank; `harvest_curve_fees` is permissionless and callable before migration) · The
+  founder wants the presale to read as a clean fundraise: the vault starts at graduation. Today, fees harvested from
+  a presale that never graduates sit in the vault forever, because `redeem` only opens after migration. Not yet
+  implemented: needs `harvest_curve_fees` to require migration (or the crank to skip it) plus tests. What to do with
+  the fees of a presale that never graduates is still open.
