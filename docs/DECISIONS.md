@@ -227,3 +227,11 @@ Format: date — decision · alternatives · reason.
   a presale that never graduates sit in the vault forever, because `redeem` only opens after migration. Not yet
   implemented: needs `harvest_curve_fees` to require migration (or the crank to skip it) plus tests. What to do with
   the fees of a presale that never graduates is still open.
+- **Supersedes the entry above (same day, founder decision):** the presale fee is the DBC minimum, 0.25%, and the
+  whole partner share (80% of the fee after Meteora's 20%) goes to the platform treasury, on successful and failed
+  presales alike. The creator gets no share of presale fees and the vault gets nothing from the presale; the floor is
+  funded at graduation. The platform also passes its referral account on UI swaps (Meteora's host fee, 4% of the
+  fee). · Hold presale fees until graduation and put them into the vault · Most launches fail, so presale fees are
+  real platform income; a creator share at 0.25% would be about $24 per successful raise and would reward churn.
+  Needs: a platform treasury destination in `harvest_curve_fees` (today it pays the vault) and creator_trading_fee_
+  percentage 0 in the preset.
