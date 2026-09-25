@@ -6,10 +6,10 @@
  *   tsx scripts/e2e/plan.ts completing-buy --launch <addr> --offer-raw N [--rpc URL]   -> checks the offer covers the rest
  *   tsx scripts/e2e/plan.ts post-migration --launch <addr> --buyer1 <pk> --buyer2 <pk> [--rpc URL] -> shell exports
  *
- * Demo split (fractions of the threshold T, raw quote; buys pay the 1% curve fee on top):
- *   creator first buy      10% of T / 0.99           (tx2 of create-launch)
- *   buyer1 presale buy     45% of T / 0.99           (ExactIn)
- *   buyer2 completing buy  offers 50% of T / 0.99    (PartialFill takes only what the curve still needs, ~45%)
+ * Demo split (fractions of the threshold T, raw quote; buys pay the 0.25% curve fee on top):
+ *   creator first buy      10% of T / 0.9975         (tx2 of create-launch)
+ *   buyer1 presale buy     45% of T / 0.9975         (ExactIn)
+ *   buyer2 completing buy  offers 50% of T / 0.9975  (PartialFill takes only what the curve still needs, ~45%)
  *   buyer1 DAMM v2 buy     5% of T                   (after migration)
  *   buyer2 DAMM v2 sell    25% of its base           ("crash" sell)
  *   buyer1 redeem          50% of its base
@@ -18,6 +18,7 @@
 import {
   ConnectionSender,
   DEFAULT_QUOTE_ASSET,
+  STOCKFLOOR_DBC_DEFAULTS,
   TOKEN_PROGRAM_ID,
   computeThresholdQuoteRaw,
   effectiveMintMultiplier,
@@ -39,9 +40,10 @@ import {
 } from "./lib.ts";
 
 const FEE_DEN = 1_000_000_000n;
-const CURVE_FEE_NUM = 10_000_000n; // 1%
+/** The presale fee numerator of every StockFloor launch (0.25%, DBC's minimum). */
+const CURVE_FEE_NUM = STOCKFLOOR_DBC_DEFAULTS.cliffFeeNumerator;
 
-/** Quote input whose net (after the 1% curve fee) is at least `net`. */
+/** Quote input whose net (after the curve fee) is at least `net`. */
 const grossForNet = (net: bigint) =>
   divCeil(net * FEE_DEN, FEE_DEN - CURVE_FEE_NUM);
 

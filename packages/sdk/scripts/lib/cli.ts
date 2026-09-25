@@ -17,6 +17,7 @@ import {
   type LaunchRef,
   type LaunchState,
   type SendGuardDecision,
+  vaultSharePctFromMigrationFeePct,
 } from "../../src";
 import { loadKeypair } from "../../src/node";
 
@@ -217,6 +218,8 @@ export function log(...parts: unknown[]): void {
 export function stateSummary(s: LaunchState) {
   return {
     launch: s.address.toBase58(),
+    version: s.launch.version,
+    feeSplit: s.launch.feeSplitEnabled ? "v3: platform / creator / vault" : "v2: 100% to the vault",
     phase: s.phase,
     progress: `${(s.progress.fraction * 100).toFixed(2)}% (${s.progress.quoteReserve} / ${s.progress.threshold} raw quote)`,
     config: s.launch.config.toBase58(),
@@ -231,6 +234,11 @@ export function stateSummary(s: LaunchState) {
     exitFeeBps: s.launch.exitFeeBps,
     migrationFeeHarvested: s.launch.migrationFeeHarvested,
     surplusHarvested: s.launch.surplusHarvested,
+    vaultSharePct: vaultSharePctFromMigrationFeePct(s.dbcConfig.migrationFeePercentage, s.launch.version),
+    creator: s.launch.creator.toBase58(),
+    totalHarvestedQuote: s.launch.totalHarvestedQuote.toString(),
+    totalPlatformQuote: s.launch.totalPlatformQuote.toString(),
+    totalCreatorQuote: s.launch.totalCreatorQuote.toString(),
     partnerQuoteFeePending: (s.dbcPool?.partnerQuoteFee ?? 0n).toString(),
     claimerBaseRaw: s.claimerBaseBalance?.toString() ?? null,
     positions: s.positions.map((p) => ({ position: p.position.toBase58(), pendingQuote: p.pending.b.toString(), pendingBase: p.pending.a.toString() })),

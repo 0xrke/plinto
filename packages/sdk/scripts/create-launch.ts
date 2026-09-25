@@ -103,7 +103,8 @@ runCli(async () => {
 
   log(`quote ${quote.symbol} ${quote.mint}: $${input.quotePriceUsd} per UI token (${priceSource}), multiplier ${input.quoteMultiplier}`);
   log(`threshold ${rawToUnits(built.curve.thresholdQuoteRaw, quote.decimals)} ${quote.symbol} (${built.curve.thresholdQuoteRaw} raw)`);
-  log(`preview: start $${built.preview.startPriceUsd.toExponential(4)}, graduation $${built.preview.graduationPriceUsd.toExponential(4)}, floor at graduation $${built.preview.floorAtGraduationUsd.toExponential(4)}, vault at graduation ${built.preview.vaultAtGraduationQuoteRaw} raw`);
+  log(`preview: start $${built.preview.startPriceUsd.toExponential(4)}, graduation $${built.preview.graduationPriceUsd.toExponential(4)}, floor at graduation $${built.preview.floorAtGraduationUsd.toExponential(4)}, floor per $100 at listing $${built.preview.floorPer100AtListingUsd.toFixed(2)}`);
+  log(`graduation split of ${built.curve.thresholdQuoteRaw} raw: vault ${built.preview.vaultAtGraduationQuoteRaw} (${built.preview.vaultSharePct}%), pool ${built.preview.poolQuoteAtGraduationRaw} (${built.preview.poolSharePct}%), platform ${built.preview.platformGraduationFeeQuoteRaw}, creator ${built.preview.creatorGraduationBonusQuoteRaw}`);
   if (built.firstBuyQuote) log(`first buy: ${built.firstBuyQuote.includedFeeInputAmount} raw quote -> ${built.firstBuyQuote.outputAmount} raw base`);
 
   // What is already on chain (everything is missing on a fresh run).

@@ -841,7 +841,7 @@ main(async () => {
     "",
     `SPYx flow of the demo launch (raw): ${spyxFlow.map((f) => `${f.role} ${fmtInt(f.start)} -> ${fmtInt(f.end)} (${f.net >= 0n ? "+" : ""}${fmtInt(f.net)})`).join("; ")}.`,
     "",
-    `Where the net ${fmtInt(spyxNet)} raw SPYx (${usd(spyxRawUsd(spyxNet))}) of the demo ends up: floor vault ${fmtInt(state.vaultBalance)} raw (redeemable by the remaining holders, including the creator), DAMM v2 pool token B ${fmtInt(dammQuote)} raw (permanently locked liquidity that holders can still sell into), and ${fmtInt(spyxNet - state.vaultBalance - dammQuote)} raw of curve trading fees to the protocol and the creator plus the DBC protocol migration fee.`,
+    `Where the net ${fmtInt(spyxNet)} raw SPYx (${usd(spyxRawUsd(spyxNet))}) of the demo ends up: floor vault ${fmtInt(state.vaultBalance)} raw (redeemable by the remaining holders, including the creator), DAMM v2 pool token B ${fmtInt(dammQuote)} raw (permanently locked liquidity that holders can still sell into), and ${fmtInt(spyxNet - state.vaultBalance - dammQuote)} raw paid elsewhere: the platform treasury (presale fees, 5% of the threshold at graduation, 20% of LP fees), the creator (5% of the threshold, 50% of LP fees), Meteora's protocol fees and the DBC protocol migration fee.`,
     "",
   );
   if (upgradeMeasured) {
