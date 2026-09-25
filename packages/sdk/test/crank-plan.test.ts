@@ -22,6 +22,10 @@ import {
   type CrankInput,
   type LaunchAccount,
   type LaunchState,
+  associatedTokenAddress,
+  authorityPda,
+  CU_LIMITS,
+  PLATFORM_TREASURY,
 } from "../src";
 
 const SPYX = new PublicKey(DEFAULT_QUOTE_ASSET.mint);
@@ -162,7 +166,9 @@ describe("planCrank", () => {
     const plan = planCrank(s);
     const t = s.dbcConfig.migrationQuoteThreshold;
     expect(plan[0]).toEqual({ kind: "harvest_curve_fees", partnerQuoteFee: 5_000n, partnerBaseFee: 0n, createsClaimerBaseAccount: true });
-    expect(plan[1]).toEqual({ kind: "harvest_migration_fee", expectedQuote: t - (t * 50n + 99n) / 100n });
+    // mf 60 (vault share 50%): the partner fee T - ceil(0.4 T), split 5% of T platform, 5% of T creator, rest vault.
+    const fee = t - (t * 40n + 99n) / 100n;
+    expect(plan[1]).toEqual({ kind: "harvest_migration_fee", expectedQuote: fee, platform: t / 20n, creator: t / 20n, vault: fee - 2n * (t / 20n) });
     expect(plan[2]).toEqual({ kind: "harvest_surplus", expectedQuote: 1n });
     expect(plan[3]!.kind === "migrate" && plan[3]!.dammConfig.equals(DAMM_V2_CONFIG_CUSTOMIZABLE)).toBe(true);
     expect(kinds(s, { minCurveFeeQuote: 5_001n })).toEqual(["harvest_migration_fee", "harvest_surplus", "migrate"]);
@@ -170,6 +176,41 @@ describe("planCrank", () => {
     const lp = scenario({ complete: true, migrated: true, launchMigratedLatch: true, migrationFeeHarvested: true, surplusHarvested: true, positions: [{ a: 0n, b: 9n }] });
     expect(kinds(lp, { minLpFeeQuote: 10n })).toEqual([]);
     expect(kinds(lp, { minLpFeeQuote: 9n })).toEqual(["harvest_lp_fees"]);
+  });
+
+  it("harvest_migration_fee carries the v3 split; a v2 launch expects everything in the vault", () => {
+    const v3 = scenario({ complete: true, migrated: true });
+    const t = v3.dbcConfig.migrationQuoteThreshold;
+    const fee = t - (t * BigInt(100 - v3.dbcConfig.migrationFeePercentage) + 99n) / 100n;
+    const m3 = planCrank(v3).find((a) => a.kind === "harvest_migration_fee")!;
+    expect(m3).toEqual({ kind: "harvest_migration_fee", expectedQuote: fee, platform: t / 20n, creator: t / 20n, vault: fee - 2n * (t / 20n) });
+    const v2 = scenario({ complete: true, migrated: true, version: 2 });
+    const t2 = v2.dbcConfig.migrationQuoteThreshold;
+    const fee2 = t2 - (t2 * BigInt(100 - v2.dbcConfig.migrationFeePercentage) + 99n) / 100n;
+    const m2 = planCrank(v2).find((a) => a.kind === "harvest_migration_fee")!;
+    expect(m2).toEqual({ kind: "harvest_migration_fee", expectedQuote: fee2, platform: 0n, creator: 0n, vault: fee2 });
+  });
+
+  it("buildCrankAction pays the launch creator (launch.creator) and the platform on the fee-split harvests", () => {
+    const s = scenario({ complete: true, migrated: false });
+    const payer = key();
+    const mig = planCrank(s).find((a) => a.kind === "harvest_migration_fee")!;
+    const ix = buildCrankAction(s as unknown as LaunchState, mig, payer).instructions[0]!;
+    const quote = (owner: PublicKey) => associatedTokenAddress(owner, SPYX, TOKEN_2022_PROGRAM_ID).toBase58();
+    expect(ix.keys.slice(-3).map((k) => k.pubkey.toBase58())).toEqual([
+      quote(authorityPda(s.launch.config)[0]),
+      quote(s.launch.creator),
+      quote(PLATFORM_TREASURY),
+    ]);
+    expect(buildCrankAction(s as unknown as LaunchState, mig, payer).computeUnitLimit).toBe(CU_LIMITS.harvestMigrationFee);
+    const lpState = scenario({ complete: true, migrated: true, launchMigratedLatch: true, migrationFeeHarvested: true, surplusHarvested: true, positions: [{ a: 0n, b: 5_000n }] });
+    const lp = planCrank(lpState)[0]!;
+    const lpIx = buildCrankAction(lpState as unknown as LaunchState, lp, payer).instructions[0]!;
+    expect(lpIx.keys.slice(-3).map((k) => k.pubkey.toBase58())).toEqual([
+      quote(authorityPda(lpState.launch.config)[0]),
+      quote(lpState.launch.creator),
+      quote(PLATFORM_TREASURY),
+    ]);
   });
 
   it("dust minimums: a 1-raw curve fee or a 1-raw donation to the claimer base ATA schedules nothing", () => {
@@ -240,7 +281,7 @@ describe("planCrank", () => {
     const m = buildCrankAction(state, migrate!, payer);
     expect(m.signers.length).toBe(2);
     expect(m.computeUnitLimit).toBe(200_000);
-    expect(buildCrankAction(state, curve!, payer).computeUnitLimit).toBe(100_000); // creates the claimer base ATA
+    expect(buildCrankAction(state, curve!, payer).computeUnitLimit).toBe(120_000); // creates the claimer base ATA
     expect(buildCrankAction(state, mig!, payer).instructions.length).toBe(1);
     expect(buildCrankAction(state, surplus!, payer).signers).toEqual([]);
 

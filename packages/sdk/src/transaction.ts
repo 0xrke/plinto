@@ -8,19 +8,23 @@ import { ComputeBudgetProgram, PublicKey, Transaction, type TransactionInstructi
 export const PACKET_DATA_SIZE = 1232;
 
 /**
- * Recommended compute unit limits (enforced by the fork compute budget test; each is at least the
- * measured maximum plus a margin for PDA bump searches).
+ * Recommended compute unit limits: the production limits of the fork compute budget test
+ * (tests/integration/compute-budget.test.ts `LIMITS`, which enforces them; test/launch-composer
+ * checks the two stay equal). Each is the measured maximum plus a margin for PDA / ATA bump
+ * searches. Launch v3 (2026-09-25): create_launch also creates up to three quote ATAs (max
+ * measured 163,053 CU), and the fee-split harvests derive the payee ATAs (harvest_curve_fees
+ * 91,276 / 59,180, harvest_migration_fee 69,817, harvest_lp_fees 90,551).
  */
 export const CU_LIMITS = {
-  createLaunch: 120_000,
+  createLaunch: 200_000,
   registerPool: 20_000,
-  harvestCurveFeesCreatesAta: 100_000,
-  harvestCurveFees: 80_000,
-  harvestMigrationFee: 60_000,
+  harvestCurveFeesCreatesAta: 120_000,
+  harvestCurveFees: 85_000,
+  harvestMigrationFee: 100_000,
   harvestSurplus: 60_000,
   syncMigration: 20_000,
   burnClaimerBase: 40_000,
-  harvestLpFees: 100_000,
+  harvestLpFees: 120_000,
   floor: 15_000,
   redeem: 40_000,
   dbcCreateConfig: 50_000,

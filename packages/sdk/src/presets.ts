@@ -6,10 +6,14 @@
  *   `ratio x start price` (gentle: 1.2x, flat: 1.01x). Its liquidity is sized so that exactly
  *   the migration threshold `T` of quote is needed to walk the whole segment, so the curve
  *   completes at (or one rounding step below) the last curve point.
- * - At graduation DBC takes the migration fee `fee = T - ceil(T * (100 - pct) / 100)`; with a
- *   0% creator share the whole fee goes to the fee claimer (our Authority PDA) and becomes the
- *   vault. The rest of the quote plus base tokens seed a full-range DAMM v2 pool at the
- *   migration price.
+ * - At graduation DBC takes the migration fee `fee = T - ceil(T * (100 - mf) / 100)` with
+ *   `mf = vault share + 10` (launch v3, docs/DECISIONS.md D7); with a 0% creator share the whole
+ *   fee goes to the fee claimer (our claimer PDA). `harvest_migration_fee` then pays 5% of T to
+ *   the platform treasury, 5% of T to the launch creator and the rest (the vault share of T, plus
+ *   rounding) into the vault (`graduationSplit`). The pool part, `90 - vault share` percent of T,
+ *   plus base tokens seed a full-range DAMM v2 pool at the migration price.
+ * - Presale fee 0.25% (DBC's minimum), all of the partner share to the platform treasury (no
+ *   creator share); the migrated DAMM v2 pool charges a fixed 1% with the dynamic fee off.
  * - The supply is dynamic: DBC mints what the curve and the pool need and burns the rest at
  *   migration. The start price is solved so that the supply at graduation is about
  *   1,000,000,000 base tokens (6 decimals).
@@ -48,11 +52,16 @@ import {
   validateDbcConfigParams,
 } from "./dbc/validateConfig";
 import {
+  floorPer100AtListing,
   floorPerTokenUsd,
+  graduationSplit,
   maxLossFraction,
+  priceImpactPct,
+  rawToUi,
   sqrtPriceX64ToUsd,
   usdToQuoteRaw,
 } from "./math";
+import { validateLaunchConfigParams } from "./stockfloor/validateLaunch";
 
 export type CurvePreset = "gentle" | "flat";
 
@@ -83,10 +92,17 @@ export const BASE_TOKEN_DECIMALS = 6;
 export const BASE_SUPPLY_TARGET_RAW =
   1_000_000_000n * 10n ** BigInt(BASE_TOKEN_DECIMALS);
 
+/** Vault share of the raise (the initial floor), chosen by the creator. */
 export const VAULT_SHARE_MIN_PCT = 30;
-export const VAULT_SHARE_MAX_PCT = 70;
+export const VAULT_SHARE_MAX_PCT = 60;
 export const DEFAULT_VAULT_SHARE_PCT = 50;
-export const DEFAULT_THRESHOLD_USD = 1000;
+/** Platform 5% + creator 5% of the raise, paid out of the DBC migration fee at graduation. */
+export const GRADUATION_CUTS_PCT = 10;
+/**
+ * Default migration threshold in USD. The UI applies its own threshold policy (min $10,000, or $1
+ * with the demo flag); the SDK only enforces `MIN_THRESHOLD_USD`.
+ */
+export const DEFAULT_THRESHOLD_USD = 10_000;
 export const DEFAULT_EXIT_FEE_BPS = 200;
 /** The StockFloor program caps the exit fee at 500 bps. */
 export const MAX_EXIT_FEE_BPS = 500;
@@ -99,14 +115,41 @@ export const METEORA_KEEPER_MIN_THRESHOLD_USD = 750;
  */
 export const MIN_THRESHOLD_USD = 1;
 
-/** Fixed DBC parameters of every StockFloor launch (docs/BRIEF.md §4). */
+/** DBC migration fee percentage for a vault share: vault + platform 5% + creator 5% (40..70). */
+export function migrationFeePctForVaultShare(vaultSharePct: number): number {
+  assertVaultShare(vaultSharePct);
+  return vaultSharePct + GRADUATION_CUTS_PCT;
+}
+
+/** Share of the raise that seeds the DAMM v2 pool: `90 - vault share` (30..60). */
+export function poolSharePctForVaultShare(vaultSharePct: number): number {
+  assertVaultShare(vaultSharePct);
+  return 100 - GRADUATION_CUTS_PCT - vaultSharePct;
+}
+
+/**
+ * Vault share of an on-chain launch from its DBC `migrationFeePercentage`: `mf - 10` for launch v3,
+ * `mf` for v2 launches (their whole migration fee went into the vault).
+ */
+export function vaultSharePctFromMigrationFeePct(migrationFeePct: number, launchVersion: number): number {
+  return launchVersion >= 3 ? migrationFeePct - GRADUATION_CUTS_PCT : migrationFeePct;
+}
+
+function assertVaultShare(vaultSharePct: number): void {
+  if (!Number.isInteger(vaultSharePct) || vaultSharePct < VAULT_SHARE_MIN_PCT || vaultSharePct > VAULT_SHARE_MAX_PCT) {
+    throw new LaunchInputError(`vaultSharePct must be an integer in [${VAULT_SHARE_MIN_PCT}, ${VAULT_SHARE_MAX_PCT}]`);
+  }
+}
+
+/** Fixed DBC parameters of every StockFloor launch (docs/DECISIONS.md D6-D8). */
 export const STOCKFLOOR_DBC_DEFAULTS = {
-  /** 1% constant curve trading fee (fee scheduler with no periods). */
-  curveTradingFeeBps: 100,
-  /** Fee numerator out of 1e9 for the curve trading fee. */
-  cliffFeeNumerator: 10_000_000n,
+  /** 0.25% constant curve trading fee (fee scheduler with no periods), DBC's minimum. */
+  curveTradingFeeBps: 25,
+  /** Fee numerator out of 1e9 for the curve trading fee (DBC `MIN_FEE_NUMERATOR`). */
+  cliffFeeNumerator: 2_500_000n,
   collectFeeMode: CollectFeeMode.QuoteToken,
-  creatorTradingFeePercentage: 30,
+  /** The whole partner share of the presale fee goes to the platform treasury (program: must be 0). */
+  creatorTradingFeePercentage: 0,
   creatorMigrationFeePercentage: 0,
   migrationOption: MigrationOption.DammV2,
   migrationFeeOption: MigrationFeeOption.Customizable,
@@ -132,9 +175,12 @@ export interface LaunchInput {
   /** Effective ScaledUiAmount multiplier of the quote mint (UI = raw / 10^decimals * multiplier). */
   quoteMultiplier: number;
   preset: CurvePreset;
-  /** Share of the raise that becomes the vault (the DBC migration fee percentage), 30..70. */
+  /**
+   * Share of the raise that becomes the vault, 30..60. The DBC migration fee percentage is this
+   * plus 10 (platform 5% + creator 5%); the pool gets `90 - vaultSharePct`.
+   */
   vaultSharePct: number;
-  /** Migration threshold in USD. Default 1000. */
+  /** Migration threshold in USD. Default `DEFAULT_THRESHOLD_USD`. */
   thresholdUsd?: number;
   /** Exit fee of the launch in bps. Default 200. Not part of the DBC config. */
   exitFeeBps?: number;
@@ -149,12 +195,39 @@ export interface LaunchPreview {
   graduationPriceUsd: number;
   /** USD floor per base token right after the migration fee is harvested. */
   floorAtGraduationUsd: number;
-  /** Quote raw that enters the vault at graduation (the partner migration fee). */
+  /** Quote raw that enters the vault at graduation (the partner migration fee minus the two cuts). */
   vaultAtGraduationQuoteRaw: bigint;
+  /** Quote raw paid to the platform treasury at graduation (5% of the threshold). */
+  platformGraduationFeeQuoteRaw: bigint;
+  /** Quote raw paid to the creator at graduation (5% of the threshold). */
+  creatorGraduationBonusQuoteRaw: bigint;
+  /** Quote raw deposited into the DAMM v2 pool (before DBC's 0.2% protocol liquidity fee). */
+  poolQuoteAtGraduationRaw: bigint;
+  /** The same four amounts in USD at the input quote price. */
+  vaultAtGraduationUsd: number;
+  platformGraduationFeeUsd: number;
+  creatorGraduationBonusUsd: number;
+  poolQuoteAtGraduationUsd: number;
   /** Base mint supply after migration (sold on the curve + deposited into DAMM v2). */
   baseSupplyAtGraduationRaw: bigint;
   /** `1 - floor / graduation price`. */
   maxLossAtGraduationPrice: number;
+  /** Vault share of the raise (input), the pool share `90 - vault` and the DBC migration fee `vault + 10`. */
+  vaultSharePct: number;
+  poolSharePct: number;
+  migrationFeePct: number;
+  /**
+   * "Floor per $100 at listing": USD a holder gets back from `redeem`, after the exit fee, for $100
+   * of tokens bought at the listing price, right after graduation. `100 * floor / listing price *
+   * (1 - exit fee)`; not a guarantee (the price can move and the floor only grows).
+   */
+  floorPer100AtListingUsd: number;
+  /**
+   * Price sensitivity after listing: relative price move caused by a buy of 1% of the raise into
+   * the full-range DAMM v2 pool, `(1 + 0.01 T / pool quote)^2 - 1`, as a fraction (0.0506 = 5.06%),
+   * pool fee ignored.
+   */
+  priceImpact1PctRaise: number;
 }
 
 /** Exact curve and graduation amounts behind a launch (all raw units). */
@@ -170,8 +243,16 @@ export interface LaunchCurve {
   migrationBaseAmount: bigint;
   /** Quote deposited into DAMM v2 (before the 0.2% protocol liquidity fee). */
   migrationQuoteAmount: bigint;
-  /** Migration fee paid to the fee claimer, i.e. the vault at graduation. */
+  /** DBC migration fee percentage of the config: vault share + 10. */
+  migrationFeePct: number;
+  /** Migration fee paid by DBC to the fee claimer (the claimer PDA): platform + creator + vault. */
   partnerMigrationFee: bigint;
+  /** Part of the partner migration fee paid to the platform treasury (5% of the threshold). */
+  platformGraduationFee: bigint;
+  /** Part of the partner migration fee paid to the launch creator (5% of the threshold). */
+  creatorGraduationBonus: bigint;
+  /** Part of the partner migration fee that enters the vault: the initial floor backing. */
+  vaultAtGraduation: bigint;
   baseSupplyAtGraduationRaw: bigint;
 }
 
@@ -211,15 +292,7 @@ function normalizeInput(input: LaunchInput): NormalizedInput {
     throw new LaunchInputError("quoteMultiplier must be a positive number");
   if (!Object.prototype.hasOwnProperty.call(CURVE_PRESETS, preset))
     throw new LaunchInputError(`unknown curve preset: ${String(preset)}`);
-  if (
-    !Number.isInteger(vaultSharePct) ||
-    vaultSharePct < VAULT_SHARE_MIN_PCT ||
-    vaultSharePct > VAULT_SHARE_MAX_PCT
-  ) {
-    throw new LaunchInputError(
-      `vaultSharePct must be an integer in [${VAULT_SHARE_MIN_PCT}, ${VAULT_SHARE_MAX_PCT}]`,
-    );
-  }
+  assertVaultShare(vaultSharePct);
   if (!Number.isFinite(thresholdUsd) || thresholdUsd < MIN_THRESHOLD_USD)
     throw new LaunchInputError(
       `thresholdUsd must be a number >= ${MIN_THRESHOLD_USD}`,
@@ -306,9 +379,10 @@ function evaluateCurve(
     migrationSqrtPrice,
     curve,
   );
+  const migrationFeePct = migrationFeePctForVaultShare(vaultSharePct);
   const { quoteAmount: migrationQuoteAmount } = getMigrationQuoteAmount(
     threshold,
-    vaultSharePct,
+    migrationFeePct,
   );
   const migrationBaseAmount = getConcentratedMigrationBaseAmount(
     migrationQuoteAmount,
@@ -316,9 +390,10 @@ function evaluateCurve(
   );
   const { partnerMigrationFee } = getMigrationFeeDistribution(
     threshold,
-    vaultSharePct,
+    migrationFeePct,
     STOCKFLOOR_DBC_DEFAULTS.creatorMigrationFeePercentage,
   );
+  const split = graduationSplit(threshold, partnerMigrationFee);
 
   // Supply after migration. DBC mints `swap buffer + migration base` for a dynamic-supply
   // config, buyers take up to `swapBaseAmount`, DAMM v2 receives the migration base (the 0.2%
@@ -336,7 +411,11 @@ function evaluateCurve(
     swapBaseAmount,
     migrationBaseAmount,
     migrationQuoteAmount,
+    migrationFeePct,
     partnerMigrationFee,
+    platformGraduationFee: split.platform,
+    creatorGraduationBonus: split.creator,
+    vaultAtGraduation: split.vault,
     baseSupplyAtGraduationRaw,
   };
 }
@@ -346,7 +425,7 @@ function evaluateCurve(
  *
  * With price p0 at the start, p1 = r * p0 at graduation and T the threshold (raw units):
  *   base sold on the curve   = L (1/√p0 - 1/√p1) = T / √(p0 p1) = T / (√r p0)
- *   base in the DAMM v2 pool ≈ Q / p1 = Q / (r p0),    Q = T (100 - pct) / 100
+ *   base in the DAMM v2 pool ≈ Q / p1 = Q / (r p0),    Q = T (90 - vault share) / 100
  *   supply S = (T/√r + Q/r) / p0   =>   p0 = (T/√r + Q/r) / S
  * The closed form ignores rounding and the finite DAMM v2 price range, so it is refined with the
  * exact integer math: the supply scales with 1/p0 = 2^128/s0², hence s0' = sqrt(s0² * S_actual / S_target).
@@ -358,7 +437,7 @@ export function computeLaunchCurve(input: LaunchInput): LaunchCurve {
 
   const t = Number(threshold);
   const r = Number(num) / Number(den);
-  const q = (t * (100 - n.vaultSharePct)) / 100;
+  const q = (t * poolSharePctForVaultShare(n.vaultSharePct)) / 100;
   const p0 = (t / Math.sqrt(r) + q / r) / Number(BASE_SUPPLY_TARGET_RAW);
   let sqrtStartPrice = BigInt(Math.floor(Math.sqrt(p0) * 2 ** 64));
 
@@ -391,10 +470,15 @@ export function computeLaunchCurve(input: LaunchInput): LaunchCurve {
  * - startPriceUsd / graduationPriceUsd: `(sqrtPrice / 2^64)^2` is quote raw per base raw; one
  *   base token in USD is that `* 10^(6 - quoteDecimals) * multiplier * quotePriceUsd`.
  * - floorAtGraduationUsd: `vault_raw / supply_raw` converted the same way, where vault_raw is the
- *   partner migration fee and supply_raw the base supply after migration. It ignores the vault
- *   growth from curve trading fees and surplus, so the real floor at graduation is a bit higher.
+ *   vault's part of the partner migration fee (after the platform and creator cuts) and supply_raw
+ *   the base supply after migration. It ignores the vault growth from LP fees, surplus and exit
+ *   fees, so the real floor at graduation is a bit higher.
  * - maxLossAtGraduationPrice: `1 - floor / graduation price`. Independent of the quote price
- *   and multiplier: about `f / (√r + 1 - f)` for vault share f and preset ratio r.
+ *   and multiplier: about `1 - v / (√r + 1 - m)` for vault share v, migration fee m = v + 10%
+ *   and preset ratio r.
+ * - floorPer100AtListingUsd: `100 * floor / graduation price * (1 - exit fee)`
+ *   (`floorPer100AtListing(v, m, r, exit)` in closed form).
+ * - priceImpact1PctRaise: `(1 + 0.01 T / pool quote)^2 - 1`.
  */
 export function previewLaunch(input: LaunchInput): LaunchPreview {
   const n = normalizeInput(input);
@@ -407,28 +491,69 @@ export function previewLaunch(input: LaunchInput): LaunchPreview {
       n.quoteMultiplier,
       n.quotePriceUsd,
     );
+  const quoteUsd = (raw: bigint) =>
+    rawToUi(raw, n.quote.decimals, n.quoteMultiplier) * n.quotePriceUsd;
   const startPriceUsd = toUsd(c.sqrtStartPrice);
   const graduationPriceUsd = toUsd(c.migrationSqrtPrice);
   const floorAtGraduationUsd = floorPerTokenUsd(
-    c.partnerMigrationFee,
+    c.vaultAtGraduation,
     c.baseSupplyAtGraduationRaw,
     BASE_TOKEN_DECIMALS,
     n.quote.decimals,
     n.quoteMultiplier,
     n.quotePriceUsd,
   );
+  const exitFactor = 1 - n.exitFeeBps / 10_000;
+  const floorPer100AtListingUsd =
+    graduationPriceUsd > 0
+      ? ((100 * floorAtGraduationUsd) / graduationPriceUsd) * exitFactor
+      : 0;
+  const priceImpact1PctRaise =
+    c.migrationQuoteAmount > 0n
+      ? priceImpactPct(
+          Number(c.thresholdQuoteRaw) / 100,
+          Number(c.migrationQuoteAmount),
+        ) / 100
+      : 0;
   return {
     thresholdQuoteRaw: c.thresholdQuoteRaw,
     startPriceUsd,
     graduationPriceUsd,
     floorAtGraduationUsd,
-    vaultAtGraduationQuoteRaw: c.partnerMigrationFee,
+    vaultAtGraduationQuoteRaw: c.vaultAtGraduation,
+    platformGraduationFeeQuoteRaw: c.platformGraduationFee,
+    creatorGraduationBonusQuoteRaw: c.creatorGraduationBonus,
+    poolQuoteAtGraduationRaw: c.migrationQuoteAmount,
+    vaultAtGraduationUsd: quoteUsd(c.vaultAtGraduation),
+    platformGraduationFeeUsd: quoteUsd(c.platformGraduationFee),
+    creatorGraduationBonusUsd: quoteUsd(c.creatorGraduationBonus),
+    poolQuoteAtGraduationUsd: quoteUsd(c.migrationQuoteAmount),
     baseSupplyAtGraduationRaw: c.baseSupplyAtGraduationRaw,
     maxLossAtGraduationPrice: maxLossFraction(
       graduationPriceUsd,
       floorAtGraduationUsd,
     ),
+    vaultSharePct: n.vaultSharePct,
+    poolSharePct: poolSharePctForVaultShare(n.vaultSharePct),
+    migrationFeePct: c.migrationFeePct,
+    floorPer100AtListingUsd,
+    priceImpact1PctRaise,
   };
+}
+
+/** Closed-form "floor per $100 at listing" for a preset and vault share (see `floorPer100AtListing`). */
+export function floorPer100AtListingForPreset(
+  preset: CurvePreset,
+  vaultSharePct: number,
+  exitFeeBps: number = DEFAULT_EXIT_FEE_BPS,
+): number {
+  const { num, den } = CURVE_PRESETS[preset].priceRatio;
+  return floorPer100AtListing(
+    vaultSharePct / 100,
+    migrationFeePctForVaultShare(vaultSharePct) / 100,
+    Number(num) / Number(den),
+    exitFeeBps,
+  );
 }
 
 /** DBC `ConfigParameters` plus the `create_config` accounts derived from the launch. */
@@ -514,7 +639,7 @@ export function buildDbcConfigParams(
     creatorTradingFeePercentage: d.creatorTradingFeePercentage,
     tokenUpdateAuthority: d.tokenUpdateAuthority,
     migrationFee: {
-      feePercentage: n.vaultSharePct,
+      feePercentage: c.migrationFeePct,
       creatorFeePercentage: d.creatorMigrationFeePercentage,
     },
     migratedPoolFee: {
@@ -543,6 +668,9 @@ export function buildDbcConfigParams(
 
   const result = validateDbcConfigParams(params, { leftoverReceiver });
   assertCurveCanComplete(params, result.migrationSqrtPrice);
+  // The checks StockFloor's create_launch runs on the stored config (fee claimer and leftover
+  // receiver are checked against the claimer PDA by the program, not here).
+  validateLaunchConfigParams(params, { exitFeeBps: n.exitFeeBps });
 
   return { ...params, feeClaimer, leftoverReceiver, quoteMint };
 }

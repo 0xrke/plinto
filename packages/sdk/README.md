@@ -71,9 +71,25 @@ for (const tx of built.transactions) {
   await sender.send(tx.instructions, { signers: tx.signers, computeUnitLimit: tx.computeUnitLimit, label: tx.label });
 }
 built.addresses;      // config, launch, claimer, vaultAuthority, vault, baseMint, pool, ...
-built.preview;        // start / graduation price, floor at graduation, vault at graduation
+built.preview;        // start / graduation price, floor at graduation, graduation split (vault, pool,
+                      // platform, creator), floor per $100 at listing, price sensitivity of a 1% buy
 built.firstBuyQuote;  // exact DBC quote of the creator's first buy on the fresh pool
 ```
+
+Fee model (launch v3, `docs/DECISIONS.md` D6-D8), fixed in `STOCKFLOOR_DBC_DEFAULTS`:
+
+| When | Fee | Where it goes |
+|---|---|---|
+| Presale (DBC curve) | 0.25% (DBC minimum) | Meteora 20%; the partner 80% to the platform treasury (`harvest_curve_fees`); creator 0% |
+| Graduation (threshold T) | DBC migration fee `vault share + 10`% of T | `harvest_migration_fee`: platform 5% of T, creator 5% of T, the vault the rest (`graduationSplit`); the pool gets `90 - vault share`% |
+| After graduation (DAMM v2) | 1%, dynamic fee off | Meteora 20%; `harvest_lp_fees` splits the rest creator 50%, platform 20%, vault 30% + rounding (`lpFeeSplit`) |
+| Redeem | exit fee 2% | stays in the vault |
+
+The vault share is 30..60% (`VAULT_SHARE_MIN_PCT`..`VAULT_SHARE_MAX_PCT`); `migrationFeePctForVaultShare`,
+`poolSharePctForVaultShare` and `vaultSharePctFromMigrationFeePct(mf, launch.version)` convert. v2 launches
+(created before the fee model) keep paying every harvest 100% into the vault; `launch.feeSplitEnabled`
+tells them apart. `buildDbcConfigParams` also runs `validateLaunchConfigParams`, the port of the checks
+`create_launch` runs on the DBC config, so a drifting preset fails before anything is paid for.
 
 tx 1: DBC `create_config` (token badge) + `create_launch` (signer: config keypair). tx 2: DBC pool +
 `register_pool` (+ first buy when it fits; signer: base mint keypair). tx 3: the first buy when it does
@@ -107,6 +123,11 @@ planCrank(s);         // pure: ordered due actions (register_pool, harvest_curve
 await runCrank(sender, { launch });   // executes until nothing is due; races are re-planned and skipped
 await runCrankAll(sender);            // every launch
 ```
+
+- **Fee-split harvests** (`harvest_migration_fee`, `harvest_lp_fees`) take the launch creator
+  (`launch.creator`, carried in `launchKeysFromAccount(...).creator`) for the creator's quote ATA; the
+  platform and transit ATAs are derived. The `harvest_migration_fee` action carries the expected
+  `platform`, `creator` and `vault` amounts (v2: all to the vault).
 
 - **`sync_migration`** is planned as soon as DBC reports the migration while `Launch.migrated` is unset,
   which is the normal case: the one-shot DBC harvests run before `migration_damm_v2` and latch nothing.

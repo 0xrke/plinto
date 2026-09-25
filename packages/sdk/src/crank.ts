@@ -36,11 +36,21 @@ import {
   syncMigrationIx,
 } from "./stockfloor/instructions";
 import { CU_LIMITS } from "./transaction";
+import { graduationSplit } from "./math";
+import { LAUNCH_VERSION_FEE_SPLIT } from "./stockfloor/accounts";
 
 export type CrankAction =
   | { kind: "register_pool"; pool: PublicKey }
   | { kind: "harvest_curve_fees"; partnerQuoteFee: bigint; partnerBaseFee: bigint; createsClaimerBaseAccount: boolean }
-  | { kind: "harvest_migration_fee"; expectedQuote: bigint }
+  | {
+      kind: "harvest_migration_fee";
+      /** Partner migration fee DBC pays out (raw quote). */
+      expectedQuote: bigint;
+      /** Expected payouts (launch v3: 5% of T, 5% of T, the rest; v2: all to the vault). */
+      platform: bigint;
+      creator: bigint;
+      vault: bigint;
+    }
   | { kind: "harvest_surplus"; expectedQuote: bigint }
   | { kind: "migrate"; dammConfig: PublicKey; dammPool: PublicKey }
   | { kind: "sync_migration" }
@@ -144,8 +154,12 @@ export function planCrank(s: CrankInput, opts: PlanCrankOptions = {}): CrankActi
     if (!L.migrationFeeHarvested && (pool.migrationFeeWithdrawStatus & PARTNER_MIGRATION_FEE_MASK) === 0) {
       const t = s.dbcConfig.migrationQuoteThreshold;
       const fee = t - (t * BigInt(100 - s.dbcConfig.migrationFeePercentage) + 99n) / 100n;
-      const creator = (fee * BigInt(s.dbcConfig.creatorMigrationFeePercentage)) / 100n;
-      actions.push({ kind: "harvest_migration_fee", expectedQuote: fee - creator });
+      const dbcCreator = (fee * BigInt(s.dbcConfig.creatorMigrationFeePercentage)) / 100n;
+      const partner = fee - dbcCreator;
+      // v3 splits the partner fee (platform, creator, vault); v2 launches keep 100% in the vault.
+      // A pre-existing balance in the transit is swept to the vault on top of `vault`.
+      const split = L.version >= LAUNCH_VERSION_FEE_SPLIT ? graduationSplit(t, partner) : { platform: 0n, creator: 0n, vault: partner };
+      actions.push({ kind: "harvest_migration_fee", expectedQuote: partner, ...split });
     }
     if (!L.surplusHarvested && pool.isPartnerWithdrawSurplus === 0) {
       actions.push({ kind: "harvest_surplus", expectedQuote: s.partnerSurplus });

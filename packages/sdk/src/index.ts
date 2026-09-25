@@ -41,6 +41,7 @@ export * from "./token";
 export * from "./transaction";
 export * from "./stockfloor/accounts";
 export * from "./stockfloor/instructions";
+export * from "./stockfloor/validateLaunch";
 export * from "./dbc/accounts";
 export * from "./dbc/instructions";
 export * from "./dbc/swapQuote";

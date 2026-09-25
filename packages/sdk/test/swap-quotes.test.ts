@@ -79,7 +79,7 @@ function stateArb() {
   return fc
     .record({
       preset: fc.constantFrom("gentle" as const, "flat" as const),
-      share: fc.integer({ min: 30, max: 70 }),
+      share: fc.integer({ min: 30, max: 60 }),
       thresholdUsd: fc.integer({ min: 10, max: 100_000 }),
       creatorPct: fc.integer({ min: 0, max: 30 }),
       collectFeeMode: fc.constantFrom(0, 1),

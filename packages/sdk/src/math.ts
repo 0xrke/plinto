@@ -277,3 +277,95 @@ export function effectiveScaledUiMultiplier(
     throw new RangeError("invalid ScaledUiAmount multiplier");
   return m;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Fee model (launch v3, docs/DECISIONS.md D6-D8). Mirrors programs/stockfloor/src/math.rs.
+// ---------------------------------------------------------------------------------------------
+
+/** Platform cut at graduation: 5% of the migration threshold T. */
+export const PLATFORM_GRADUATION_FEE_BPS = 500;
+/** Creator success bonus at graduation: 5% of the migration threshold T. */
+export const CREATOR_GRADUATION_BONUS_BPS = 500;
+/** Creator share of harvested DAMM v2 LP quote fees. */
+export const LP_FEE_CREATOR_BPS = 5_000;
+/** Platform share of harvested DAMM v2 LP quote fees (the vault gets the rest, at least 30%). */
+export const LP_FEE_PLATFORM_BPS = 2_000;
+
+const U64_MAX_BIG = (1n << 64n) - 1n;
+
+/** How one harvested quote amount is paid out (raw units). `platform + creator + vault` = received. */
+export interface FeeSplit {
+  platform: bigint;
+  creator: bigint;
+  vault: bigint;
+}
+
+function assertU64(value: bigint, what: string): void {
+  if (value < 0n || value > U64_MAX_BIG) throw new RangeError(`${what} must be a u64`);
+}
+
+const bpsFloor = (amount: bigint, bps: number) => (amount * BigInt(bps)) / MAX_BPS;
+const minBig = (a: bigint, b: bigint) => (a < b ? a : b);
+
+/**
+ * `math::graduation_split`: split of the partner migration fee actually received at graduation,
+ * for migration threshold `T`:
+ *
+ *   platform = min(floor(T * 500 / 10_000), received)
+ *   creator  = min(floor(T * 500 / 10_000), received - platform)
+ *   vault    = received - platform - creator
+ *
+ * The cuts are shares of the raise, not of the fee, so the vault gets every rounding unit.
+ */
+export function graduationSplit(thresholdRaw: bigint, receivedRaw: bigint): FeeSplit {
+  assertU64(thresholdRaw, "thresholdRaw");
+  assertU64(receivedRaw, "receivedRaw");
+  const platform = minBig(bpsFloor(thresholdRaw, PLATFORM_GRADUATION_FEE_BPS), receivedRaw);
+  const creator = minBig(bpsFloor(thresholdRaw, CREATOR_GRADUATION_BONUS_BPS), receivedRaw - platform);
+  return { platform, creator, vault: receivedRaw - platform - creator };
+}
+
+/**
+ * `math::lp_fee_split`: harvested DAMM v2 LP quote fees `q`: creator `floor(q / 2)`, platform
+ * `floor(q / 5)`, vault the rest (at least `floor(3q / 10)` and every rounding unit).
+ */
+export function lpFeeSplit(receivedRaw: bigint): FeeSplit {
+  assertU64(receivedRaw, "receivedRaw");
+  const creator = bpsFloor(receivedRaw, LP_FEE_CREATOR_BPS);
+  const platform = bpsFloor(receivedRaw, LP_FEE_PLATFORM_BPS);
+  return { platform, creator, vault: receivedRaw - creator - platform };
+}
+
+/**
+ * Floor value per $100 bought at the listing price (the DAMM v2 opening price, equal to the price
+ * at graduation), after the exit fee: `100 * v / (sqrt(r) + 1 - m) * (1 - exitFeeBps / 10_000)`.
+ *
+ * - `v`: vault share of the raise, as a fraction (0.5 for 50%);
+ * - `m`: the DBC migration fee percentage as a fraction, `v + 0.10` for launch v3 (= 1 - pool share);
+ * - `r`: the preset's graduation / start price ratio (1.01 flat, 1.2 gentle).
+ *
+ * Derivation: with start price p0, the curve sells T / (sqrt(r) p0) tokens and the pool gets
+ * (1 - m) T / (r p0), so the floor over the listing price r p0 is v / (sqrt(r) + 1 - m). It ignores
+ * the rounding, the vault's growth after graduation and the price moving after listing. Not a
+ * guarantee: the UI calls it "Floor per $100 at listing".
+ */
+export function floorPer100AtListing(v: number, m: number, r: number, exitFeeBps: number): number {
+  if (!(v > 0 && v <= 1)) throw new RangeError("v (vault share) must be a fraction in (0, 1]");
+  if (!(m >= v && m < 1)) throw new RangeError("m (migration fee share) must be a fraction in [v, 1)");
+  if (!(Number.isFinite(r) && r >= 1)) throw new RangeError("r (price ratio) must be >= 1");
+  if (!Number.isInteger(exitFeeBps) || exitFeeBps < 0 || exitFeeBps > 10_000) {
+    throw new RangeError("exitFeeBps must be an integer in [0, 10000]");
+  }
+  return ((100 * v) / (Math.sqrt(r) + 1 - m)) * (1 - exitFeeBps / 10_000);
+}
+
+/**
+ * Price move caused by buying `tradeUsd` of base with quote from a full-range constant-product
+ * pool holding `poolQuoteUsd` of quote, fee ignored: `((1 + X / Q)^2 - 1) * 100` percent.
+ */
+export function priceImpactPct(tradeUsd: number, poolQuoteUsd: number): number {
+  if (!(Number.isFinite(tradeUsd) && tradeUsd >= 0)) throw new RangeError("tradeUsd must be non-negative");
+  if (!(Number.isFinite(poolQuoteUsd) && poolQuoteUsd > 0)) throw new RangeError("poolQuoteUsd must be positive");
+  const x = tradeUsd / poolQuoteUsd;
+  return ((1 + x) * (1 + x) - 1) * 100;
+}

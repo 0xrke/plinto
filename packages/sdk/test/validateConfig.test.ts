@@ -382,11 +382,13 @@ describe("validateDbcConfigParams", () => {
           }),
         "InvalidTokenSupply",
       );
+      // post > pre (the buffer can be capped to the curve's capacity, so pre may equal post:
+      // swap a strictly larger pre).
       expectCode(
         (p) =>
           (p.tokenSupply = {
             preMigrationTokenSupply: post,
-            postMigrationTokenSupply: pre,
+            postMigrationTokenSupply: pre.addn(1),
           }),
         "InvalidTokenSupply",
       );

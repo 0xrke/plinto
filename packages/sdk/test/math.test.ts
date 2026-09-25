@@ -1,7 +1,15 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
+  CREATOR_GRADUATION_BONUS_BPS,
   effectiveScaledUiMultiplier,
+  floorPer100AtListing,
+  graduationSplit,
+  LP_FEE_CREATOR_BPS,
+  LP_FEE_PLATFORM_BPS,
+  lpFeeSplit,
+  PLATFORM_GRADUATION_FEE_BPS,
+  priceImpactPct,
   floorPerTokenRaw,
   floorPerTokenUsd,
   maxLossFraction,
@@ -406,5 +414,126 @@ describe("USD helpers", () => {
     expect(toRational(1e-7)).toEqual({ n: 1n, d: 10000000n });
     expect(toRational("-2.25")).toEqual({ n: -225n, d: 100n });
     expect(() => toRational(".")).toThrow(RangeError);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Fee model v3: the vectors mirror programs/stockfloor/src/math.rs (graduation_split_vectors,
+// lp_fee_split_vectors) so the SDK and the program agree to the raw unit.
+// ---------------------------------------------------------------------------------------------
+
+/** DBC `get_migration_quote_amount` fee at mf 60 (vault share 50%): T - ceil(T * 40 / 100). */
+const fee60 = (t: bigint) => t - (t * 40n + 99n) / 100n;
+const gs = (t: bigint, r: bigint) => {
+  const s = graduationSplit(t, r);
+  return [s.platform, s.creator, s.vault];
+};
+const ls = (q: bigint) => {
+  const s = lpFeeSplit(q);
+  return [s.creator, s.platform, s.vault];
+};
+
+describe("graduationSplit (platform 5% of T, creator 5% of T, vault the rest)", () => {
+  it("fee constants match the program", () => {
+    expect([PLATFORM_GRADUATION_FEE_BPS, CREATOR_GRADUATION_BONUS_BPS, LP_FEE_CREATOR_BPS, LP_FEE_PLATFORM_BPS]).toEqual([500, 500, 5_000, 2_000]);
+  });
+
+  it("matches the Rust vectors", () => {
+    expect(gs(0n, 0n)).toEqual([0n, 0n, 0n]);
+    expect(gs(1n, fee60(1n))).toEqual([0n, 0n, fee60(1n)]);
+    expect(fee60(19n)).toBe(11n);
+    expect(gs(19n, fee60(19n))).toEqual([0n, 0n, 11n]);
+    expect(gs(20n, fee60(20n))).toEqual([1n, 1n, 10n]);
+    expect(gs(21n, fee60(21n))).toEqual([1n, 1n, 10n]);
+    expect(gs(39n, fee60(39n))).toEqual([1n, 1n, 21n]);
+    expect(gs(40n, fee60(40n))).toEqual([2n, 2n, 20n]);
+    expect(fee60(6_548_266n)).toBe(3_928_959n);
+    expect(gs(6_548_266n, fee60(6_548_266n))).toEqual([327_413n, 327_413n, 3_274_133n]);
+    expect(gs(131_346_320n, fee60(131_346_320n))).toEqual([6_567_316n, 6_567_316n, 65_673_160n]);
+    const cut = U64_MAX / 20n;
+    expect(gs(U64_MAX, fee60(U64_MAX))).toEqual([cut, cut, fee60(U64_MAX) - 2n * cut]);
+    // Received below the two cuts: the platform is paid first, then the creator, vault 0.
+    expect(gs(1_000n, 100n)).toEqual([50n, 50n, 0n]);
+    expect(gs(1_000n, 99n)).toEqual([50n, 49n, 0n]);
+    expect(gs(1_000n, 50n)).toEqual([50n, 0n, 0n]);
+    expect(gs(1_000n, 49n)).toEqual([49n, 0n, 0n]);
+    expect(gs(1_000n, 0n)).toEqual([0n, 0n, 0n]);
+    expect(gs(1_000n, 101n)).toEqual([50n, 50n, 1n]);
+    // A larger fee than the model expects goes to the vault.
+    expect(gs(100n, U64_MAX)).toEqual([5n, 5n, U64_MAX - 10n]);
+  });
+
+  it("property: the parts sum to received, each cut is at most T/20, the vault gets the rest", () => {
+    fc.assert(
+      fc.property(fc.bigInt({ min: 0n, max: U64_MAX }), fc.bigInt({ min: 0n, max: U64_MAX }), (t, r) => {
+        const s = graduationSplit(t, r);
+        expect(s.platform + s.creator + s.vault).toBe(r);
+        expect(s.platform <= t / 20n && s.creator <= t / 20n).toBe(true);
+        expect(s.vault >= (r > 2n * (t / 20n) ? r - 2n * (t / 20n) : 0n)).toBe(true);
+        if (s.creator > 0n) expect(s.platform).toBe(t / 20n);
+      }),
+      { numRuns: 2_000 },
+    );
+  });
+
+  it("rejects values outside u64", () => {
+    expect(() => graduationSplit(-1n, 0n)).toThrow(RangeError);
+    expect(() => graduationSplit(0n, U64_MAX + 1n)).toThrow(RangeError);
+  });
+});
+
+describe("lpFeeSplit (creator 50%, platform 20%, vault the rest)", () => {
+  it("matches the Rust vectors", () => {
+    expect(ls(0n)).toEqual([0n, 0n, 0n]);
+    expect(ls(1n)).toEqual([0n, 0n, 1n]);
+    expect(ls(2n)).toEqual([1n, 0n, 1n]);
+    expect(ls(3n)).toEqual([1n, 0n, 2n]);
+    expect(ls(4n)).toEqual([2n, 0n, 2n]);
+    expect(ls(5n)).toEqual([2n, 1n, 2n]);
+    expect(ls(9n)).toEqual([4n, 1n, 4n]);
+    expect(ls(10n)).toEqual([5n, 2n, 3n]);
+    expect(ls(11n)).toEqual([5n, 2n, 4n]);
+    expect(ls(1_000_000n)).toEqual([500_000n, 200_000n, 300_000n]);
+    expect(ls(U64_MAX)).toEqual([U64_MAX / 2n, U64_MAX / 5n, U64_MAX - U64_MAX / 2n - U64_MAX / 5n]);
+  });
+
+  it("property: sum, creator = floor(q/2), platform = floor(q/5), vault >= floor(3q/10)", () => {
+    fc.assert(
+      fc.property(fc.bigInt({ min: 0n, max: U64_MAX }), (q) => {
+        const s = lpFeeSplit(q);
+        expect(s.creator + s.platform + s.vault).toBe(q);
+        expect(s.creator).toBe(q / 2n);
+        expect(s.platform).toBe(q / 5n);
+        expect(s.vault >= (3n * q) / 10n).toBe(true);
+      }),
+      { numRuns: 2_000 },
+    );
+    expect(() => lpFeeSplit(-1n)).toThrow(RangeError);
+  });
+});
+
+describe("floorPer100AtListing and priceImpactPct", () => {
+  it("floor per $100 bought at the listing price: 100 * v / (sqrt(r) + 1 - m) * (1 - exit)", () => {
+    // Founder table (docs/DECISIONS.md D12).
+    expect(floorPer100AtListing(0.5, 0.6, 1.01, 200)).toBeCloseTo(34.88, 2);
+    expect(floorPer100AtListing(0.3, 0.4, 1.01, 200)).toBeCloseTo(18.32, 2);
+    expect(floorPer100AtListing(0.6, 0.7, 1.01, 200)).toBeCloseTo(45.06, 2);
+    expect(floorPer100AtListing(0.5, 0.6, 1.2, 200)).toBeCloseTo(32.77, 2);
+    expect(floorPer100AtListing(0.5, 0.6, 1.01, 0)).toBeCloseTo(34.88 / 0.98, 2);
+  });
+
+  it("rejects percentages passed where fractions are expected", () => {
+    expect(() => floorPer100AtListing(50, 60, 1.01, 200)).toThrow(RangeError);
+    expect(() => floorPer100AtListing(0.5, 0.4, 1.01, 200)).toThrow(RangeError);
+    expect(() => floorPer100AtListing(0.5, 0.6, 0.9, 200)).toThrow(RangeError);
+    expect(() => floorPer100AtListing(0.5, 0.6, 1.01, 10_001)).toThrow(RangeError);
+  });
+
+  it("price impact of a buy into a full-range pool: (1 + X / Q)^2 - 1, in percent", () => {
+    // 1% of the raise into a pool holding 40% of it: 1.025^2 - 1 = 5.0625%.
+    expect(priceImpactPct(100, 4_000)).toBeCloseTo(5.0625, 10);
+    expect(priceImpactPct(0, 4_000)).toBe(0);
+    expect(() => priceImpactPct(1, 0)).toThrow(RangeError);
+    expect(() => priceImpactPct(-1, 10)).toThrow(RangeError);
   });
 });

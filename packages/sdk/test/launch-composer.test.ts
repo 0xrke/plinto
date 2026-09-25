@@ -5,6 +5,8 @@
  */
 import { Keypair, PublicKey } from "@solana/web3.js";
 import fc from "fast-check";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   authorityPda,
@@ -29,6 +31,9 @@ import {
   TOKEN_2022_PROGRAM_ID,
   validateDbcConfigParams,
   type LaunchInput,
+  associatedTokenAddress,
+  CU_LIMITS,
+  PLATFORM_TREASURY,
 } from "../src";
 
 const base: LaunchInput = {
@@ -53,7 +58,7 @@ describe("buildLaunchTransactions", () => {
     expect(tx2!.signers.map((s) => s.publicKey.toBase58())).toEqual([b.baseMintKeypair.publicKey.toBase58()]);
     expect(tx1!.instructions.map((i) => i.programId.toBase58())).toEqual([DBC_PROGRAM_ID.toBase58(), STOCKFLOOR_PROGRAM_ID.toBase58()]);
     expect(tx2!.instructions.map((i) => i.programId.toBase58())).toEqual([DBC_PROGRAM_ID.toBase58(), STOCKFLOOR_PROGRAM_ID.toBase58()]);
-    expect(tx1!.computeUnitLimit).toBe(170_000);
+    expect(tx1!.computeUnitLimit).toBe(250_000);
     expect(tx2!.computeUnitLimit).toBe(170_000);
     const a = b.addresses;
     expect(a.claimer.equals(authorityPda(a.config)[0])).toBe(true);
@@ -68,6 +73,36 @@ describe("buildLaunchTransactions", () => {
     const createLaunch = tx1!.instructions[1]!;
     expect(createLaunch.keys[0]!.pubkey.equals(creator) && createLaunch.keys[1]!.pubkey.equals(creator)).toBe(true);
     expect(createLaunch.keys[2]!.pubkey.equals(a.config) && createLaunch.keys[2]!.isSigner).toBe(true);
+    // create_launch creates the creator, platform and transit quote ATAs (init_if_needed).
+    const quote = (owner: PublicKey) => associatedTokenAddress(owner, a.quoteMint, a.quoteTokenProgram).toBase58();
+    expect(createLaunch.keys.slice(12).map((k) => [k.pubkey.toBase58(), k.isWritable])).toEqual([
+      [quote(creator), true],
+      [PLATFORM_TREASURY.toBase58(), false],
+      [quote(PLATFORM_TREASURY), true],
+      [quote(a.claimer), true],
+    ]);
+    expect(tx1!.size).toBeLessThanOrEqual(PACKET_DATA_SIZE);
+  });
+
+  it("CU_LIMITS follow the production limits of the fork compute budget test", () => {
+    const src = readFileSync(join(__dirname, "..", "..", "..", "tests", "integration", "compute-budget.test.ts"), "utf8");
+    const limit = (step: string) => {
+      const m = new RegExp(`"${step.replace(/[()+]/g, (c) => `\\${c}`)}":\\s*([0-9_]+)`).exec(src);
+      if (!m) throw new Error(`no fork limit for ${step}`);
+      return Number(m[1]!.replace(/_/g, ""));
+    };
+    expect(CU_LIMITS.createLaunch).toBe(limit("stockfloor create_launch"));
+    expect(CU_LIMITS.registerPool).toBe(limit("stockfloor register_pool"));
+    expect(CU_LIMITS.harvestCurveFeesCreatesAta).toBe(limit("stockfloor harvest_curve_fees (creates the claimer base ATA)"));
+    expect(CU_LIMITS.harvestCurveFees).toBe(limit("stockfloor harvest_curve_fees"));
+    expect(CU_LIMITS.harvestMigrationFee).toBe(limit("stockfloor harvest_migration_fee"));
+    expect(CU_LIMITS.harvestSurplus).toBe(limit("stockfloor harvest_surplus"));
+    expect(CU_LIMITS.syncMigration).toBe(limit("stockfloor sync_migration"));
+    expect(CU_LIMITS.harvestLpFees).toBe(limit("stockfloor harvest_lp_fees"));
+    expect(CU_LIMITS.redeem).toBe(limit("stockfloor redeem"));
+    expect(CU_LIMITS.floor).toBe(limit("stockfloor floor (view)"));
+    expect(CU_LIMITS.dbcCreateConfig).toBe(limit("DBC create_config"));
+    expect(CU_LIMITS.dbcMigrationDammV2).toBe(limit("DBC migration_damm_v2"));
   });
 
   it("every transaction fits 1232 bytes for all quotes, presets, shares, max metadata, first buys and priority fees", () => {
@@ -76,7 +111,7 @@ describe("buildLaunchTransactions", () => {
         fc.record({
           quote: fc.constantFrom(...QUOTE_ALLOWLIST),
           preset: fc.constantFrom("gentle" as const, "flat" as const),
-          share: fc.integer({ min: 30, max: 70 }),
+          share: fc.integer({ min: 30, max: 60 }),
           nameLen: fc.integer({ min: 1, max: 32 }),
           symbolLen: fc.integer({ min: 1, max: 10 }),
           uriLen: fc.integer({ min: 0, max: 200 }),
