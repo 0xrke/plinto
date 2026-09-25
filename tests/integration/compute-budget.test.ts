@@ -26,6 +26,7 @@ import {
 } from "../src/constants.js";
 import { dammSwap2Ix, DammPoolKeys, pendingPositionFees } from "../src/damm.js";
 import { bnToBig, createConfigIx, DbcPoolKeys, fetchVirtualPool, initializeVirtualPoolWithSplTokenIx, migrationDammV2Ix, swap2Ix, SwapMode } from "../src/dbc.js";
+import { applyFeeModelV3, graduationSplit, lpFeeSplit } from "../src/fee-model.js";
 import { FloorTracker } from "../src/floor-invariants.js";
 import { Fork, TxSuccess } from "../src/fork.js";
 import { fundedWallet } from "../src/scenario.js";
@@ -35,6 +36,9 @@ import {
   createLaunchIx,
   decodeFloorReturn,
   deriveClaimerBaseAccount,
+  deriveClaimerQuote,
+  deriveCreatorQuote,
+  derivePlatformQuote,
   deriveVault,
   floorIx,
   harvestCurveFeesIx,
@@ -53,28 +57,33 @@ import { createAta, mintSupply, splAta, spyxAta, tokenAmount } from "../src/toke
  * the largest value measured over six runs with random keys plus headroom for PDA / ATA bump searches:
  * every extra search iteration costs about 1,500 CU and happens with probability 1/2, so each limit
  * leaves at least ~16 iterations (24,000 CU) above the smallest measurement of a transaction that
- * searches (create_launch has the most: claimer, vault authority, launch, vault ATA). Transactions
- * that only use stored bumps (register_pool, sync_migration, harvest_migration_fee, harvest_surplus, floor, redeem)
- * measure the same units on every run. Every limit, DBC's migration included, is at most 200,000 CU.
+ * searches (create_launch has the most: claimer, vault authority, launch, and the vault, creator,
+ * platform and transit ATAs, three of which it may also create). Launch v3 harvests that pay the
+ * platform or split through the transit derive those ATAs too (harvest_curve_fees 1,
+ * harvest_migration_fee and harvest_lp_fees 3). Transactions that only use stored bumps
+ * (register_pool, sync_migration, harvest_surplus, floor, redeem) measure the same units on every
+ * run. Every limit, DBC's migration included, is at most 200,000 CU. Measured maxima over six runs
+ * (2026-09-25, v3): create_launch 163,053 (the first launch also creates the platform ATA),
+ * harvest_curve_fees 91,276 / 59,180, harvest_migration_fee 69,817, harvest_lp_fees 90,551.
  */
 export const LIMITS = {
   "DBC create_config": 50_000,
   "DBC initialize_virtual_pool_with_spl_token": 150_000,
-  "stockfloor create_launch": 120_000,
+  "stockfloor create_launch": 200_000,
   "stockfloor register_pool": 20_000,
   "DBC swap2 (curve buy)": 60_000,
   "DBC swap2 (curve sell)": 60_000,
-  "stockfloor harvest_curve_fees (creates the claimer base ATA)": 100_000,
-  "stockfloor harvest_curve_fees": 80_000,
+  "stockfloor harvest_curve_fees (creates the claimer base ATA)": 120_000,
+  "stockfloor harvest_curve_fees": 85_000,
   "DBC swap2 (PartialFill completion)": 60_000,
   "DBC migration_damm_v2": 200_000,
   "stockfloor sync_migration": 20_000,
-  "stockfloor harvest_migration_fee": 60_000,
+  "stockfloor harvest_migration_fee": 100_000,
   "stockfloor harvest_surplus": 60_000,
   "stockfloor burn_claimer_base (empty)": 40_000,
   "SPL transfer + stockfloor burn_claimer_base (donation)": 45_000,
   "DAMM v2 swap2": 40_000,
-  "stockfloor harvest_lp_fees": 100_000,
+  "stockfloor harvest_lp_fees": 120_000,
   "stockfloor floor (view)": 15_000,
   "stockfloor redeem": 40_000,
 } as const;
@@ -125,6 +134,7 @@ describe("lifecycle under production compute-unit limits", () => {
       exitFeeBps: 200,
     };
     const { feeClaimer, leftoverReceiver, quoteMint, ...params } = buildDbcConfigParams(input, claimer, claimer);
+    applyFeeModelV3(params, input.vaultSharePct);
     const T = bnToBig(params.migrationQuoteThreshold as never);
     meter("DBC create_config", [await createConfigIx({ config, feeClaimer, leftoverReceiver, quoteMint, payer: partner.publicKey, params: params as never, tokenBadge: DBC_TOKEN_BADGE_SPYX })], [partner, configKp]);
     const baseMintKp = Keypair.generate();
@@ -137,7 +147,19 @@ describe("lifecycle under production compute-unit limits", () => {
     const vault = deriveVault(config);
     const vaultAuthority = vaultAuthorityPda(config)[0];
     probe = () => [tokenAmount(fork, vault), mintSupply(fork, keys.baseMint), tokenAmount(fork, keys.quoteVault), tokenAmount(fork, keys.baseVault)];
-    const tracker = new FloorTracker(fork, { vault, baseMint: keys.baseMint, quoteMint: SPYX_MINT, vaultAuthority, claimer, claimerBaseAccount: deriveClaimerBaseAccount(config, keys.baseMint) });
+    const platformQuote = derivePlatformQuote();
+    const creatorQuote = deriveCreatorQuote(creator.publicKey);
+    const tracker = new FloorTracker(fork, {
+      vault,
+      baseMint: keys.baseMint,
+      quoteMint: SPYX_MINT,
+      vaultAuthority,
+      claimer,
+      claimerBaseAccount: deriveClaimerBaseAccount(config, keys.baseMint),
+      claimerQuoteAccount: deriveClaimerQuote(config),
+      creatorQuoteAccount: creatorQuote,
+      platformQuoteAccount: platformQuote,
+    });
     tracker.trackBase(keys.baseVault);
     tracker.start("registered");
 
@@ -159,17 +181,23 @@ describe("lifecycle under production compute-unit limits", () => {
       meter("DBC swap2 (curve sell)", [await swap2Ix({ keys, payer: alice.publicKey, inputTokenAccount: splAta(alice.publicKey, keys.baseMint), outputTokenAccount: spyxAta(alice.publicKey), amount0: tokenAmount(fork, splAta(alice.publicKey, keys.baseMint)) / 4n, amount1: 0n, swapMode: SwapMode.ExactIn })], [alice]),
     );
     const cranker = fork.newWallet(10);
+    // v3: presale fees go to the platform treasury, the vault does not move.
     let expected = bnToBig(fetchVirtualPool(fork, keys.pool).partnerQuoteFee);
-    let v0 = tokenAmount(fork, vault);
-    await tracker.step("harvest_curve_fees #1", "no-outflow", async () => meter("stockfloor harvest_curve_fees (creates the claimer base ATA)", [await harvestCurveFeesIx({ payer: cranker.publicKey, keys })], [cranker]));
-    expect(tokenAmount(fork, vault) - v0).toBe(expected);
+    await tracker.step(
+      "harvest_curve_fees #1",
+      "no-outflow",
+      async () => meter("stockfloor harvest_curve_fees (creates the claimer base ATA)", [await harvestCurveFeesIx({ payer: cranker.publicKey, keys })], [cranker]),
+      { vaultIn: 0n, platformIn: expected, creatorIn: 0n },
+    );
 
     const remaining = T - bnToBig(fetchVirtualPool(fork, keys.pool).quoteReserve);
     await curveBuy((remaining * 11n) / 10n + 1_000_000n, SwapMode.PartialFill, "DBC swap2 (PartialFill completion)");
     expected = bnToBig(fetchVirtualPool(fork, keys.pool).partnerQuoteFee);
-    v0 = tokenAmount(fork, vault);
-    await tracker.step("harvest_curve_fees #2", "no-outflow", async () => meter("stockfloor harvest_curve_fees", [await harvestCurveFeesIx({ payer: cranker.publicKey, keys })], [cranker]));
-    expect(tokenAmount(fork, vault) - v0).toBe(expected);
+    await tracker.step("harvest_curve_fees #2", "no-outflow", async () => meter("stockfloor harvest_curve_fees", [await harvestCurveFeesIx({ payer: cranker.publicKey, keys })], [cranker]), {
+      vaultIn: 0n,
+      platformIn: expected,
+      creatorIn: 0n,
+    });
 
     // ---------------------------------------------------------------- migration and harvests
     const m = await migrationDammV2Ix({ keys, payer: cranker.publicKey, dammConfig: DAMM_V2_CONFIG_CUSTOMIZABLE });
@@ -180,9 +208,12 @@ describe("lifecycle under production compute-unit limits", () => {
     await tracker.step("sync_migration", "no-outflow", async () => meter("stockfloor sync_migration", [await syncMigrationIx({ config, pool: keys.pool })], [cranker]));
     expect(fetchLaunch(fork, config).migrated).toBe(true);
 
-    v0 = tokenAmount(fork, vault);
-    await tracker.step("harvest_migration_fee", "no-outflow", async () => meter("stockfloor harvest_migration_fee", [await harvestMigrationFeeIx({ keys })], [cranker]));
-    expect(tokenAmount(fork, vault) - v0).toBe(T - ceilDiv(T * 50n, 100n));
+    const mig = graduationSplit(T, T - ceilDiv(T * 40n, 100n)); // vault share 50% -> mf 60
+    await tracker.step("harvest_migration_fee", "no-outflow", async () => meter("stockfloor harvest_migration_fee", [await harvestMigrationFeeIx({ keys })], [cranker]), {
+      vaultIn: mig.vault,
+      platformIn: mig.platform,
+      creatorIn: mig.creator,
+    });
     await tracker.step("harvest_surplus", "no-outflow", async () => meter("stockfloor harvest_surplus", [await harvestSurplusIx({ keys })], [cranker]));
     await tracker.step("burn_claimer_base (empty)", "no-outflow", async () => meter("stockfloor burn_claimer_base (empty)", [await burnClaimerBaseIx({ config, baseMint: keys.baseMint })], [cranker]));
     const donation = tokenAmount(fork, splAta(alice.publicKey, keys.baseMint)) / 10n;
@@ -207,16 +238,18 @@ describe("lifecycle under production compute-unit limits", () => {
     await tracker.step("damm sell", "no-outflow", async () =>
       meter("DAMM v2 swap2", [await dammSwap2Ix({ keys: dk, payer: trader.publicKey, inputTokenAccount: traderBase, outputTokenAccount: spyxAta(trader.publicKey), amount0: tokenAmount(fork, traderBase) / 2n, amount1: 0n, swapMode: 0 })], [trader]),
     );
-    const lp = pendingPositionFees(fork, dk.pool, m.firstPosition);
-    v0 = tokenAmount(fork, vault);
-    await tracker.step("harvest_lp_fees", "no-outflow", async () =>
-      meter(
-        "stockfloor harvest_lp_fees",
-        [await harvestLpFeesIx({ payer: cranker.publicKey, keys, dammPool: dk.pool, position: m.firstPosition, positionNftAccount: m.firstPositionNftAccount, dammTokenAVault: dk.tokenAVault, dammTokenBVault: dk.tokenBVault })],
-        [cranker],
-      ),
+    const lp = lpFeeSplit(pendingPositionFees(fork, dk.pool, m.firstPosition).b);
+    await tracker.step(
+      "harvest_lp_fees",
+      "no-outflow",
+      async () =>
+        meter(
+          "stockfloor harvest_lp_fees",
+          [await harvestLpFeesIx({ payer: cranker.publicKey, keys, dammPool: dk.pool, position: m.firstPosition, positionNftAccount: m.firstPositionNftAccount, dammTokenAVault: dk.tokenAVault, dammTokenBVault: dk.tokenBVault })],
+          [cranker],
+        ),
+      { vaultIn: lp.vault, platformIn: lp.platform, creatorIn: lp.creator },
     );
-    expect(tokenAmount(fork, vault) - v0).toBe(lp.b);
 
     // ---------------------------------------------------------------- floor view and redemptions
     const view = decodeFloorReturn(meter("stockfloor floor (view)", [await floorIx({ config, baseMint: keys.baseMint })], [cranker]));
