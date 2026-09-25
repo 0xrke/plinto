@@ -1,5 +1,16 @@
 # Status — 2026-09-25 (ET)
 
+
+## Mainnet upgrade to the v3 fee model — 2026-09-26
+- Program `98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA` upgraded from `main` (`d508707`), founder-approved.
+  Extended by 31,712 bytes (0.1611 SOL of rent moved into the programdata account), then upgraded in
+  `5NcEtQDQFshKgJEVpbeias5ak7U2oY8hkoAVx9UyA1oEujNH38Qp1KdZcv7vzQCPC2C4diweVGHpbSKntggSxriC`.
+  The on-chain ELF equals `target/deploy/stockfloor.so` byte for byte (sha256 `86b90a59…`). Buffer closed and
+  refunded; deployer holds 4.0324 SOL. Upgrade authority unchanged (deployer).
+- Pre-deploy checks on the same binary: Rust 58/58, fork suite 129/129 (audit PoCs excluded).
+- SFDEMO read back with the new SDK: `version 2`, `feeSplit: v2: 100% to the vault`, phase `redeemable`.
+- Treasury stays the hot key `78tRFS…` for now (founder decision); moving it needs another upgrade.
+
 ## Current milestone
 **C2 done: StockFloor is live on Solana mainnet** (launch v2 fee model). **The launch v3 fee model is implemented
 on branch `feat/fee-model`** (program, SDK, CLI/crank, app, docs; all gated suites green), not merged and not
