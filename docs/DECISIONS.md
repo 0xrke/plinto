@@ -256,3 +256,9 @@ Format: date — decision · alternatives · reason.
   every token (no creator choice, no platform share). · 1%; a platform share; a creator-chosen range · Every exit
   thickens the floor for the holders who stay, and one rule for all tokens is easy to explain and compare. Matches
   the program today (no change needed).
+- **The creator keeps the vault-share slider (founder decision, 2026-09-25).** With the platform 5% and the creator
+  bonus 5% fixed, the slider splits the remaining 90% of the raise between the vault (30–60%, default 50%) and the
+  pool (the rest, 30–60%). · A fixed 50/40 split for every token · The slider trades price stability against buyer
+  protection and does not favour the creator, so it is a legitimate per-community choice. The create form must show
+  the resulting buyer guarantee and price sensitivity, and the token page must show the guarantee per $100, not only
+  the vault share percentage. The upper bound drops from 70% to 60% so the pool keeps at least 30% of the raise.
