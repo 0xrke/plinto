@@ -49,13 +49,15 @@ pub mod stockfloor {
         instructions::register_pool::handle_register_pool(ctx)
     }
 
-    /// Permissionless: partner trading fees from the DBC curve into the vault.
+    /// Permissionless: partner trading fees from the DBC curve; v3: to the platform treasury,
+    /// v2: into the vault.
     pub fn harvest_curve_fees(ctx: Context<HarvestCurveFees>) -> Result<()> {
         instructions::harvest_curve_fees::handle_harvest_curve_fees(ctx)
     }
 
-    /// Permissionless: partner migration fee into the vault (once).
-    pub fn harvest_migration_fee(ctx: Context<HarvestQuoteFromDbc>) -> Result<()> {
+    /// Permissionless: partner migration fee (once); v3: 5% of the threshold to the platform, 5%
+    /// to the creator, the rest into the vault; v2: all into the vault.
+    pub fn harvest_migration_fee(ctx: Context<HarvestMigrationFee>) -> Result<()> {
         instructions::harvest_dbc_quote::handle_harvest_migration_fee(ctx)
     }
 
@@ -74,7 +76,8 @@ pub mod stockfloor {
         instructions::burn_claimer_base::handle_burn_claimer_base(ctx)
     }
 
-    /// Permissionless: DAMM v2 LP fees; quote into the vault, base burned.
+    /// Permissionless: DAMM v2 LP fees; base burned; quote v3: creator 50% / platform 20% / vault
+    /// the rest, v2: all into the vault.
     pub fn harvest_lp_fees(ctx: Context<HarvestLpFees>) -> Result<()> {
         instructions::harvest_lp_fees::handle_harvest_lp_fees(ctx)
     }

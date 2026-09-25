@@ -1,5 +1,6 @@
 pub mod burn_claimer_base;
 pub mod create_launch;
+pub mod fee_split;
 pub mod floor;
 pub mod harvest_curve_fees;
 pub mod harvest_dbc_quote;
