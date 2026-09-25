@@ -18,6 +18,8 @@ export const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey("ATokenGPvbdGVxr1b2hvZb
 export const METAPLEX_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
 export const STOCKFLOOR_PROGRAM_ID = new PublicKey("98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA");
 export const SPIKE_PROGRAM_ID = new PublicKey("JDizjXTevp3bsexc4cxHbNPjMgXPhMewwkY34JnZSQFh");
+/** StockFloor platform treasury (programs/stockfloor/src/constants.rs PLATFORM_TREASURY). */
+export const PLATFORM_TREASURY = new PublicKey("78tRFS255ADZT2oMSXi5xjHt7Y2SVDLdDEBz759eQsqJ");
 
 // SPYx (Token-2022, 8 decimals)
 export const SPYX_MINT = new PublicKey("XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W");

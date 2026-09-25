@@ -9,7 +9,9 @@
  *    (tracked explicitly: DBC base vault, DAMM v2 base vault, holders, claimer base ATA);
  * 4. the claimer PDA holds no base tokens after any instruction (its base ATA is empty);
  * 5. the claimer never holds or controls the vault: the vault is the vault authority's quote ATA
- *    (owner and mint never change), with no delegate and no close authority.
+ *    (owner and mint never change), with no delegate and no close authority;
+ * 6. (launch v3) the claimer's quote transit account is empty after every instruction, and on a
+ *    harvest step the vault, the platform and the creator receive exactly the declared parts.
  */
 import { PublicKey } from "@solana/web3.js";
 import { expect } from "vitest";
@@ -27,6 +29,12 @@ export interface FloorTrackerAccounts {
   claimer: PublicKey;
   /** ATA(claimer, base mint): must be empty after every non-donation step. */
   claimerBaseAccount: PublicKey;
+  /** ATA(claimer, quote mint): the v3 fee-split transit, empty after every step. */
+  claimerQuoteAccount?: PublicKey;
+  /** ATA(launch creator, quote mint): the creator's payee account. */
+  creatorQuoteAccount?: PublicKey;
+  /** ATA(PLATFORM_TREASURY, quote mint): the platform's payee account. */
+  platformQuoteAccount?: PublicKey;
 }
 
 /** SPL / Token-2022 base account layout: delegate COption at 72, close_authority COption at 129. */
@@ -46,6 +54,10 @@ export interface FloorState {
   supply: bigint;
   claimerBase: bigint;
   trackedBase: bigint;
+  /** Transit, creator and platform quote balances (0 when the account is absent or not tracked). */
+  transit: bigint;
+  creatorQuote: bigint;
+  platformQuote: bigint;
 }
 
 export type StepKind =
@@ -64,6 +76,12 @@ export interface StepOptions {
   vaultOut?: bigint;
   /** For "redeem": the exit fee retained, > 0 requires a strictly higher floor. */
   feeRetained?: bigint;
+  /** Exact quote entering the vault in this step (harvest steps). */
+  vaultIn?: bigint;
+  /** Exact quote entering the platform payee account in this step. */
+  platformIn?: bigint;
+  /** Exact quote entering the creator payee account in this step. */
+  creatorIn?: bigint;
 }
 
 export class FloorTracker {
@@ -76,6 +94,9 @@ export class FloorTracker {
   readonly vaultAuthority: PublicKey;
   readonly claimer: PublicKey;
   readonly claimerBaseAccount: PublicKey;
+  readonly claimerQuoteAccount?: PublicKey;
+  readonly creatorQuoteAccount?: PublicKey;
+  readonly platformQuoteAccount?: PublicKey;
 
   constructor(
     private readonly fork: Fork,
@@ -87,7 +108,16 @@ export class FloorTracker {
     this.vaultAuthority = accounts.vaultAuthority;
     this.claimer = accounts.claimer;
     this.claimerBaseAccount = accounts.claimerBaseAccount;
+    this.claimerQuoteAccount = accounts.claimerQuoteAccount;
+    this.creatorQuoteAccount = accounts.creatorQuoteAccount;
+    this.platformQuoteAccount = accounts.platformQuoteAccount;
     this.trackBase(accounts.claimerBaseAccount);
+  }
+
+  private quoteBalance(account?: PublicKey): bigint {
+    if (!account) return 0n;
+    const a = this.fork.getAccount(account);
+    return a && a.data.length >= 72 ? a.data.readBigUInt64LE(64) : 0n;
   }
 
   /** Register a base token account so that it counts toward the supply reconciliation. */
@@ -104,6 +134,9 @@ export class FloorTracker {
       supply: mintSupply(this.fork, this.baseMint),
       claimerBase: tokenAmount(this.fork, this.claimerBaseAccount),
       trackedBase,
+      transit: this.quoteBalance(this.claimerQuoteAccount),
+      creatorQuote: this.quoteBalance(this.creatorQuoteAccount),
+      platformQuote: this.quoteBalance(this.platformQuoteAccount),
     };
   }
 
@@ -135,6 +168,9 @@ export class FloorTracker {
     } else {
       expect(next.vault >= prev.vault, `${ctx} vault must not decrease outside redeem (${prev.vault} -> ${next.vault})`).toBe(true);
     }
+    if (opts.vaultIn !== undefined) expect(next.vault - prev.vault, `${ctx} vault part`).toBe(opts.vaultIn);
+    if (opts.platformIn !== undefined) expect(next.platformQuote - prev.platformQuote, `${ctx} platform part`).toBe(opts.platformIn);
+    if (opts.creatorIn !== undefined) expect(next.creatorQuote - prev.creatorQuote, `${ctx} creator part`).toBe(opts.creatorIn);
 
     // Floor per token never decreases: next.vault / next.supply >= prev.vault / prev.supply.
     if (prev.supply > 0n && next.supply > 0n) {
@@ -155,6 +191,7 @@ export class FloorTracker {
     if (kind !== "donation") {
       expect(s.claimerBase, `${ctx} claimer holds no base tokens`).toBe(0n);
     }
+    if (kind !== "donation") expect(s.transit, `${ctx} the claimer's quote transit account is empty`).toBe(0n);
     const owner = tokenAccountOwner(this.fork, this.vault);
     expect(owner.equals(this.vaultAuthority), `${ctx} vault owner is the vault authority`).toBe(true);
     expect(owner.equals(this.claimer), `${ctx} the claimer does not own the vault`).toBe(false);

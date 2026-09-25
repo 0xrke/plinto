@@ -30,6 +30,7 @@ import { parseEvents } from "../src/anchor.js";
 import { SPYX_DECIMALS, SPYX_MINT, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "../src/constants.js";
 import { dammSwap2Ix, fetchDammPool, fetchPosition } from "../src/damm.js";
 import { bnToBig, fetchVirtualPool } from "../src/dbc.js";
+import { lpFeeSplit } from "../src/fee-model.js";
 import { FloorTracker } from "../src/floor-invariants.js";
 import { anchorErrorFromLogs, Fork, TxResult } from "../src/fork.js";
 import { fundedWallet, Migration } from "../src/scenario.js";
@@ -201,10 +202,14 @@ async function apply(w: World, a: Action, i: number): Promise<void> {
       return;
     }
     case "harvestCurve": {
+      // Launch v3: presale fees go to the platform treasury; the vault does not change.
       const expected = bnToBig(fetchVirtualPool(fork, L.keys.pool).partnerQuoteFee);
-      await w.tracker.step(label, "no-outflow", async () => fork.send([await harvestCurveFeesIx({ payer: w.cranker.publicKey, keys: L.keys })], [w.cranker]));
+      await w.tracker.step(label, "no-outflow", async () => fork.send([await harvestCurveFeesIx({ payer: w.cranker.publicKey, keys: L.keys })], [w.cranker]), {
+        vaultIn: 0n,
+        platformIn: expected,
+        creatorIn: 0n,
+      });
       count(a.kind, true);
-      w.vault += expected;
       return;
     }
     case "harvestLp": {
@@ -229,16 +234,19 @@ async function apply(w: World, a: Action, i: number): Promise<void> {
           ],
           [w.cranker],
         ),
+        (() => {
+          const s = lpFeeSplit(expectedB);
+          return { vaultIn: s.vault, platformIn: s.platform, creatorIn: s.creator };
+        })(),
       );
       count(a.kind, true);
-      w.vault += expectedB;
+      w.vault += lpFeeSplit(expectedB).vault;
       return;
     }
     case "harvestSurplus": {
       const already = fetchLaunch(fork, L.config).surplusHarvested as boolean;
       const surplus = bnToBig(fetchVirtualPool(fork, L.keys.pool).quoteReserve) - L.threshold;
-      const pc = (surplus * 80n) / 100n;
-      const expected = pc - (pc * 30n) / 100n;
+      const expected = (surplus * 80n) / 100n; // creator trading share 0%
       let r: TxResult | undefined;
       await w.tracker.step(label, "no-outflow", async () => {
         r = fork.sendTx([await harvestSurplusIx({ keys: L.keys })], [w.cranker]);

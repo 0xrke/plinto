@@ -83,8 +83,9 @@ describe("create_launch validation", () => {
     const fork = Fork.create({ stockfloor: true, spike: false });
     // DBC only requires migration_quote_threshold > 0. Its rounding (quote_amount =
     // ceil(T * (100 - pct) / 100), fee = T - quote_amount) pays the partner nothing for a dust
-    // threshold, which would give a Launch with a provably empty vault. pct = 50 here, so T = 1
-    // is the whole zero-fee range and T = 2 is the first threshold that pays 1 raw.
+    // threshold, which would give a Launch with a provably empty vault. pct = 60 here (vault share
+    // 50%), so T = 1 is the whole zero-fee range and T = 2 is the first threshold that pays 1 raw
+    // (below T = 20 the platform and creator cuts are 0, so it all goes to the vault).
     for (const [threshold, expected] of [
       [1n, "MigrationQuoteThresholdTooSmall"],
       [2n, null],
@@ -140,13 +141,19 @@ describe("create_launch validation", () => {
     const signers = [L.partner, L.creator, L.configKeypair];
     const otherMint = createSplMint(fork, L.partner);
     const cases: Array<[string, Promise<TransactionInstruction>, string | RegExp]> = [
-      ["claimer = vault authority", createLaunchFor(L, 200, { overrides: { claimer: L.vaultAuthority } }), "ConstraintSeeds"],
+      // As for the vault below: the transit's init_if_needed (ATA of the substituted claimer) runs
+      // first and references an ATA that is not in the transaction. With that ATA (the vault) passed as
+      // the transit, Anchor rejects the vault passed twice as a mutable account.
+      ["claimer = vault authority", createLaunchFor(L, 200, { overrides: { claimer: L.vaultAuthority } }), /MissingAccount/],
+      ["claimer = vault authority, with ATA(vault authority, SPYx) as the transit", createLaunchFor(L, 200, { overrides: { claimer: L.vaultAuthority, claimerQuoteAccount: L.vault } }), "ConstraintDuplicateMutableAccount"],
       // Anchor runs the vault's init_if_needed before the seeds checks: the ATA-create CPI for the
       // substituted owner references an ATA that is not in the transaction (MissingAccount). With that
       // ATA included it is created and the seeds check rejects the substitution; the tx rolls back.
       ["vault authority = claimer", createLaunchFor(L, 200, { overrides: { vaultAuthority: L.claimer } }), /MissingAccount/],
-      ["vault authority = claimer, with ATA(claimer, SPYx) as the vault", createLaunchFor(L, 200, { overrides: { vaultAuthority: L.claimer, vault: spyxAta(L.claimer) } }), "ConstraintSeeds"],
-      ["claimer of another config", createLaunchFor(L, 200, { overrides: { claimer: other.claimer } }), "ConstraintSeeds"],
+      // ATA(claimer, SPYx) is the transit account (account 15): passing it as the vault too is a
+      // duplicate mutable account.
+      ["vault authority = claimer, with ATA(claimer, SPYx) as the vault", createLaunchFor(L, 200, { overrides: { vaultAuthority: L.claimer, vault: spyxAta(L.claimer) } }), "ConstraintDuplicateMutableAccount"],
+      ["claimer of another config, with its transit", createLaunchFor(L, 200, { overrides: { claimer: other.claimer, claimerQuoteAccount: other.claimerQuoteAccount } }), "ConstraintSeeds"],
       ["vault authority of another config, with its vault", createLaunchFor(L, 200, { overrides: { vaultAuthority: other.vaultAuthority, vault: other.vault } }), "ConstraintSeeds"],
       // init_if_needed creates ATA(vault_authority, quote mint) through the ATA program, which references
       // that derived address; it is not in the transaction, so the runtime rejects the CPI.
@@ -160,9 +167,14 @@ describe("create_launch validation", () => {
       expect(fork.getAccount(deriveLaunch(L.config)), label).toBeNull();
     }
 
-    // With ATA(claimer, SPYx) created by a third party, it is validated as an existing vault and fails on its owner.
+    // With ATA(claimer, SPYx) (the canonical transit) created by a third party, it is validated as an
+    // existing vault and fails on its owner, also when a different transit is passed.
     const claimerQuoteAta = createAta(fork, fork.newWallet(1), L.claimer, SPYX_MINT, TOKEN_2022_PROGRAM_ID);
+    expect(claimerQuoteAta.equals(L.claimerQuoteAccount)).toBe(true);
     expect(errName(fork.sendExpectFail([await createLaunchFor(L, 200, { overrides: { vault: claimerQuoteAta } })], signers))).toBe("ConstraintTokenOwner");
+    expect(
+      errName(fork.sendExpectFail([await createLaunchFor(L, 200, { overrides: { vault: claimerQuoteAta, claimerQuoteAccount: other.claimerQuoteAccount } })], signers)),
+    ).toBe("ConstraintTokenOwner");
 
     // The config keypair must sign.
     const unsigned = await createLaunchFor(L, 200);

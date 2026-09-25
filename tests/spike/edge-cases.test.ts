@@ -40,7 +40,14 @@ const PARTNER_FEE = migrationFeeSplit(THRESHOLD, 50, 0).partner; // 250_000_000
 async function launchWithSpikePda(fork: Fork) {
   const configKp = Keypair.generate();
   const authority = deriveAuthority(configKp.publicKey, SPIKE_PROGRAM_ID);
-  const launch = await createLaunch(fork, { feeClaimer: authority, configKeypair: configKp, migrationQuoteThreshold: THRESHOLD });
+  // The M1 spike's fee parameters (1% curve fee, 30% creator share, 50% migration fee), pinned
+  // explicitly since the harness defaults moved to the StockFloor v3 fee model.
+  const launch = await createLaunch(fork, {
+    feeClaimer: authority,
+    configKeypair: configKp,
+    migrationQuoteThreshold: THRESHOLD,
+    config: { tradingFeeBps: 100, creatorTradingFeePercentage: 30, migrationFeePercentage: 50 },
+  });
   const pdaQuoteAta = createAta(fork, launch.partner, authority, SPYX_MINT, TOKEN_2022_PROGRAM_ID);
   return { ...launch, authority, pdaQuoteAta };
 }

@@ -12,9 +12,9 @@
  *    liquidity stays locked (the program has no way to remove liquidity);
  * 2. a position created directly for the claimer with no liquidity harvests exactly 0;
  * 3. a position on a second DAMM v2 pool with the same mints and both-token fees (created with the
- *    claimer as pool creator): the quote fee reaches the vault and the base fee is burned in the same
- *    instruction, so the supply falls by exactly the base fee (the burn path of `harvest_lp_fees`,
- *    which the quote-only migrated pool never takes).
+ *    claimer as pool creator): the quote fee is split (launch v3: creator 50%, platform 20%, vault
+ *    the rest) and the base fee is burned in the same instruction, so the supply falls by exactly the
+ *    base fee (the burn path of `harvest_lp_fees`, which the quote-only migrated pool never takes).
  *
  * 4. the SDK finds all of them (including the NFT held in the claimer's ATA, not the DAMM v2 NFT
  *    account PDA) and, by default, runCrank harvests only the positions on the launch's own pool with
@@ -43,6 +43,7 @@ import {
   pendingPositionFees,
 } from "../src/damm.js";
 import { bnToBig } from "../src/dbc.js";
+import { lpFeeSplit } from "../src/fee-model.js";
 import { FloorTracker } from "../src/floor-invariants.js";
 import { anchorErrorFromLogs, Fork, TxFailure } from "../src/fork.js";
 import { fundedWallet, Migration } from "../src/scenario.js";
@@ -74,8 +75,9 @@ describe("extra DAMM v2 positions held by the claimer", () => {
     );
   }
 
-  /** harvest_lp_fees as one tracked step; returns the stockfloor event. */
-  async function harvest(label: string, keys: DammPoolKeys, position: PublicKey, positionNftAccount: PublicKey) {
+  /** harvest_lp_fees as one tracked step with the exact v3 split of `quoteFee`; returns the stockfloor event. */
+  async function harvest(label: string, keys: DammPoolKeys, position: PublicKey, positionNftAccount: PublicKey, quoteFee: bigint) {
+    const split = lpFeeSplit(quoteFee);
     const res = await tracker.step(label, "no-outflow", async () =>
       fork.send(
         [
@@ -91,6 +93,7 @@ describe("extra DAMM v2 positions held by the claimer", () => {
         ],
         [cranker],
       ),
+      { vaultIn: split.vault, platformIn: split.platform, creatorIn: split.creator },
     );
     return parseEvents(stockfloorProgram(), res.logs).find((e) => e.name === "lpFeesHarvested")!;
   }
@@ -181,13 +184,14 @@ describe("extra DAMM v2 positions held by the claimer", () => {
 
     const v0 = tokenAmount(fork, L.vault);
     const h0 = bnToBig(fetchLaunch(fork, L.config).totalHarvestedQuote);
-    const e1 = await harvest("harvest_lp_fees position 1 (migrated)", dk, migration.firstPosition, migration.firstPositionNftAccount);
-    expect(tokenAmount(fork, L.vault) - v0).toBe(p1.b);
-    const e2 = await harvest("harvest_lp_fees position 2 (transferred to the claimer)", dk, created.position, claimerNft);
-    expect(tokenAmount(fork, L.vault) - v0).toBe(p1.b + p2.b);
-    expect([bnToBig(e1.data.quoteAmount), bnToBig(e2.data.quoteAmount), bnToBig(e2.data.baseBurned)]).toEqual([p1.b, p2.b, 0n]);
+    const [v1, v2] = [lpFeeSplit(p1.b).vault, lpFeeSplit(p2.b).vault];
+    const e1 = await harvest("harvest_lp_fees position 1 (migrated)", dk, migration.firstPosition, migration.firstPositionNftAccount, p1.b);
+    expect(tokenAmount(fork, L.vault) - v0).toBe(v1);
+    const e2 = await harvest("harvest_lp_fees position 2 (transferred to the claimer)", dk, created.position, claimerNft, p2.b);
+    expect(tokenAmount(fork, L.vault) - v0).toBe(v1 + v2);
+    expect([bnToBig(e1.data.quoteAmount), bnToBig(e2.data.quoteAmount), bnToBig(e2.data.baseBurned)]).toEqual([v1, v2, 0n]);
     expect(e2.data.position.equals(created.position)).toBe(true);
-    expect(bnToBig(fetchLaunch(fork, L.config).totalHarvestedQuote) - h0).toBe(p1.b + p2.b);
+    expect(bnToBig(fetchLaunch(fork, L.config).totalHarvestedQuote) - h0).toBe(v1 + v2);
     expect(bnToBig(fetchPosition(fork, created.position).feeBPending)).toBe(0n);
     // The donated liquidity stays in the pool: only the NFT owner (the claimer) could remove it, and
     // the program has no instruction that does.
@@ -203,7 +207,7 @@ describe("extra DAMM v2 positions held by the claimer", () => {
     expect(tokenAccountOwner(fork, created.positionNftAccount).equals(L.claimer)).toBe(true);
     made.empty = { position: created.position, nftAccount: created.positionNftAccount };
     const v0 = tokenAmount(fork, L.vault);
-    const ev = await harvest("harvest_lp_fees empty position", migration.dammKeys, created.position, created.positionNftAccount);
+    const ev = await harvest("harvest_lp_fees empty position", migration.dammKeys, created.position, created.positionNftAccount, 0n);
     expect(tokenAmount(fork, L.vault)).toBe(v0);
     expect([bnToBig(ev.data.quoteAmount), bnToBig(ev.data.baseBurned)]).toEqual([0n, 0n]);
   });
@@ -258,12 +262,13 @@ describe("extra DAMM v2 positions held by the claimer", () => {
     const s0 = mintSupply(fork, L.keys.baseMint);
     const dammA0 = tokenAmount(fork, init.keys.tokenAVault);
     const burned0 = bnToBig(fetchLaunch(fork, L.config).totalBurnedBase);
-    const ev = await harvest("harvest_lp_fees on the second pool (burns the base fee)", init.keys, init.position, init.positionNftAccount);
-    expect(tokenAmount(fork, L.vault) - v0).toBe(pending.b);
+    const ev = await harvest("harvest_lp_fees on the second pool (burns the base fee)", init.keys, init.position, init.positionNftAccount, pending.b);
+    const vaultPart = lpFeeSplit(pending.b).vault;
+    expect(tokenAmount(fork, L.vault) - v0).toBe(vaultPart);
     expect(s0 - mintSupply(fork, L.keys.baseMint)).toBe(pending.a);
     expect(dammA0 - tokenAmount(fork, init.keys.tokenAVault)).toBe(pending.a);
     expect(tokenAmount(fork, L.claimerBaseAccount)).toBe(0n);
-    expect([bnToBig(ev.data.quoteAmount), bnToBig(ev.data.baseBurned)]).toEqual([pending.b, pending.a]);
+    expect([bnToBig(ev.data.quoteAmount), bnToBig(ev.data.baseBurned)]).toEqual([vaultPart, pending.a]);
     expect(bnToBig(fetchLaunch(fork, L.config).totalBurnedBase) - burned0).toBe(pending.a);
     // Vault up and supply down in one instruction: the floor strictly rises.
     const prev = tracker.history[tracker.history.length - 2];

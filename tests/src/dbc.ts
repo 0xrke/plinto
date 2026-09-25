@@ -156,7 +156,7 @@ export interface StockfloorConfigOptions {
   migrationQuoteThreshold: bigint;
   sqrtStartPrice: bigint;
   curve: CurvePoint[];
-  /** Curve trading fee in bps (default 100 = 1%). */
+  /** Curve trading fee in bps (default 25 = 0.25%, the StockFloor v3 presale fee). */
   tradingFeeBps?: number;
   migrationFeePercentage?: number;
   creatorMigrationFeePercentage?: number;
@@ -172,7 +172,7 @@ export interface StockfloorConfigOptions {
  * locked liquidity, DAMM v2 migration with the Customizable option, immutable metadata.
  */
 export function stockfloorConfigParameters(o: StockfloorConfigOptions) {
-  const feeBps = BigInt(o.tradingFeeBps ?? 100);
+  const feeBps = BigInt(o.tradingFeeBps ?? 25);
   return {
     poolFees: {
       baseFee: {
@@ -204,10 +204,10 @@ export function stockfloorConfigParameters(o: StockfloorConfigOptions) {
     },
     migrationFeeOption: MigrationFeeOption.Customizable,
     tokenSupply: null,
-    creatorTradingFeePercentage: o.creatorTradingFeePercentage ?? 30,
+    creatorTradingFeePercentage: o.creatorTradingFeePercentage ?? 0,
     tokenUpdateAuthority: TokenAuthorityOption.Immutable,
     migrationFee: {
-      feePercentage: o.migrationFeePercentage ?? 50,
+      feePercentage: o.migrationFeePercentage ?? 60,
       creatorFeePercentage: o.creatorMigrationFeePercentage ?? 0,
     },
     migratedPoolFee: {

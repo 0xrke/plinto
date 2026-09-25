@@ -5,10 +5,11 @@
  * pool) are in c1-lifecycle.test.ts, and the M1 review regressions in review-regressions.test.ts;
  * this file covers what needs a dedicated setup:
  *
- * - a random signer cannot redirect any harvest: every destination is pinned to the vault or the
- *   claimer's own base ATA (substitutions fail, including the claimer and vault authority PDAs of
- *   another launch or swapped with each other), and when it cranks honestly the vault receives
- *   exact amounts while the signer receives nothing;
+ * - a random signer cannot redirect any harvest: every destination is pinned to the vault, the
+ *   claimer's own base and quote (transit) ATAs, the platform treasury's quote ATA or the launch
+ *   creator's quote ATA (substitutions fail, including the claimer and vault authority PDAs of
+ *   another launch or swapped with each other), and when it cranks honestly the vault, the platform
+ *   and the creator receive exact amounts (launch v3 split) while the signer receives nothing;
  * - harvest_migration_fee before migration (allowed by DBC) does not open redemptions;
  * - a second pool on the same config (fees, migration fee, LP position all owned by the same
  *   claimer PDA on the DBC/DAMM side) can never feed or drain the launch vault;
@@ -42,6 +43,7 @@ import {
   initializeVirtualPoolWithSplTokenIx,
   withdrawMigrationFeeIx,
 } from "../src/dbc.js";
+import { graduationSplit, lpFeeSplit } from "../src/fee-model.js";
 import { FloorTracker } from "../src/floor-invariants.js";
 import { anchorErrorFromLogs, Fork, TxFailure } from "../src/fork.js";
 import { buyOnCurve, fundedWallet, Migration, migrateToDammV2 } from "../src/scenario.js";
@@ -186,11 +188,42 @@ describe("C1 adversarial: a random signer cannot redirect any harvest", () => {
         { claimer: L1.vaultAuthority, claimerBaseAccount: splAta(L1.vaultAuthority, L1.keys.baseMint) },
         "ConstraintSeeds",
       ],
+      // The v3 presale-fee destination is pinned to ATA(PLATFORM_TREASURY, SPYx).
+      ["platform quote account = attacker SPYx account", { platformQuoteAccount: attackerQuote }, "PayeeAccountMismatch"],
+      ["platform quote account = the launch creator's SPYx ATA", { platformQuoteAccount: L1.creatorQuoteAccount }, "PayeeAccountMismatch"],
+      ["platform quote account = the claimer's SPYx ATA (transit)", { platformQuoteAccount: claimerQuoteAta }, "PayeeAccountMismatch"],
+      ["platform quote account = the vault", { platformQuoteAccount: L1.vault }, /ConstraintDuplicateMutableAccount|PayeeAccountMismatch/],
     ];
     for (const [label, overrides, expected] of cases) {
       const f = fork.sendExpectFail([await harvestCurveFeesIx({ payer: a, keys: L1.keys, overrides })], [attacker]);
       expectError(f, expected, label);
     }
+  });
+
+  it("harvest_migration_fee and harvest_lp_fees: substituted transit, creator or platform accounts are rejected", async () => {
+    const a = attacker.publicKey;
+    const payees: Array<[string, Partial<Record<string, PublicKey>>, string | RegExp]> = [
+      ["transit = attacker SPYx account", { claimerQuoteAccount: attackerQuote }, "PayeeAccountMismatch"],
+      ["transit = another launch's transit", { claimerQuoteAccount: L2.claimerQuoteAccount }, "PayeeAccountMismatch"],
+      ["transit = the vault", { claimerQuoteAccount: L1.vault }, /ConstraintDuplicateMutableAccount|PayeeAccountMismatch/],
+      ["creator quote account = attacker SPYx account", { creatorQuoteAccount: attackerQuote }, "PayeeAccountMismatch"],
+      ["creator quote account = another launch creator's SPYx ATA", { creatorQuoteAccount: L2.creatorQuoteAccount }, "PayeeAccountMismatch"],
+      ["creator quote account = the platform's SPYx ATA", { creatorQuoteAccount: L1.platformQuoteAccount }, /ConstraintDuplicateMutableAccount|PayeeAccountMismatch/],
+      ["platform quote account = attacker SPYx account", { platformQuoteAccount: attackerQuote }, "PayeeAccountMismatch"],
+      ["platform quote account = the creator's SPYx ATA", { platformQuoteAccount: L1.creatorQuoteAccount }, /ConstraintDuplicateMutableAccount|PayeeAccountMismatch/],
+    ];
+    for (const [label, overrides, expected] of payees) {
+      let f = fork.sendExpectFail([await harvestMigrationFeeIx({ keys: L1.keys, overrides })], [attacker]);
+      expectError(f, expected, `harvest_migration_fee: ${label}`);
+      f = fork.sendExpectFail([await harvestLpFeesIx(lpArgs(L1, m1, a, overrides))], [attacker]);
+      expectError(f, expected, `harvest_lp_fees: ${label}`);
+    }
+    // The creator payee is launch.creator: the ATA of any other wallet (e.g. the pool creator's other
+    // wallet, or the builder's `creator` argument pointing elsewhere) is rejected.
+    const f = fork.sendExpectFail([await harvestMigrationFeeIx({ keys: L1.keys, creator: attacker.publicKey })], [attacker]);
+    expect(errName(f)).toBe("PayeeAccountMismatch");
+    expect(fetchLaunch(fork, L1.config).migrationFeeHarvested).toBe(false);
+    expect(tokenAmount(fork, attackerQuote)).toBe(1n);
   });
 
   it("harvest_migration_fee and harvest_surplus: substituted vault, pool, launch or claimer are rejected", async () => {
@@ -300,34 +333,41 @@ describe("C1 adversarial: a random signer cannot redirect any harvest", () => {
     expect(errName(f)).toBe("InvalidAuthority");
   });
 
-  it("cranking honestly, the attacker pays only SOL; every harvest pays exact amounts into the vault", async () => {
+  it("cranking honestly, the attacker pays only SOL; every harvest pays exact amounts to the vault, the platform and the creator", async () => {
     const a = attacker.publicKey;
     const q0 = tokenAmount(fork, attackerQuote);
     const b0 = tokenAmount(fork, attackerBase);
     const expectedCurve = bnToBig(fetchVirtualPool(fork, L1.keys.pool).partnerQuoteFee);
     const T = L1.threshold;
-    const expectedMigration = T - ceilDiv(T * 50n, 100n);
+    // Vault share 50% -> migration_fee_percentage 60: the partner fee is T - ceil(T * 40%).
+    const migration = graduationSplit(T, T - ceilDiv(T * 40n, 100n));
     const surplus = bnToBig(fetchVirtualPool(fork, L1.keys.pool).quoteReserve) - T;
-    const pc = (surplus * 80n) / 100n;
-    const expectedSurplus = pc - (pc * 30n) / 100n;
+    const expectedSurplus = (surplus * 80n) / 100n; // creator trading share 0%
     const lp = pendingLpFee(fork, m1);
+    const lpSplit = lpFeeSplit(lp.b);
     expect(expectedCurve).toBeGreaterThan(0n);
     expect(lp.b).toBeGreaterThan(0n);
     expect(lp.a).toBe(0n);
 
-    const step = async (ix: Promise<TransactionInstruction>, expected: bigint) => {
+    const step = async (ix: Promise<TransactionInstruction>, expected: { vault: bigint; platform: bigint; creator: bigint }) => {
       const v0 = tokenAmount(fork, L1.vault);
+      const p0 = tokenAmount(fork, L1.platformQuoteAccount);
+      const c0 = tokenAmount(fork, L1.creatorQuoteAccount);
       fork.send([await ix], [attacker]);
-      expect(tokenAmount(fork, L1.vault) - v0).toBe(expected);
+      expect(tokenAmount(fork, L1.vault) - v0).toBe(expected.vault);
+      expect(tokenAmount(fork, L1.platformQuoteAccount) - p0).toBe(expected.platform);
+      expect(tokenAmount(fork, L1.creatorQuoteAccount) - c0).toBe(expected.creator);
+      expect(tokenAmount(fork, L1.claimerQuoteAccount)).toBe(0n);
     };
-    await step(harvestCurveFeesIx({ payer: a, keys: L1.keys }), expectedCurve);
-    await step(harvestMigrationFeeIx({ keys: L1.keys }), expectedMigration);
-    await step(harvestSurplusIx({ keys: L1.keys }), expectedSurplus);
-    await step(burnClaimerBaseIx({ config: L1.config, baseMint: L1.keys.baseMint }), 0n);
-    await step(harvestLpFeesIx(lpArgs(L1, m1, a)), lp.b);
+    const none = { vault: 0n, platform: 0n, creator: 0n };
+    await step(harvestCurveFeesIx({ payer: a, keys: L1.keys }), { ...none, platform: expectedCurve });
+    await step(harvestMigrationFeeIx({ keys: L1.keys }), migration);
+    await step(harvestSurplusIx({ keys: L1.keys }), { ...none, vault: expectedSurplus });
+    await step(burnClaimerBaseIx({ config: L1.config, baseMint: L1.keys.baseMint }), none);
+    await step(harvestLpFeesIx(lpArgs(L1, m1, a)), lpSplit);
 
-    expect(tokenAmount(fork, L1.vault)).toBe(expectedCurve + expectedMigration + expectedSurplus + lp.b);
-    console.log(JSON.stringify({ honestCrank: { curveFees: expectedCurve, migrationFee: expectedMigration, surplus: expectedSurplus, lpFees: lp.b } }, (_k, v) => (typeof v === "bigint" ? v.toString() : v)));
+    expect(tokenAmount(fork, L1.vault)).toBe(migration.vault + expectedSurplus + lpSplit.vault);
+    console.log(JSON.stringify({ honestCrank: { curveFeesToPlatform: expectedCurve, migration, surplus: expectedSurplus, lp: lpSplit } }, (_k, v) => (typeof v === "bigint" ? v.toString() : v)));
     expect(tokenAmount(fork, attackerQuote)).toBe(q0);
     expect(tokenAmount(fork, attackerBase)).toBe(b0);
     expect(tokenAmount(fork, L1.claimerBaseAccount)).toBe(0n);
@@ -346,7 +386,7 @@ describe("C1 adversarial: harvest_migration_fee before migration does not open r
     await completeWithPartialFill(fork, L);
 
     const T = L.threshold;
-    const expectedFee = T - ceilDiv(T * 50n, 100n);
+    const expectedFee = graduationSplit(T, T - ceilDiv(T * 40n, 100n)).vault;
     fork.send([await harvestMigrationFeeIx({ keys: L.keys })], [fork.newWallet(1)]);
     expect(tokenAmount(fork, L.vault)).toBe(expectedFee);
     expect(fetchLaunch(fork, L.config).migrationFeeHarvested).toBe(true);
@@ -358,7 +398,7 @@ describe("C1 adversarial: harvest_migration_fee before migration does not open r
 
     // Migration still works and seeds DAMM v2 with the same quote as in the normal order.
     const m = await migrateToDammV2(fork, L.keys);
-    const q = ceilDiv(T * 50n, 100n);
+    const q = ceilDiv(T * 40n, 100n); // pool share 40% of the raise
     expect(bnToBig(fetchDammPool(fork, m.dammPool).tokenBAmount)).toBe(q - (q * 20n) / 10_000n);
 
     const V = tokenAmount(fork, L.vault);
@@ -459,7 +499,7 @@ describe("C1 adversarial: a second pool on the same config never feeds or drains
 // the surplus itself is a cheatcode (no DBC 0.2.1 swap can overshoot the threshold). In the real
 // flow the surplus is rounding dust; c1-lifecycle 8e ties that amount to DBC's own surplus event.
 describe("C1 edge: harvest_surplus routing with a non-trivial surplus (cheatcode state, not reachable by DBC 0.2.1 swaps)", () => {
-  it("pays exactly floor(floor(surplus * 80%) * (100 - 30)%) of DBC's surplus into the vault", async () => {
+  it("pays exactly floor(floor(surplus * 80%) * (100 - 0)%) of DBC's surplus into the vault (no creator trading share)", async () => {
     const fork = Fork.create({ stockfloor: true, spike: false });
     const L = await createStockfloorLaunch(fork);
     await graduate(fork, L, [30n]);
@@ -473,7 +513,7 @@ describe("C1 edge: harvest_surplus routing with a non-trivial surplus (cheatcode
     const surplus = bnToBig(fetchVirtualPool(fork, L.keys.pool).quoteReserve) - L.threshold;
     expect(surplus).toBeGreaterThanOrEqual(extra);
     const pc = (surplus * 80n) / 100n;
-    const expected = pc - (pc * 30n) / 100n;
+    const expected = pc - (pc * 0n) / 100n;
     const dbc0 = tokenAmount(fork, L.keys.quoteVault);
     fork.send([await harvestSurplusIx({ keys: L.keys })], [fork.newWallet(1)]);
     expect(tokenAmount(fork, L.vault)).toBe(expected);
@@ -657,6 +697,9 @@ describe("Quote issuer controls (pause, frozen vault, transfer hook) fail cleanl
       const before = snapshot();
       set();
       for (const [label, ix] of harvests()) {
+        // v3: harvest_curve_fees pays the platform and never touches the vault, so a frozen vault
+        // does not concern it (fee-model.test.ts covers a frozen platform account).
+        if (label === "harvest_curve_fees" && mode === "vault frozen") continue;
         expect(errName(fork.sendExpectFail([await ix], [c])), `${label} with ${mode}`).toBe(expected);
       }
       restore();
@@ -669,10 +712,14 @@ describe("Quote issuer controls (pause, frozen vault, transfer hook) fail cleanl
     const lp = pendingLpFee(fork, g.migration);
     setScaledUiMultiplier(fork, SPYX_MINT, 1.5);
     const v0 = tokenAmount(fork, L.vault);
+    const p0 = tokenAmount(fork, L.platformQuoteAccount);
     for (const [, ix] of harvests()) fork.send([await ix], [c]);
     const surplus = bnToBig(fetchVirtualPool(fork, L.keys.pool).quoteReserve) - T;
     const pc = (surplus * 80n) / 100n;
-    expect(tokenAmount(fork, L.vault) - v0).toBe(expectedCurve + (T - ceilDiv(T * 50n, 100n)) + (pc - (pc * 30n) / 100n) + lp.b);
+    const mig = graduationSplit(T, T - ceilDiv(T * 40n, 100n));
+    const lpSplit = lpFeeSplit(lp.b);
+    expect(tokenAmount(fork, L.vault) - v0).toBe(mig.vault + pc + lpSplit.vault);
+    expect(tokenAmount(fork, L.platformQuoteAccount) - p0).toBe(expectedCurve + mig.platform + lpSplit.platform);
 
     // Phase C: redeem under each control, then exact after restore (still at multiplier 1.5, then 0.8).
     const [holder] = g.buyers;

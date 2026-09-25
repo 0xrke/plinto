@@ -24,7 +24,8 @@ import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import { authorityPda, buildDbcConfigParams, DEFAULT_QUOTE_ASSET } from "@stockfloor/sdk";
 import { describe, expect, it } from "vitest";
 import { DBC_TOKEN_BADGE_SPYX, SPYX_MINT, TOKEN_2022_PROGRAM_ID } from "../src/constants.js";
-import { createConfigIx, fetchVirtualPool, initializeVirtualPoolWithSplTokenIx } from "../src/dbc.js";
+import { bnToBig, createConfigIx, fetchVirtualPool, initializeVirtualPoolWithSplTokenIx } from "../src/dbc.js";
+import { applyFeeModelV3 } from "../src/fee-model.js";
 import { anchorErrorFromLogs, Fork, TxFailure } from "../src/fork.js";
 import { dammSwap2Ix } from "../src/damm.js";
 import { fundedWallet, migrateToDammV2 } from "../src/scenario.js";
@@ -88,7 +89,8 @@ describe("1. create_launch binds the StockFloor shape of the DBC config", () => 
       (p) => (p.tokenSupply = { preMigrationTokenSupply: new BN("2000000000000000"), postMigrationTokenSupply: new BN("2000000000000000") }),
       "FixedTokenSupplyNotAllowed",
     ],
-    ["creator trading fee share 31%", (p) => (p.creatorTradingFeePercentage = 31), "CreatorTradingFeeTooHigh"],
+    ["creator trading fee share 1%", (p) => (p.creatorTradingFeePercentage = 1), "CreatorTradingFeeTooHigh"],
+    ["creator trading fee share 30% (the v2 preset)", (p) => (p.creatorTradingFeePercentage = 30), "CreatorTradingFeeTooHigh"],
     ["creator trading fee share 100%", (p) => (p.creatorTradingFeePercentage = 100), "CreatorTradingFeeTooHigh"],
     ["flat 50% curve fee", (p) => (p.poolFees.baseFee.cliffFeeNumerator = new BN(500_000_000)), "CurveFeeTooHigh"],
     ["curve fee 20% + 1 numerator", (p) => (p.poolFees.baseFee.cliffFeeNumerator = new BN(200_000_001)), "CurveFeeTooHigh"],
@@ -240,6 +242,7 @@ describe("2. register_pool is permissionless for the committed base mint: the cr
       vaultSharePct: 50,
     };
     const { feeClaimer, leftoverReceiver, quoteMint, ...params } = buildDbcConfigParams(input, claimer, claimer);
+    applyFeeModelV3(params, input.vaultSharePct);
     fork.send(
       [await createConfigIx({ config, feeClaimer, leftoverReceiver, quoteMint, payer: partner.publicKey, params: params as never, tokenBadge: DBC_TOKEN_BADGE_SPYX })],
       [partner, configKp],
@@ -286,6 +289,7 @@ describe("2. register_pool is permissionless for the committed base mint: the cr
       exitFeeBps: 200,
     };
     const { feeClaimer, leftoverReceiver, quoteMint, ...params } = buildDbcConfigParams(input, claimer, claimer);
+    applyFeeModelV3(params, input.vaultSharePct);
     fork.send(
       [await createConfigIx({ config, feeClaimer, leftoverReceiver, quoteMint, payer: partner.publicKey, params: params as never, tokenBadge: DBC_TOKEN_BADGE_SPYX })],
       [partner, configKp],
@@ -394,7 +398,7 @@ function setVaultCloseAuthority(fork: Fork, vault: PublicKey, closeAuthority: Pu
 }
 
 describe("4. harvests refuse an encumbered vault (the vault owner signs into upgradeable DBC / DAMM v2)", () => {
-  it("delegate, close authority or a foreign owner on the vault: every harvest fails atomically; redeem still works", async () => {
+  it("delegate, close authority or a foreign owner on the vault: every harvest that pays the vault fails atomically; redeem still works", async () => {
     const fork = Fork.create({ stockfloor: true, spike: false });
     const L = await createStockfloorLaunch(fork);
     const g = await graduate(fork, L, [30n, 10n]);
@@ -419,9 +423,20 @@ describe("4. harvests refuse an encumbered vault (the vault owner signs into upg
         dammTokenAVault: g.migration.tokenAVault,
         dammTokenBVault: g.migration.tokenBVault,
       });
+    // v3: harvest_curve_fees pays the platform and never touches the vault, so an encumbered vault
+    // does not stop it (checked first, with a delegate on the vault).
+    setVaultDelegate(fork, L.vault, evil);
+    const vc0 = tokenAmount(fork, L.vault);
+    const pc0 = tokenAmount(fork, L.platformQuoteAccount);
+    const curveFee = bnToBig(fetchVirtualPool(fork, L.keys.pool).partnerQuoteFee);
+    expect(curveFee).toBeGreaterThan(0n);
+    fork.send([await harvestCurveFeesIx({ payer: c.publicKey, keys: L.keys })], [c]);
+    expect(tokenAmount(fork, L.vault)).toBe(vc0);
+    expect(tokenAmount(fork, L.platformQuoteAccount) - pc0).toBe(curveFee);
+    setVaultDelegate(fork, L.vault, null);
+
     const harvests = () =>
       [
-        ["harvest_curve_fees", harvestCurveFeesIx({ payer: c.publicKey, keys: L.keys })],
         ["harvest_migration_fee", harvestMigrationFeeIx({ keys: L.keys })],
         ["harvest_surplus", harvestSurplusIx({ keys: L.keys })],
         ["harvest_lp_fees", lp()],

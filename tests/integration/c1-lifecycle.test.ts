@@ -9,18 +9,23 @@
  *  2. DBC pool
  *  3. create_launch + register_pool
  *  4. buys and sells by several wallets
- *  5. harvest_curve_fees (exact partner share)
+ *  5. harvest_curve_fees (exact partner share, to the platform treasury: launch v3)
  *  6. curve completion (surplus)
  *  7. migration to DAMM v2
- *  8. harvest_migration_fee (exact), harvest_surplus (exact), burn_claimer_base (supply effects)
+ *  8. harvest_migration_fee (exact 5% platform / 5% creator / rest vault split), harvest_surplus
+ *     (exact), burn_claimer_base (supply effects)
  *  9. DAMM v2 trades
- * 10. harvest_lp_fees (exact)
+ * 10. harvest_lp_fees (exact 50% creator / 20% platform / 30% vault split)
  * 11. redeem by several holders (exact net / fee)
  * 12. floor invariants after every step (FloorTracker)
  * with the first adversarial checks at the stage where they apply.
  *
  * Every expected amount is computed independently of the stockfloor program: from DBC / DAMM v2
  * formulas (vendor sources), DBC swap events, DAMM v2 account state, or @stockfloor/sdk math.
+ *
+ * Fee model v3 (docs/DECISIONS.md, 2026-09-25): 0.25% presale fee with no creator share, the
+ * migration fee percentage is the vault share + 10, and the SDK-built parameters get those fields
+ * pinned by `applyFeeModelV3` (a no-op once the SDK presets produce them).
  */
 import { createTransferInstruction } from "@solana/spl-token";
 import { Keypair, PublicKey } from "@solana/web3.js";
@@ -45,6 +50,7 @@ import { dbcProgram, dammProgram, parseCpiEvents, parseEvents } from "../src/anc
 import {
   DAMM_V2_CONFIG_CUSTOMIZABLE,
   DBC_TOKEN_BADGE_SPYX,
+  PLATFORM_TREASURY,
   SPYX_DECIMALS,
   SPYX_MINT,
   STOCKFLOOR_PROGRAM_ID,
@@ -63,6 +69,7 @@ import {
   swap2Ix,
   SwapMode,
 } from "../src/dbc.js";
+import { applyFeeModelV3, graduationSplit, lpFeeSplit, migrationFeePctForVaultShare } from "../src/fee-model.js";
 import { FloorTracker } from "../src/floor-invariants.js";
 import { anchorErrorFromLogs, Fork, TxFailure, TxSuccess } from "../src/fork.js";
 import { buyOnCurve, fundedWallet, Migration, migrateToDammV2, sellOnCurve } from "../src/scenario.js";
@@ -72,6 +79,9 @@ import {
   burnClaimerBaseIx,
   deriveClaimer,
   deriveClaimerBaseAccount,
+  deriveClaimerQuote,
+  deriveCreatorQuote,
+  derivePlatformQuote,
   expectedFloorQ64,
   deriveLaunch,
   deriveVault,
@@ -105,10 +115,12 @@ import {
 const SPYX_USD_PRICE = 757.02;
 const THRESHOLD_USD = 1000; // BRIEF §4 default; ~1.31 SPYx, cheap to fund with cheatcodes
 const VAULT_SHARE_PCT = 50;
+/** DBC migration_fee_percentage: vault 50% + platform 5% + creator 5% of the raise. */
+const MIGRATION_FEE_PCT = migrationFeePctForVaultShare(VAULT_SHARE_PCT);
 const EXIT_FEE_BPS = 200;
-const CREATOR_TRADING_FEE_PCT = 30n;
+const CREATOR_TRADING_FEE_PCT = 0n;
 const PROTOCOL_FEE_PCT = 20n;
-const CURVE_FEE_NUMERATOR = 10_000_000n; // 1% of 1e9
+const CURVE_FEE_NUMERATOR = 2_500_000n; // 0.25% of 1e9
 const FEE_DENOMINATOR = 1_000_000_000n;
 const PARTNER_MIGRATION_FEE_MASK = 0b100;
 const U128 = 1n << 128n;
@@ -176,7 +188,16 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
   let migration: Migration;
   let migrationFeeHarvested = 0n;
   const wallets: Record<string, Keypair> = {};
+  /** Quote that entered the vault, per harvest. */
   const harvested: Record<string, bigint> = {};
+  /** Quote paid to the platform treasury and to the creator, per harvest. */
+  const platformPaid: Record<string, bigint> = {};
+  const creatorPaid: Record<string, bigint> = {};
+  let platformQuote: PublicKey;
+  let creatorQuote: PublicKey;
+  let transit: PublicKey;
+  /** true once the SDK presets speak the v3 mapping (migration fee = vault share + 10). */
+  let sdkV3 = false;
   const redemptions: Array<{ holder: string; amount: bigint; gross: bigint; fee: bigint; net: bigint }> = [];
   let expectedPartnerTradingFee = 0n;
   let donation = 0n;
@@ -195,6 +216,9 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     vaultAuthority = vaultAuthorityPda(config)[0];
     vault = vaultAddress(config, SPYX_MINT, TOKEN_2022_PROGRAM_ID);
     launchPk = launchPda(config)[0];
+    platformQuote = derivePlatformQuote();
+    creatorQuote = deriveCreatorQuote(creator.publicKey);
+    transit = deriveClaimerQuote(config);
     log.fixtures = { generatedAt: fork.manifest.generatedAt, slots: [...new Set(fork.manifest.accounts.map((a) => a.slot).concat(fork.manifest.programs.map((p) => p.slot)))].sort() };
   });
 
@@ -235,6 +259,7 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     };
     expect(DEFAULT_QUOTE_ASSET.mint).toBe(SPYX_MINT.toBase58());
     const built = buildDbcConfigParams(input, claimer, claimer);
+    applyFeeModelV3(built, VAULT_SHARE_PCT);
     curve = computeLaunchCurve(input);
     preview = previewLaunch(input);
     threshold = curve.thresholdQuoteRaw;
@@ -262,8 +287,16 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     expect(cfg.feeClaimer.equals(claimer)).toBe(true);
     expect(cfg.leftoverReceiver.equals(claimer)).toBe(true);
     expect(bnToBig(cfg.migrationQuoteThreshold)).toBe(threshold);
-    expect(cfg.migrationFeePercentage).toBe(VAULT_SHARE_PCT);
+    expect(cfg.migrationFeePercentage).toBe(MIGRATION_FEE_PCT);
     expect(cfg.creatorMigrationFeePercentage).toBe(0);
+    // Migrated DAMM v2 pool: Customizable option, fixed 1% fee, no dynamic fee, no first swap at the
+    // minimum fee (create_launch requires all of these).
+    expect(cfg.migrationFeeOption).toBe(6);
+    expect(cfg.migratedPoolFeeBps).toBe(100);
+    expect(cfg.migratedDynamicFee).toBe(0);
+    expect(cfg.migratedPoolBaseFeeMode).toBe(0);
+    expect(cfg.migratedCompoundingFeeBps).toBe(0);
+    expect(cfg.enableFirstSwapWithMinFee).toBe(0);
     expect(cfg.creatorTradingFeePercentage).toBe(Number(CREATOR_TRADING_FEE_PCT));
     expect(cfg.partnerPermanentLockedLiquidityPercentage).toBe(100);
     expect(cfg.partnerLiquidityPercentage + cfg.creatorLiquidityPercentage + cfg.creatorPermanentLockedLiquidityPercentage).toBe(0);
@@ -378,22 +411,29 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     expect(fork.mustGetAccount(launchPk).owner.equals(STOCKFLOOR_PROGRAM_ID)).toBe(true);
     expect(L.claimerBump).toBe(authorityPda(config)[1]);
     expect(L.vaultAuthorityBump).toBe(vaultAuthorityPda(config)[1]);
-    expect(L.version).toBe(2);
-    // Raw layout v2 (docs/research/program-design.md §3): the documented offsets for memcmp filters.
+    expect(L.version).toBe(3);
+    expect(bnToBig(L.totalPlatformQuote)).toBe(0n);
+    expect(bnToBig(L.totalCreatorQuote)).toBe(0n);
+    // Raw layout v3 (docs/research/program-design.md §3): the documented offsets for memcmp filters.
     const raw = fork.mustGetAccount(launchPk).data;
     expect(raw.length).toBe(351);
-    expect([raw[8], raw[10], raw[11], raw.readUInt16LE(12)]).toEqual([2, authorityPda(config)[1], vaultAuthorityPda(config)[1], EXIT_FEE_BPS]);
+    expect([raw[8], raw[10], raw[11], raw.readUInt16LE(12)]).toEqual([3, authorityPda(config)[1], vaultAuthorityPda(config)[1], EXIT_FEE_BPS]);
     expect(new PublicKey(raw.subarray(17, 49)).equals(config) && new PublicKey(raw.subarray(49, 81)).equals(creator.publicKey)).toBe(true);
     expect(new PublicKey(raw.subarray(113, 145)).equals(keys.baseMint) && new PublicKey(raw.subarray(145, 177)).equals(SPYX_MINT)).toBe(true);
     expect(new PublicKey(raw.subarray(209, 241)).equals(vault)).toBe(true);
     expect(raw.subarray(289, 351).every((x) => x === 0)).toBe(true);
     expect(tokenAccountOwner(fork, vault).equals(vaultAuthority)).toBe(true);
     expect(tokenAmount(fork, vault)).toBe(0n);
+    // The payee and transit ATAs exist from the start, so no harvest needs rent or a payer.
+    expect(tokenAccountOwner(fork, creatorQuote).equals(creator.publicKey)).toBe(true);
+    expect(tokenAccountOwner(fork, platformQuote).equals(PLATFORM_TREASURY)).toBe(true);
+    expect(tokenAccountOwner(fork, transit).equals(claimer)).toBe(true);
+    expect([tokenAmount(fork, creatorQuote), tokenAmount(fork, platformQuote), tokenAmount(fork, transit)]).toEqual([0n, 0n, 0n]);
     const ev = parseEvents(stockfloorProgram(), res.logs).find((e) => e.name === "launchCreated");
     expect(ev!.data.claimer.equals(claimer)).toBe(true);
     expect(ev!.data.vaultAuthority.equals(vaultAuthority)).toBe(true);
     expect(ev!.data.vault.equals(vault)).toBe(true);
-    expect(ev?.data.migrationFeePercentage).toBe(VAULT_SHARE_PCT);
+    expect(ev?.data.migrationFeePercentage).toBe(MIGRATION_FEE_PCT);
     expect(ev!.data.baseMint.equals(keys.baseMint)).toBe(true);
     expect(bnToBig(ev!.data.migrationQuoteThreshold)).toBe(threshold);
     log.cu = { createLaunch: res.computeUnits };
@@ -416,7 +456,17 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
   });
 
   it("3c. register_pool by a random key (permissionless) records the canonical pool; floor invariants tracking starts", async () => {
-    tracker = new FloorTracker(fork, { vault, baseMint: keys.baseMint, quoteMint: SPYX_MINT, vaultAuthority, claimer, claimerBaseAccount: claimerBase });
+    tracker = new FloorTracker(fork, {
+      vault,
+      baseMint: keys.baseMint,
+      quoteMint: SPYX_MINT,
+      vaultAuthority,
+      claimer,
+      claimerBaseAccount: claimerBase,
+      claimerQuoteAccount: transit,
+      creatorQuoteAccount: creatorQuote,
+      platformQuoteAccount: platformQuote,
+    });
     tracker.trackBase(keys.baseVault);
     tracker.start("launch created");
     const res = await tracker.step("register_pool", "no-outflow", async () =>
@@ -444,7 +494,7 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
       const b0 = tokenAmount(fork, baseOf(w));
       const res = await tracker.step(`curve buy ${name}`, "no-outflow", () => buyOnCurve(fork, keys, w, quoteIn));
       const s = dbcSwap(res);
-      // ExactIn buy, fees on the quote input: total = ceil(in * 1% ), protocol = floor(total * 20%).
+      // ExactIn buy, fees on the quote input: total = ceil(in * 0.25%), protocol = floor(total * 20%).
       expect(s.includedFeeInput).toBe(quoteIn);
       expect(s.totalFee).toBe(ceilDiv(quoteIn * CURVE_FEE_NUMERATOR, FEE_DENOMINATOR));
       expect(s.protocol).toBe((s.totalFee * PROTOCOL_FEE_PCT) / 100n);
@@ -460,7 +510,7 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
       const q0 = tokenAmount(fork, spyxAta(w.publicKey));
       const res = await tracker.step(`curve sell ${name}`, "no-outflow", () => sellOnCurve(fork, keys, w, baseIn));
       const s = dbcSwap(res);
-      // Sell, fees on the quote output: total = ceil(grossOut * 1%), user receives grossOut - total.
+      // Sell, fees on the quote output: total = ceil(grossOut * 0.25%), user receives grossOut - total.
       expect(s.totalFee).toBe(ceilDiv((s.output + s.totalFee) * CURVE_FEE_NUMERATOR, FEE_DENOMINATOR));
       expect(s.protocol).toBe((s.totalFee * PROTOCOL_FEE_PCT) / 100n);
       expect(tokenAmount(fork, spyxAta(w.publicKey)) - q0).toBe(s.output);
@@ -497,6 +547,8 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     expect(errName(f)).toBe("InvalidDbcPool");
     f = fork.sendExpectFail([await harvestCurveFeesIx({ payer: c.publicKey, keys, overrides: { vault: attackerQuote } })], [c]);
     expect(errName(f)).toBe("ConstraintAddress");
+    f = fork.sendExpectFail([await harvestCurveFeesIx({ payer: c.publicKey, keys, overrides: { platformQuoteAccount: attackerQuote } })], [c]);
+    expect(errName(f)).toBe("PayeeAccountMismatch");
     f = fork.sendExpectFail([await harvestMigrationFeeIx({ keys })], [c]);
     expect(errName(f)).toBe("CurveNotComplete");
     const alice = wallets.alice;
@@ -505,24 +557,38 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     expect(tokenAmount(fork, attackerQuote)).toBe(0n);
   });
 
-  it("5b. harvest_curve_fees by a random key moves exactly the partner share into the vault", async () => {
+  it("5b. harvest_curve_fees by a random key moves exactly the partner share to the platform treasury; the vault does not move", async () => {
     const c = cranker();
     const dbcQuote0 = tokenAmount(fork, keys.quoteVault);
     const v0 = tokenAmount(fork, vault);
-    const res = await tracker.step("harvest_curve_fees #1", "no-outflow", async () =>
-      fork.send([await harvestCurveFeesIx({ payer: c.publicKey, keys })], [c]),
+    const res = await tracker.step(
+      "harvest_curve_fees #1",
+      "no-outflow",
+      async () => fork.send([await harvestCurveFeesIx({ payer: c.publicKey, keys })], [c]),
+      { vaultIn: 0n, platformIn: expectedPartnerTradingFee, creatorIn: 0n },
     );
-    expect(tokenAmount(fork, vault) - v0).toBe(expectedPartnerTradingFee);
+    expect(tokenAmount(fork, vault)).toBe(v0);
     expect(dbcQuote0 - tokenAmount(fork, keys.quoteVault)).toBe(expectedPartnerTradingFee);
     expect(bnToBig(fetchVirtualPool(fork, keys.pool).partnerQuoteFee)).toBe(0n);
     // The random signer received nothing (it has no token accounts at all).
     expect(fork.getAccount(spyxAta(c.publicKey))).toBeNull();
     expect(fork.getAccount(baseOf(c))).toBeNull();
-    const ev = parseEvents(stockfloorProgram(), res.logs).find((e) => e.name === "curveFeesHarvested");
-    expect(bnToBig(ev!.data.quoteAmount)).toBe(expectedPartnerTradingFee);
+    const evs = parseEvents(stockfloorProgram(), res.logs);
+    const ev = evs.find((e) => e.name === "curveFeesHarvested");
+    expect(bnToBig(ev!.data.quoteAmount)).toBe(0n); // the vault part
     expect(bnToBig(ev!.data.baseBurned)).toBe(0n);
-    expect(bnToBig(fetchLaunch(fork, config).totalHarvestedQuote)).toBe(expectedPartnerTradingFee);
-    harvested.curveFees1 = expectedPartnerTradingFee;
+    const fd = evs.find((e) => e.name === "feesDistributed")!;
+    expect([fd.data.source, bnToBig(fd.data.received), bnToBig(fd.data.platformAmount), bnToBig(fd.data.creatorAmount), bnToBig(fd.data.vaultAmount)]).toEqual([
+      0,
+      expectedPartnerTradingFee,
+      expectedPartnerTradingFee,
+      0n,
+      0n,
+    ]);
+    const L = fetchLaunch(fork, config);
+    expect(bnToBig(L.totalHarvestedQuote)).toBe(0n);
+    expect(bnToBig(L.totalPlatformQuote)).toBe(expectedPartnerTradingFee);
+    platformPaid.curveFees1 = expectedPartnerTradingFee;
     expectedPartnerTradingFee = 0n;
     (log.cu as any).harvestCurveFees = res.computeUnits;
 
@@ -600,9 +666,11 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     expect(damm.tokenAMint.equals(keys.baseMint)).toBe(true);
     expect(damm.tokenBMint.equals(SPYX_MINT)).toBe(true);
     expect(damm.collectFeeMode).toBe(1); // OnlyB: LP fees in the quote token only
-    // Quote into DAMM v2 = ceil(T * (100 - pct) / 100) minus the 0.2% protocol liquidity migration fee.
-    const migrationQuote = ceilDiv(threshold * BigInt(100 - VAULT_SHARE_PCT), 100n);
-    expect(migrationQuote).toBe(curve.migrationQuoteAmount);
+    // Quote into DAMM v2 = ceil(T * (100 - pct) / 100) minus the 0.2% protocol liquidity migration fee
+    // (pool share 40% of the raise at vault share 50%).
+    const migrationQuote = ceilDiv(threshold * BigInt(100 - MIGRATION_FEE_PCT), 100n);
+    // The SDK preview uses the same mapping once its presets are on the v3 model (C10).
+    sdkV3 = migrationQuote === curve.migrationQuoteAmount;
     expect(bnToBig(damm.tokenBAmount)).toBe(migrationQuote - (migrationQuote * 20n) / 10_000n);
     expect(tokenAmount(fork, migration.tokenBVault)).toBe(bnToBig(damm.tokenBAmount));
     expect(tokenAmount(fork, migration.tokenAVault)).toBe(bnToBig(damm.tokenAAmount));
@@ -623,7 +691,7 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     expect(tokenAmount(fork, keys.baseVault)).toBe(bnToBig(pool.protocolMigrationBaseFeeAmount));
     expect(supply).toBeLessThan(supply0);
     const previewDiff = preview.baseSupplyAtGraduationRaw - supply;
-    expect(previewDiff >= 0n && previewDiff <= 1_000n).toBe(true); // SDK preview: slight over-estimate, < 0.001 token
+    if (sdkV3) expect(previewDiff >= 0n && previewDiff <= 1_000n).toBe(true); // SDK preview: slight over-estimate, < 0.001 token
     log.migration = {
       dammPool: migration.dammPool.toBase58(),
       position: migration.firstPosition.toBase58(),
@@ -646,25 +714,47 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     expect(errName(f)).toBe("MigrationFeeNotHarvested");
   });
 
-  it("8b. harvest_migration_fee moves exactly the partner migration fee into the vault", async () => {
-    const expected = threshold - ceilDiv(threshold * BigInt(100 - VAULT_SHARE_PCT), 100n); // creator share 0%
-    expect(expected).toBe(getMigrationFeeDistribution(threshold, VAULT_SHARE_PCT, 0).partnerMigrationFee);
-    expect(expected).toBe(preview.vaultAtGraduationQuoteRaw);
+  it("8b. harvest_migration_fee splits the partner migration fee: 5% of T to the platform, 5% of T to the creator, the rest into the vault", async () => {
+    const partnerFee = threshold - ceilDiv(threshold * BigInt(100 - MIGRATION_FEE_PCT), 100n); // creator migration share 0%
+    expect(partnerFee).toBe(getMigrationFeeDistribution(threshold, MIGRATION_FEE_PCT, 0).partnerMigrationFee);
+    const split = graduationSplit(threshold, partnerFee);
+    expect(split.platform).toBe(threshold / 20n);
+    expect(split.creator).toBe(threshold / 20n);
+    // Vault 50% of the raise (rounding in the vault's favour).
+    expect(split.vault >= threshold / 2n && split.vault <= threshold / 2n + 2n).toBe(true);
+    const expected = split.vault;
     const c = cranker();
     const dbcQuote0 = tokenAmount(fork, keys.quoteVault);
     const v0 = tokenAmount(fork, vault);
-    const res = await tracker.step("harvest_migration_fee", "no-outflow", async () => fork.send([await harvestMigrationFeeIx({ keys })], [c]));
+    const res = await tracker.step("harvest_migration_fee", "no-outflow", async () => fork.send([await harvestMigrationFeeIx({ keys })], [c]), {
+      vaultIn: split.vault,
+      platformIn: split.platform,
+      creatorIn: split.creator,
+    });
     expect(tokenAmount(fork, vault) - v0).toBe(expected);
-    expect(dbcQuote0 - tokenAmount(fork, keys.quoteVault)).toBe(expected);
+    expect(dbcQuote0 - tokenAmount(fork, keys.quoteVault)).toBe(partnerFee);
+    expect(tokenAmount(fork, transit)).toBe(0n);
     expect(fetchVirtualPool(fork, keys.pool).migrationFeeWithdrawStatus & PARTNER_MIGRATION_FEE_MASK).toBe(PARTNER_MIGRATION_FEE_MASK);
     const L = fetchLaunch(fork, config);
     expect(L.migrationFeeHarvested).toBe(true);
     expect(L.migrated).toBe(true); // latched: the pool was migrated when the fee was harvested
-    const ev = parseEvents(stockfloorProgram(), res.logs).find((e) => e.name === "migrationFeeHarvested");
+    const evs = parseEvents(stockfloorProgram(), res.logs);
+    const ev = evs.find((e) => e.name === "migrationFeeHarvested");
     expect(bnToBig(ev!.data.quoteAmount)).toBe(expected);
     expect(bnToBig(ev!.data.vaultBalance)).toBe(tokenAmount(fork, vault));
+    const fd = evs.find((e) => e.name === "feesDistributed")!;
+    expect([fd.data.source, bnToBig(fd.data.received), bnToBig(fd.data.platformAmount), bnToBig(fd.data.creatorAmount), bnToBig(fd.data.vaultAmount)]).toEqual([
+      1,
+      partnerFee,
+      split.platform,
+      split.creator,
+      split.vault,
+    ]);
+    expect([fd.data.platformFallback, fd.data.creatorFallback]).toEqual([false, false]);
     expect(fork.getAccount(spyxAta(c.publicKey))).toBeNull();
     harvested.migrationFee = expected;
+    platformPaid.migrationFee = split.platform;
+    creatorPaid.migrationFee = split.creator;
     migrationFeeHarvested = expected;
     (log.cu as any).harvestMigrationFee = res.computeUnits;
   });
@@ -679,17 +769,20 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
   it("8d. harvest_curve_fees again collects exactly the completing buy's partner fee", async () => {
     const c = cranker();
     const v0 = tokenAmount(fork, vault);
-    await tracker.step("harvest_curve_fees #2 (post-migration)", "no-outflow", async () =>
-      fork.send([await harvestCurveFeesIx({ payer: c.publicKey, keys })], [c]),
+    await tracker.step(
+      "harvest_curve_fees #2 (post-migration)",
+      "no-outflow",
+      async () => fork.send([await harvestCurveFeesIx({ payer: c.publicKey, keys })], [c]),
+      { vaultIn: 0n, platformIn: expectedPartnerTradingFee, creatorIn: 0n },
     );
     expect(expectedPartnerTradingFee).toBeGreaterThan(0n);
-    expect(tokenAmount(fork, vault) - v0).toBe(expectedPartnerTradingFee);
+    expect(tokenAmount(fork, vault)).toBe(v0);
     expect(bnToBig(fetchVirtualPool(fork, keys.pool).partnerQuoteFee)).toBe(0n);
-    harvested.curveFees2 = expectedPartnerTradingFee;
+    platformPaid.curveFees2 = expectedPartnerTradingFee;
     expectedPartnerTradingFee = 0n;
   });
 
-  it("8e. harvest_surplus moves exactly 80% x (100 - 30)% of the surplus (DBC formula) and only once", async () => {
+  it("8e. harvest_surplus moves exactly 80% x (100 - 0)% of the surplus (DBC formula) into the vault, and only once", async () => {
     const pool = fetchVirtualPool(fork, keys.pool);
     const surplus = bnToBig(pool.quoteReserve) - threshold;
     const partnerAndCreator = (surplus * 80n) / 100n;
@@ -814,17 +907,35 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     const dammB0 = tokenAmount(fork, migration.tokenBVault);
     const dammA0 = tokenAmount(fork, migration.tokenAVault);
     const supply0 = mintSupply(fork, keys.baseMint);
-    const res = await tracker.step("harvest_lp_fees", "no-outflow", async () => fork.send([await harvestLpFeesIx(lpArgs(c.publicKey))], [c]));
-    expect(tokenAmount(fork, vault) - v0).toBe(expectedB);
+    const split = lpFeeSplit(expectedB);
+    expect(split.creator).toBe(expectedB / 2n);
+    expect(split.platform).toBe(expectedB / 5n);
+    const res = await tracker.step("harvest_lp_fees", "no-outflow", async () => fork.send([await harvestLpFeesIx(lpArgs(c.publicKey))], [c]), {
+      vaultIn: split.vault,
+      platformIn: split.platform,
+      creatorIn: split.creator,
+    });
+    expect(tokenAmount(fork, vault) - v0).toBe(split.vault);
     expect(dammB0 - tokenAmount(fork, migration.tokenBVault)).toBe(expectedB);
     expect(tokenAmount(fork, migration.tokenAVault)).toBe(dammA0);
     expect(mintSupply(fork, keys.baseMint)).toBe(supply0);
-    const ev = parseEvents(stockfloorProgram(), res.logs).find((e) => e.name === "lpFeesHarvested");
-    expect(bnToBig(ev!.data.quoteAmount)).toBe(expectedB);
+    const evs = parseEvents(stockfloorProgram(), res.logs);
+    const ev = evs.find((e) => e.name === "lpFeesHarvested");
+    expect(bnToBig(ev!.data.quoteAmount)).toBe(split.vault);
     expect(bnToBig(ev!.data.baseBurned)).toBe(0n);
+    const fd = evs.find((e) => e.name === "feesDistributed")!;
+    expect([fd.data.source, bnToBig(fd.data.received), bnToBig(fd.data.platformAmount), bnToBig(fd.data.creatorAmount), bnToBig(fd.data.vaultAmount)]).toEqual([
+      2,
+      expectedB,
+      split.platform,
+      split.creator,
+      split.vault,
+    ]);
     expect(bnToBig(fetchPosition(fork, migration.firstPosition).feeBPending)).toBe(0n);
     expect(fork.getAccount(spyxAta(c.publicKey))).toBeNull();
-    harvested.lpFees = expectedB;
+    harvested.lpFees = split.vault;
+    platformPaid.lpFees = split.platform;
+    creatorPaid.lpFees = split.creator;
     (log.cu as any).harvestLpFees = res.computeUnits;
     log.lpFees = { claimed: expectedB, claimingFeesFromEvents: lpClaimingFees };
   });
@@ -890,6 +1001,12 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
     const totalFees = redemptions.reduce((a, r) => a + r.fee, 0n);
     const totalBase = redemptions.reduce((a, r) => a + r.amount, 0n);
     expect(bnToBig(L.totalHarvestedQuote)).toBe(totalHarvested);
+    const sum = (r: Record<string, bigint>) => Object.values(r).reduce((a, b) => a + b, 0n);
+    expect(bnToBig(L.totalPlatformQuote)).toBe(sum(platformPaid));
+    expect(bnToBig(L.totalCreatorQuote)).toBe(sum(creatorPaid));
+    expect(tokenAmount(fork, platformQuote)).toBe(sum(platformPaid));
+    expect(tokenAmount(fork, creatorQuote)).toBe(sum(creatorPaid));
+    expect(tokenAmount(fork, transit)).toBe(0n);
     expect(bnToBig(L.totalRedeemedQuote)).toBe(totalNet);
     expect(bnToBig(L.totalExitFees)).toBe(totalFees);
     expect(bnToBig(L.totalRedeemedBase)).toBe(totalBase);
@@ -913,6 +1030,8 @@ describe("C1: StockFloor lifecycle on a mainnet fork (real stockfloor + DBC + DA
       json({
         ...log,
         harvested,
+        platformPaid,
+        creatorPaid,
         vaultFinal: final.vault,
         supplyFinal: final.supply,
         steps: h.length,

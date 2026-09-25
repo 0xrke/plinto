@@ -33,6 +33,7 @@ import { DBC_TOKEN_BADGE_SPYX } from "../src/constants.js";
 import { fetchDammPool } from "../src/damm.js";
 import { bnToBig, createConfigIx, fetchPoolConfig } from "../src/dbc.js";
 import { anchorErrorFromLogs, Fork } from "../src/fork.js";
+import { graduationSplit } from "../src/fee-model.js";
 import { createStockfloorLaunch, graduate, SPYX_USD_PRICE, spyxMultiplier } from "../src/stockfloor-scenario.js";
 import { fetchLaunch, harvestMigrationFeeIx } from "../src/stockfloor.js";
 import { mintSupply, tokenAmount } from "../src/token.js";
@@ -47,7 +48,9 @@ describe("SDK presets x vault shares on the real DBC and stockfloor programs", (
     for (const share of shares) {
       it(`${preset} / ${share}%: DBC stores what the SDK port predicts; the vault gets the preview amount at graduation`, async () => {
         const fork = Fork.create({ stockfloor: true, spike: false });
-        const L = await createStockfloorLaunch(fork, { preset, vaultSharePct: share });
+        // The SDK's own parameters, unpinned: this is the acceptance test of the SDK v3 presets
+        // (migration fee = vault share + 10, 25 bps presale fee, no creator trading share).
+        const L = await createStockfloorLaunch(fork, { preset, vaultSharePct: share, rawSdkParams: true });
         const built = buildDbcConfigParams(L.input, L.claimer, L.claimer);
         const port = validateDbcConfigParams(built, { leftoverReceiver: L.claimer });
         const curve = computeLaunchCurve(L.input);
@@ -55,7 +58,9 @@ describe("SDK presets x vault shares on the real DBC and stockfloor programs", (
 
         const cfg = fetchPoolConfig(fork, L.config);
         expect(bnToBig(cfg.migrationQuoteThreshold)).toBe(curve.thresholdQuoteRaw);
-        expect(cfg.migrationFeePercentage).toBe(share);
+        expect(cfg.migrationFeePercentage).toBe(share + 10);
+        expect(cfg.creatorTradingFeePercentage).toBe(0);
+        expect(bnToBig(cfg.poolFees.baseFee.cliffFeeNumerator)).toBe(2_500_000n);
         expect(bnToBig(cfg.sqrtStartPrice)).toBe(curve.sqrtStartPrice);
         expect(bnToBig(cfg.migrationSqrtPrice)).toBe(port.migrationSqrtPrice);
         expect(bnToBig(cfg.swapBaseAmount)).toBe(port.swapBaseAmount);
@@ -69,9 +74,10 @@ describe("SDK presets x vault shares on the real DBC and stockfloor programs", (
         const { migration } = await graduate(fork, L, [20n, 15n]);
         fork.send([await harvestMigrationFeeIx({ keys: L.keys })], [fork.newWallet(1)]);
         const T = curve.thresholdQuoteRaw;
+        const partnerFee = T - ceilDiv(T * BigInt(90 - share), 100n);
         expect(tokenAmount(fork, L.vault)).toBe(preview.vaultAtGraduationQuoteRaw);
-        expect(preview.vaultAtGraduationQuoteRaw).toBe(T - ceilDiv(T * BigInt(100 - share), 100n));
-        expect(port.partnerMigrationFee).toBe(preview.vaultAtGraduationQuoteRaw);
+        expect(preview.vaultAtGraduationQuoteRaw).toBe(graduationSplit(T, partnerFee).vault);
+        expect(port.partnerMigrationFee).toBe(partnerFee);
         const q = curve.migrationQuoteAmount;
         expect(bnToBig(fetchDammPool(fork, migration.dammPool).tokenBAmount)).toBe(q - (q * 20n) / 10_000n);
         const diff = preview.baseSupplyAtGraduationRaw - mintSupply(fork, L.keys.baseMint);

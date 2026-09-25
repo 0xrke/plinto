@@ -5,6 +5,9 @@
  * - The claimer ["authority", config] is the DBC fee_claimer and the DAMM v2 position NFT owner and
  *   signs every CPI into those (upgradeable) programs. The vault is the SPYx ATA of a different PDA,
  *   ["vault_authority", config], which signs only the payout transfer of `redeem`.
+ * - Launch v3: the claimer also owns a quote transit account that the fee-split harvests pass
+ *   through (DBC / DAMM v2 pay into it, the claimer pays platform, creator and vault out of it). It
+ *   is empty after every instruction, and the vault is only ever a destination.
  * - DBC `claim_trading_fee` / `withdraw_migration_fee` / `partner_withdraw_surplus` and DAMM v2
  *   `claim_position_fee` accept a destination token account of any owner (vendor sources: the
  *   destination accounts carry no owner constraint; DAMM v2's owner path skips destination checks).
@@ -33,6 +36,7 @@ import { dammSwap2Ix, fetchDammPool, fetchPosition } from "../src/damm.js";
 import { bnToBig, fetchVirtualPool } from "../src/dbc.js";
 import { FloorTracker, tokenAccountCloseAuthority, tokenAccountDelegate } from "../src/floor-invariants.js";
 import { Fork, TxResult, TxSuccess } from "../src/fork.js";
+import { graduationSplit, lpFeeSplit } from "../src/fee-model.js";
 import { fundedWallet, Migration } from "../src/scenario.js";
 import { createStockfloorLaunch, graduate, StockfloorLaunch, trackerAccounts } from "../src/stockfloor-scenario.js";
 import {
@@ -86,28 +90,31 @@ describe("the claimer PDA never holds or controls the vault", () => {
     tracker.start("graduated, DAMM v2 traded");
   });
 
-  it("every harvest pays quote straight into the vault authority's ATA; the vault authority is not an account of any harvest, the claimer never holds quote", async () => {
+  it("every harvest pays its vault part into the vault authority's ATA; the vault authority is not an account of any harvest, the claimer's quote transit ends empty", async () => {
     expect(L.claimer.equals(L.vaultAuthority)).toBe(false);
     expect(L.vault.equals(getAta(L.vaultAuthority, SPYX_MINT, TOKEN_2022_PROGRAM_ID))).toBe(true);
     const claimerQuoteAta = spyxAta(L.claimer);
+    expect(claimerQuoteAta.equals(L.claimerQuoteAccount)).toBe(true);
     const T = L.threshold;
     const c = fork.newWallet(1);
 
+    // v3: presale fees to the platform, the migration fee split 5% / 5% / rest, the surplus to the
+    // vault (no creator trading share), LP fees split 50 / 20 / 30.
     const expectedCurve = bnToBig(fetchVirtualPool(fork, L.keys.pool).partnerQuoteFee);
-    const expectedMigration = T - ceilDiv(T * 50n, 100n);
+    const migrationSplit = graduationSplit(T, T - ceilDiv(T * 40n, 100n));
     const surplus = bnToBig(fetchVirtualPool(fork, L.keys.pool).quoteReserve) - T;
-    const pc = (surplus * 80n) / 100n;
-    const expectedSurplus = pc - (pc * 30n) / 100n;
+    const expectedSurplus = (surplus * 80n) / 100n;
     const pool = fetchDammPool(fork, migration.dammPool);
     const pos = fetchPosition(fork, migration.firstPosition);
     const liq = bnToBig(pos.unlockedLiquidity) + bnToBig(pos.vestedLiquidity) + bnToBig(pos.permanentLockedLiquidity);
     const expectedLp = bnToBig(pos.feeBPending) + (liq * (u256le(pool.feeBPerLiquidity) - u256le(pos.feeBPerTokenCheckpoint))) / U128;
     expect(expectedCurve > 0n && expectedLp > 0n).toBe(true);
 
-    const harvests: Array<[string, Promise<TransactionInstruction>, bigint]> = [
-      ["harvest_curve_fees", harvestCurveFeesIx({ payer: c.publicKey, keys: L.keys }), expectedCurve],
-      ["harvest_migration_fee", harvestMigrationFeeIx({ keys: L.keys }), expectedMigration],
-      ["harvest_surplus", harvestSurplusIx({ keys: L.keys }), expectedSurplus],
+    const lpSplit = lpFeeSplit(expectedLp);
+    const harvests: Array<[string, Promise<TransactionInstruction>, { vault: bigint; platform: bigint; creator: bigint }]> = [
+      ["harvest_curve_fees", harvestCurveFeesIx({ payer: c.publicKey, keys: L.keys }), { vault: 0n, platform: expectedCurve, creator: 0n }],
+      ["harvest_migration_fee", harvestMigrationFeeIx({ keys: L.keys }), migrationSplit],
+      ["harvest_surplus", harvestSurplusIx({ keys: L.keys }), { vault: expectedSurplus, platform: 0n, creator: 0n }],
       [
         "harvest_lp_fees",
         harvestLpFeesIx({
@@ -119,18 +126,25 @@ describe("the claimer PDA never holds or controls the vault", () => {
           dammTokenAVault: migration.tokenAVault,
           dammTokenBVault: migration.tokenBVault,
         }),
-        expectedLp,
+        lpSplit,
       ],
     ];
     for (const [label, ix, expected] of harvests) {
       const v0 = tokenAmount(fork, L.vault);
-      const res = await tracker.step(label, "no-outflow", async () => fork.send([await ix], [c]));
-      expect(tokenAmount(fork, L.vault) - v0, label).toBe(expected);
+      const res = await tracker.step(label, "no-outflow", async () => fork.send([await ix], [c]), {
+        vaultIn: expected.vault,
+        platformIn: expected.platform,
+        creatorIn: expected.creator,
+      });
+      expect(tokenAmount(fork, L.vault) - v0, label).toBe(expected.vault);
       expect(has(res, L.claimer), `${label}: the claimer signs the CPI`).toBe(true);
       expect(has(res, L.vaultAuthority), `${label}: the vault authority is not part of the transaction`).toBe(false);
       expect(tokenAccountOwner(fork, L.vault).equals(L.vaultAuthority), label).toBe(true);
-      expect(fork.getAccount(claimerQuoteAta), `${label}: the claimer has no quote account`).toBeNull();
+      expect(tokenAccountOwner(fork, claimerQuoteAta).equals(L.claimer), label).toBe(true);
+      expect(tokenAmount(fork, claimerQuoteAta), `${label}: the claimer's quote transit is empty`).toBe(0n);
+      expect(tokenAccountDelegate(fork, claimerQuoteAta), `${label}: transit has no delegate`).toBeNull();
     }
+    expect(migrationSplit.platform > 0n && migrationSplit.creator > 0n && lpSplit.platform > 0n).toBe(true);
     // The position NFT, the DBC fee claim and the migration fee claim all belong to the claimer.
     expect(tokenAccountOwner(fork, migration.firstPositionNftAccount).equals(L.claimer)).toBe(true);
 

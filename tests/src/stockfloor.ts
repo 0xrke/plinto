@@ -4,6 +4,10 @@
  *
  * Account lists follow programs/stockfloor/src/instructions/*.rs. Every builder accepts
  * `overrides` (camelCase account name -> pubkey) so adversarial tests can substitute accounts.
+ *
+ * The fee-split harvests (`harvest_migration_fee`, `harvest_lp_fees`) need the launch creator's
+ * quote ATA. The builders take `creator` explicitly or fall back to the creator recorded by
+ * `createLaunchIx` for that config in this process (every test file runs in its own fork).
  */
 import { BN, Program } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, TransactionInstruction } from "@solana/web3.js";
@@ -16,6 +20,7 @@ import {
   DBC_EVENT_AUTHORITY,
   DBC_POOL_AUTHORITY,
   DBC_PROGRAM_ID,
+  PLATFORM_TREASURY,
   SPYX_MINT,
   STOCKFLOOR_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
@@ -56,6 +61,43 @@ export function deriveClaimerBaseAccount(config: PublicKey, baseMint: PublicKey)
   return splAta(deriveClaimer(config), baseMint);
 }
 
+/** Platform treasury quote ATA: the platform's payee account (shared by every launch). */
+export function derivePlatformQuote(quoteMint = SPYX_MINT, quoteTokenProgram = TOKEN_2022_PROGRAM_ID): PublicKey {
+  return getAta(PLATFORM_TREASURY, quoteMint, quoteTokenProgram);
+}
+
+/** Launch creator quote ATA: the creator's payee account. */
+export function deriveCreatorQuote(creator: PublicKey, quoteMint = SPYX_MINT, quoteTokenProgram = TOKEN_2022_PROGRAM_ID): PublicKey {
+  return getAta(creator, quoteMint, quoteTokenProgram);
+}
+
+/** Claimer quote ATA: the transit account of the v3 fee split (always empty between instructions). */
+export function deriveClaimerQuote(config: PublicKey, quoteMint = SPYX_MINT, quoteTokenProgram = TOKEN_2022_PROGRAM_ID): PublicKey {
+  return getAta(deriveClaimer(config), quoteMint, quoteTokenProgram);
+}
+
+/** Launch creator per config, recorded by createLaunchIx (see the module comment). */
+const launchCreators = new Map<string, PublicKey>();
+
+export function recordLaunchCreator(config: PublicKey, creator: PublicKey): void {
+  launchCreators.set(config.toBase58(), creator);
+}
+
+function creatorOf(config: PublicKey, creator?: PublicKey): PublicKey {
+  const c = creator ?? launchCreators.get(config.toBase58());
+  if (!c) throw new Error(`no launch creator known for config ${config.toBase58()}: pass \`creator\``);
+  return c;
+}
+
+/** The three fee-split accounts of harvest_migration_fee / harvest_lp_fees. */
+function feeSplitAccounts(k: DbcPoolKeys, creator?: PublicKey) {
+  return {
+    claimerQuoteAccount: deriveClaimerQuote(k.config, k.quoteMint, k.quoteTokenProgram),
+    creatorQuoteAccount: deriveCreatorQuote(creatorOf(k.config, creator), k.quoteMint, k.quoteTokenProgram),
+    platformQuoteAccount: derivePlatformQuote(k.quoteMint, k.quoteTokenProgram),
+  };
+}
+
 const dbcCpiAccounts = {
   dbcPoolAuthority: DBC_POOL_AUTHORITY,
   dbcEventAuthority: DBC_EVENT_AUTHORITY,
@@ -75,6 +117,7 @@ export async function createLaunchIx(a: {
 }): Promise<TransactionInstruction> {
   const quoteMint = a.quoteMint ?? SPYX_MINT;
   const quoteTokenProgram = a.quoteTokenProgram ?? TOKEN_2022_PROGRAM_ID;
+  recordLaunchCreator(a.config, a.creator);
   return stockfloorProgram()
     .methods.createLaunch(a.exitFeeBps)
     .accountsStrict({
@@ -90,6 +133,10 @@ export async function createLaunchIx(a: {
       quoteTokenProgram,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
+      creatorQuoteAccount: deriveCreatorQuote(a.creator, quoteMint, quoteTokenProgram),
+      platformTreasury: PLATFORM_TREASURY,
+      platformQuoteAccount: derivePlatformQuote(quoteMint, quoteTokenProgram),
+      claimerQuoteAccount: deriveClaimerQuote(a.config, quoteMint, quoteTokenProgram),
       ...a.overrides,
     })
     .instruction();
@@ -140,6 +187,7 @@ export async function harvestCurveFeesIx(a: {
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
       ...dbcCpiAccounts,
+      platformQuoteAccount: derivePlatformQuote(k.quoteMint, k.quoteTokenProgram),
       ...a.overrides,
     })
     .instruction();
@@ -147,9 +195,10 @@ export async function harvestCurveFeesIx(a: {
 
 async function harvestQuoteFromDbcIx(
   method: "harvestMigrationFee" | "harvestSurplus",
-  a: { keys: DbcPoolKeys; overrides?: AccountOverrides },
+  a: { keys: DbcPoolKeys; creator?: PublicKey; overrides?: AccountOverrides },
 ): Promise<TransactionInstruction> {
   const k = a.keys;
+  const extra = method === "harvestMigrationFee" ? feeSplitAccounts(k, a.creator) : {};
   return (stockfloorProgram().methods as any)
     [method]()
     .accountsStrict({
@@ -162,13 +211,17 @@ async function harvestQuoteFromDbcIx(
       quoteMint: k.quoteMint,
       quoteTokenProgram: k.quoteTokenProgram,
       ...dbcCpiAccounts,
+      ...extra,
       ...a.overrides,
     })
     .instruction();
 }
 
-/** harvest_migration_fee has no payer: any fee payer can send it (permissionless). */
-export const harvestMigrationFeeIx = (a: { keys: DbcPoolKeys; overrides?: AccountOverrides }) =>
+/**
+ * harvest_migration_fee has no payer: any fee payer can send it (permissionless). `creator` is the
+ * launch creator (`launch.creator`); defaults to the one recorded by createLaunchIx.
+ */
+export const harvestMigrationFeeIx = (a: { keys: DbcPoolKeys; creator?: PublicKey; overrides?: AccountOverrides }) =>
   harvestQuoteFromDbcIx("harvestMigrationFee", a);
 
 export const harvestSurplusIx = (a: { keys: DbcPoolKeys; overrides?: AccountOverrides }) =>
@@ -209,6 +262,8 @@ export async function harvestLpFeesIx(a: {
   positionNftAccount: PublicKey;
   dammTokenAVault: PublicKey;
   dammTokenBVault: PublicKey;
+  /** Launch creator (`launch.creator`); defaults to the one recorded by createLaunchIx. */
+  creator?: PublicKey;
   overrides?: AccountOverrides;
 }): Promise<TransactionInstruction> {
   const k = a.keys;
@@ -234,6 +289,7 @@ export async function harvestLpFeesIx(a: {
       dammPoolAuthority: DAMM_V2_POOL_AUTHORITY,
       dammEventAuthority: DAMM_V2_EVENT_AUTHORITY,
       dammProgram: DAMM_V2_PROGRAM_ID,
+      ...feeSplitAccounts(k, a.creator),
       ...a.overrides,
     })
     .instruction();
