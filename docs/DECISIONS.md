@@ -262,3 +262,10 @@ Format: date — decision · alternatives · reason.
   protection and does not favour the creator, so it is a legitimate per-community choice. The create form must show
   the resulting buyer guarantee and price sensitivity, and the token page must show the guarantee per $100, not only
   the vault share percentage. The upper bound drops from 70% to 60% so the pool keeps at least 30% of the raise.
+- **Raise threshold bounds (founder decision, 2026-09-25):** the creator picks the threshold, with a minimum of
+  $10,000, quick picks $10,000 (default) / $25,000 / $50,000 and a maximum of $100,000. A demo build keeps the small
+  thresholds (quick picks $50 / $100 / $1,000, minimum $1) behind a build flag, proposed `NEXT_PUBLIC_DEMO_THRESHOLDS=1`,
+  so the founder can run the whole flow cheaply. · No minimum (today); a fixed platform threshold · Below ~$10K the
+  pool, the floor in dollars, the creator bonus and the platform cut are all toy-sized and spam is cheap; Meteora's
+  keepers skip stock-quoted pools under ~$750. The bound is UI-level like the quote allowlist: the program has no
+  USD oracle, and the demo must keep working on-chain. Not implemented yet.
