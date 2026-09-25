@@ -385,3 +385,31 @@ Format as above: **decision** · alternatives · why. D1–D13 refer to the impl
   two cuts; `LaunchCurve.partnerMigrationFee` stays the whole partner fee.
 - **`DEFAULT_THRESHOLD_USD` is $10,000** in the SDK too (the UI policy's default); `MIN_THRESHOLD_USD` stays $1 and the
   CLI and demo scripts keep passing their thresholds explicitly ($1,000 CLI default, $50 C2 demo).
+
+### Fee model: implementation notes (app)
+
+- **Threshold policy lives in the app** (`thresholdPolicy(demo)` in `app/src/lib/config.ts`): min $10,000, quick
+  picks $10,000 (default) / $25,000 / $50,000, max $100,000; `NEXT_PUBLIC_DEMO_THRESHOLDS=1` (exactly `1`) switches
+  to $50 / $100 / $1,000 (default $1,000) and the SDK minimum of $1, same max. `CreateLaunchForm` takes the policy as
+  a prop (default: the build's), so tests and the $50 e2e run use the demo policy without rebuilding. The old
+  $10,000,000 app maximum drops to $100,000 in both policies. · A second env var for the maximum · One bound keeps the
+  "one extra zero" guard and matches the founder's range.
+- **The create form defaults to the flat curve** and lists it first (the founder's default; its 50/40 floor per $100
+  at listing is the $34.88 the decision quotes). Gentle stays available.
+- **"Price move on a $1,000 buy"** is the create preview's price sensitivity line (`priceMoveOnBuy`, `(1 + 1000 /
+  pool quote)² − 1`, pool fee ignored), as the app task asked, instead of D12's "1% of the raise": at the $10,000
+  default the two differ (+56% vs +5%), and a fixed dollar amount lets creators compare thresholds. The SDK's
+  `priceImpact1PctRaise` stays available. · Show both · One number keeps the rail readable.
+- **Token page "floor per $100 at listing"** is computed in `toLaunchSummary` from the config (vault part of the
+  partner migration fee ÷ supply at graduation ÷ migration price × (1 − exit fee)), so it is a fixed launch term that
+  matches the SDK preview and stays after graduation. Shown as a header chip next to the vault share and a callout
+  before graduation, next to the vault share in the vault card after it (with the value at today's price), and on
+  presale launch cards. The wording avoids "guaranteed" (docs/demo-script.md): "What $100 bought at the listing price
+  redeems for at the floor", "not a guarantee of profit".
+- **v2 launches keep their own wording.** `LaunchSummary.feeSplit` (= `launch.version >= 3`) switches the fee copy:
+  a v2 launch (the live SFDEMO) shows "every fee it harvests goes into the vault" and its vault share as the whole
+  migration fee percentage (`vaultSharePctFromMigrationFeePct`). The curve fee row reads the launch's own config fee
+  (`curveFeeBps`) rather than a constant, so v2 launches still show 1%.
+- **Crank labels are version-neutral** ("Harvest the migration fee"); the per-action detail line says who is paid
+  (vault / platform / creator amounts for v3, "to the vault" for v2).
+

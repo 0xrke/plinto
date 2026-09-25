@@ -17,10 +17,15 @@ and a handful of decisions only the user can make.
   (`pnpm --filter @stockfloor/tests exec vitest run --exclude 'integration/audit-poc/**'`) **129 passed, 0 failed**
   (the C1 lifecycle, `fee-model`, `sdk-presets-fork` and the SDK-only product flow included); SDK, tests and app
   type-check clean.
-- **Not done yet:** the app (C13–C15) and the architecture / README fee docs (C16). `pnpm --filter @stockfloor/app
-  test` has 3 failures that wait for C13–C15 (vault share slider 30–70 → 30–60 in `CreateLaunchForm.test.tsx`;
-  `chain.ts` reads the vault share as `migrationFeePercentage` instead of `vaultSharePctFromMigrationFeePct(mf,
-  version)` in `chain.test.ts`).
+- **App done (C13–C15)** (docs/DECISIONS.md, "implementation notes (app)"): threshold policy (min $10,000, picks
+  $10K default / $25K / $50K, max $100K; `NEXT_PUBLIC_DEMO_THRESHOLDS=1` restores $50 / $100 / $1,000 and a $1
+  minimum), flat curve by default, vault share slider 30–60% with the "Vault X% · Pool 90−X% · Platform 5% · Creator
+  5%" caption, preview with the graduation split in dollars, floor per $100 at listing and the price move of a $1,000
+  buy, fee copy everywhere (create form, token page, disclosures, crank, home, waitlist), token page floor per $100
+  next to the vault share, v2/v3-aware vault share and fee wording. `pnpm --filter @stockfloor/app test` **242
+  passed**; app type-check clean; `next build` OK; local-fork e2e (`pnpm e2e:local`, fresh surfnet with the v3
+  binary) **11 + 4 passed**.
+- **Not done yet:** the architecture / README fee docs (C16) and the independent review.
 - **The deployed mainnet program is still the old binary.** The SDK and app must not ship v3 account lists against it
   without a program upgrade (a hard stop; the `.so` grew from 459,064 to 537,568 bytes, so it may need
   `solana program extend`).
@@ -29,7 +34,7 @@ and a handful of decisions only the user can make.
   2026-09-25 39 fork PoC tests in 20 files (F01, F02, F04, F05, F07–F13, F19–F21: the bugs this branch fixes, curve
   fees no longer entering the vault, mf 30 now rejected, the new split amounts and `FeesDistributed` event; F19's
   failure is an IDL name lookup in the PoC itself) and the 4 tests of `audit_poc_f04_fable.rs`. Everything else in
-  `pnpm test` passes except the 3 app tests above. The founder should decide whether to delete the PoCs or turn them
+  `pnpm test` passes. The founder should decide whether to delete the PoCs or turn them
   into regression tests.
 
 ## Done (with test results)
