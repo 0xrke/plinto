@@ -77,6 +77,26 @@ impl Launch {
         self.version >= crate::constants::LAUNCH_VERSION_FEE_SPLIT
     }
 
+    /// `ATA(owner, quote_mint, quote_token_program)`.
+    pub fn quote_ata(&self, owner: &Pubkey) -> Pubkey {
+        anchor_spl::associated_token::get_associated_token_address_with_program_id(
+            owner,
+            &self.quote_mint,
+            &self.quote_token_program,
+        )
+    }
+
+    /// Platform treasury quote ATA: the platform's payee account.
+    pub fn platform_quote_account(&self) -> Pubkey {
+        self.quote_ata(&crate::constants::PLATFORM_TREASURY)
+    }
+
+    /// Creator quote ATA (`launch.creator`, the signer of `create_launch`): the creator's payee
+    /// account.
+    pub fn creator_quote_account(&self) -> Pubkey {
+        self.quote_ata(&self.creator)
+    }
+
     /// Address of the claimer PDA from the stored bump (`create_program_address`, no search).
     pub fn claimer_key(&self) -> Result<Pubkey> {
         Pubkey::create_program_address(

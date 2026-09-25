@@ -2,12 +2,14 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
-use crate::constants::{CLAIMER_SEED, LAUNCH_SEED, LAUNCH_VERSION, VAULT_AUTHORITY_SEED};
+use crate::constants::{
+    CLAIMER_SEED, LAUNCH_SEED, LAUNCH_VERSION, PLATFORM_TREASURY, VAULT_AUTHORITY_SEED,
+};
 use crate::errors::StockfloorError;
 use crate::events::LaunchCreated;
 use crate::external::{load_dbc_config, validate_launch_config};
 use crate::state::Launch;
-use crate::token_utils::assert_vault_unencumbered;
+use crate::token_utils::{assert_transit_unencumbered, assert_vault_unencumbered};
 
 /// Create the launch registry and the floor vault for a freshly created DBC config.
 ///
@@ -16,8 +18,12 @@ use crate::token_utils::assert_vault_unencumbered;
 /// keypair and the creator's signature, so exactly one pool can ever match, and
 /// `register_pool` can be permissionless: the creator cannot withhold registration.
 ///
+/// It also creates (if missing) the three quote ATAs the fee split pays through, so that no harvest
+/// ever needs a payer or rent: the creator's and the platform treasury's payee accounts and the
+/// claimer's transit account.
+///
 /// Account order (clients must follow it):
-///  0. `payer`                    signer, writable: pays rent for `launch` and `vault`
+///  0. `payer`                    signer, writable: pays rent for `launch`, `vault` and the ATAs
 ///  1. `creator`                  signer: recorded as the launch creator
 ///  2. `config`                   signer: the DBC config keypair (proves the caller created it)
 ///  3. `claimer`                  PDA `["authority", config]`: the config's fee_claimer and
@@ -30,6 +36,11 @@ use crate::token_utils::assert_vault_unencumbered;
 ///  9. `quote_token_program`      owner of `quote_mint` (Token or Token-2022)
 /// 10. `associated_token_program`
 /// 11. `system_program`
+/// 12. `creator_quote_account`    writable: ATA(creator, quote_mint, quote_token_program)
+/// 13. `platform_treasury`        `PLATFORM_TREASURY`
+/// 14. `platform_quote_account`   writable: ATA(platform_treasury, quote_mint, quote_token_program)
+/// 15. `claimer_quote_account`    writable: ATA(claimer, quote_mint, quote_token_program), the
+///     transit account of the fee split
 #[derive(Accounts)]
 pub struct CreateLaunch<'info> {
     #[account(mut)]
@@ -78,6 +89,43 @@ pub struct CreateLaunch<'info> {
     pub quote_token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
+
+    /// Creator's payee account (graduation bonus, LP fee share). `init_if_needed`: it usually
+    /// exists already.
+    #[account(
+        init_if_needed,
+        payer = payer,
+        associated_token::mint = quote_mint,
+        associated_token::authority = creator,
+        associated_token::token_program = quote_token_program,
+    )]
+    pub creator_quote_account: Box<InterfaceAccount<'info, TokenAccount>>,
+
+    /// CHECK: the constant platform treasury key; only the authority of its ATA below.
+    #[account(address = PLATFORM_TREASURY @ StockfloorError::PayeeAccountMismatch)]
+    pub platform_treasury: UncheckedAccount<'info>,
+
+    /// Platform's payee account (presale fees, graduation fee, LP fee share), shared by every
+    /// launch of this quote mint.
+    #[account(
+        init_if_needed,
+        payer = payer,
+        associated_token::mint = quote_mint,
+        associated_token::authority = platform_treasury,
+        associated_token::token_program = quote_token_program,
+    )]
+    pub platform_quote_account: Box<InterfaceAccount<'info, TokenAccount>>,
+
+    /// Transit account of the fee split: DBC / DAMM v2 pay into it, the claimer pays platform,
+    /// creator and vault out of it and leaves it empty.
+    #[account(
+        init_if_needed,
+        payer = payer,
+        associated_token::mint = quote_mint,
+        associated_token::authority = claimer,
+        associated_token::token_program = quote_token_program,
+    )]
+    pub claimer_quote_account: Box<InterfaceAccount<'info, TokenAccount>>,
 }
 
 pub fn handle_create_launch(ctx: Context<CreateLaunch>, exit_fee_bps: u16) -> Result<()> {
@@ -105,6 +153,11 @@ pub fn handle_create_launch(ctx: Context<CreateLaunch>, exit_fee_bps: u16) -> Re
     assert_vault_unencumbered(
         &ctx.accounts.vault.to_account_info(),
         &ctx.accounts.vault_authority.key(),
+    )?;
+    // The same for a pre-created transit account (only the claimer could encumber it).
+    assert_transit_unencumbered(
+        &ctx.accounts.claimer_quote_account.to_account_info(),
+        &ctx.accounts.claimer.key(),
     )?;
 
     let now = Clock::get()?.unix_timestamp;
