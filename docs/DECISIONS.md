@@ -244,3 +244,11 @@ Format: date — decision · alternatives · reason.
   the migration fee is 60% of the threshold; DBC's `creator_migration_fee_percentage` is an integer share of that fee,
   so 5% of the raise is 8.33% of it (8% gives 4.8%, 9% gives 5.4%), or our program splits the partner share instead.
   Needs relaxing the `creator_migration_fee_percentage == 0` check and a vault/platform split of the partner share.
+- **Post-graduation trading (founder decision, 2026-09-25):** DAMM v2 pool fee 1%. After Meteora's 20%, the LP
+  fees split creator 50% / vault 30% / platform 20% (per $100 traded: creator $0.40, vault $0.24, platform $0.16,
+  Meteora $0.20; plus the Meteora referral on UI swaps to the platform). · 1% with creator 40 / vault 35 / platform 25;
+  1.5% with creator 45 / vault 37.5 / platform 17.5 · The creator's trading share replaces the early-buyer profit the
+  flat curve removes; $0.40 beats 8 of 13 Meteora pads while traders pay less than on pump.fun. Implementation note:
+  natively as `creator_permanent_locked_liquidity_percentage` 50 / partner 50 (relax the 100%-partner-LP check), with
+  our program splitting the partner position's quote fees vault 60% / platform 40%; or all LP to the partner and a
+  three-way split in `harvest_lp_fees`.
