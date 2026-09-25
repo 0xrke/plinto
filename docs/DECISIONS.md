@@ -235,3 +235,12 @@ Format: date — decision · alternatives · reason.
   real platform income; a creator share at 0.25% would be about $24 per successful raise and would reward churn.
   Needs: a platform treasury destination in `harvest_curve_fees` (today it pays the vault) and creator_trading_fee_
   percentage 0 in the preset.
+- **Graduation split (founder decision, 2026-09-25):** of the raised threshold, 40% seeds the DAMM v2 pool, 50% goes
+  to the vault, 5% to the platform treasury and 5% to the creator as a one-off success bonus at graduation. Founder
+  share of the raise with vesting is dropped for now. · 3% or 0% platform; 0% or 2% creator bonus; Star-style vested
+  founder budget · The flat curve removes the creator's usual early-buyer profit, so a paid-on-success bonus replaces
+  it honestly; 5% for the platform is market rate (Ember 10%, Scribe and RevShare 5%) and the most reliable platform
+  income. Buyer guarantee at listing ≈ 0.50 / (1.005 + 0.40) × 0.98 ≈ 35% of the listing price. Implementation note:
+  the migration fee is 60% of the threshold; DBC's `creator_migration_fee_percentage` is an integer share of that fee,
+  so 5% of the raise is 8.33% of it (8% gives 4.8%, 9% gives 5.4%), or our program splits the partner share instead.
+  Needs relaxing the `creator_migration_fee_percentage == 0` check and a vault/platform split of the partner share.
