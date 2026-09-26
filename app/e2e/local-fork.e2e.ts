@@ -219,7 +219,7 @@ describe.sequential("web app on a local Surfpool fork", () => {
     for (const page of ["/", "/create", `/t/${mint}`]) {
       const html = await fetch(`${APP}${page}`);
       expect(html.status).toBe(200);
-      expect(await html.text()).toContain("StockFloor");
+      expect(await html.text()).toContain("Plinto");
     }
   });
 

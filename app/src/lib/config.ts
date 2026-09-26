@@ -189,7 +189,7 @@ export const PRICE_MOVE_BUY_USD = 1_000;
 
 /** One sentence per fee of a launch (launch v3), for the create form, the preview and the token page. */
 export const FEE_COPY = {
-  presale: `Presale: a ${CURVE_TRADING_FEE_BPS / 100}% curve trading fee. Meteora keeps ${METEORA_PROTOCOL_FEE_PCT}% and the rest goes to the StockFloor platform, whether or not the presale graduates. The creator and the vault get none of it.`,
+  presale: `Presale: a ${CURVE_TRADING_FEE_BPS / 100}% curve trading fee. Meteora keeps ${METEORA_PROTOCOL_FEE_PCT}% and the rest goes to the Plinto platform, whether or not the presale graduates. The creator and the vault get none of it.`,
   graduation: `Graduation: platform ${PLATFORM_GRADUATION_FEE_PCT}% and creator ${CREATOR_GRADUATION_BONUS_PCT}% of the raise (a one-off bonus). The other ${100 - PLATFORM_GRADUATION_FEE_PCT - CREATOR_GRADUATION_BONUS_PCT}% splits between the floor vault (the vault share) and the locked pool.`,
   trading: `Trading: a ${MIGRATED_POOL_FEE_BPS / 100}% pool fee. After Meteora's ${METEORA_PROTOCOL_FEE_PCT}%, creator ${LP_FEE_SPLIT_PCT.creator}%, floor vault ${LP_FEE_SPLIT_PCT.floor}%, platform ${LP_FEE_SPLIT_PCT.platform}%.`,
   exit: `Exit: a ${DEFAULT_EXIT_FEE_BPS / 100}% fee on redemption stays in the floor vault and raises the floor.`,

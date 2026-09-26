@@ -25,7 +25,7 @@ export function SiteFooter() {
     <footer className="px-4 pb-10 pt-8 text-[13px] text-ink-2 sm:px-6 lg:px-10">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <p>
-          <b className="font-bold text-ink">StockFloor</b> · Launchpad on Meteora DBC
+          <b className="font-bold text-ink">Plinto</b> · Launchpad on Meteora DBC
         </p>
         <p>The floor protects from zero, not from loss.</p>
       </div>
@@ -33,7 +33,7 @@ export function SiteFooter() {
         <div className="space-y-1.5">
           <p className="font-bold text-ink">Important</p>
           <p>
-            StockFloor is unaudited hackathon code. Do not use it with funds you cannot afford to lose.
+            Plinto is unaudited hackathon code. Do not use it with funds you cannot afford to lose.
             Nothing here is investment advice.
           </p>
           <p>

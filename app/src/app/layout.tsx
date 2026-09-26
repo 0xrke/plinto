@@ -21,17 +21,17 @@ const sans = localFont({
   display: "swap",
 });
 
-const TITLE = "StockFloor · Launches with a floor in tokenized stocks";
+const TITLE = "Plinto · Launches with a floor in tokenized stocks";
 const DESCRIPTION =
   "A token launchpad on Meteora DBC where the raise becomes a redeemable floor backed by tokenized S&P 500.";
 
 export const metadata: Metadata = {
   // Without a base, a shared link previews as a blank card (the OG image cannot be made absolute).
   metadataBase: SITE_URL ? new URL(SITE_URL) : undefined,
-  title: { default: TITLE, template: "%s · StockFloor" },
+  title: { default: TITLE, template: "%s · Plinto" },
   description: DESCRIPTION,
-  applicationName: "StockFloor",
-  openGraph: { type: "website", siteName: "StockFloor", title: TITLE, description: DESCRIPTION, url: SITE_URL },
+  applicationName: "Plinto",
+  openGraph: { type: "website", siteName: "Plinto", title: TITLE, description: DESCRIPTION, url: SITE_URL },
   twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
 

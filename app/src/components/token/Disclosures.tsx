@@ -74,14 +74,14 @@ export function Disclosures({ launch }: { launch: LaunchSummary }) {
           )}
         </li>
         <li>
-          <span className="font-bold text-ink">The programs are upgradeable.</span> The StockFloor program has no
+          <span className="font-bold text-ink">The programs are upgradeable.</span> The Plinto program has no
           admin, pause or withdraw instruction, but its deployer can upgrade it until the upgrade authority is
           revoked, and an upgrade could change the rules, including how vault funds move. {upgradeStatusText(upgrade.data)}{" "}
           Meteora DBC and DAMM v2 are upgradeable by Meteora; an upgrade there could stop or divert fees that are not
           yet harvested into the vault.
         </li>
         <li>
-          <span className="font-bold text-ink">Unaudited software.</span> StockFloor is hackathon code that has
+          <span className="font-bold text-ink">Unaudited software.</span> Plinto is hackathon code that has
           not been audited. Smart contract bugs can lose funds.
         </li>
       </ul>

@@ -56,7 +56,7 @@ export function assertDeployableProductionBuild(env: DeployEnv): void {
   if (problems.length === 0) return;
   throw new Error(
     [
-      "StockFloor: this production build is not deployable as configured.",
+      "Plinto: this production build is not deployable as configured.",
       ...problems.map((p) => `  · ${p}`),
       "",
       "  A local production build (a Surfpool fork, or a design preview on demo data) is fine — say so:",

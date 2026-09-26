@@ -32,7 +32,7 @@ export function Wordmark({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   return (
     <span className="inline-flex items-center gap-[11px] text-ink">
       <LogoMark className={`${box} shrink-0`} />
-      <span className={`font-display font-extrabold tracking-[-0.02em] ${text}`}>StockFloor</span>
+      <span className={`font-display font-extrabold tracking-[-0.02em] ${text}`}>Plinto</span>
     </span>
   );
 }

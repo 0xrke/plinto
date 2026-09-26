@@ -27,12 +27,12 @@ export function SiteSidebar() {
       <div className="sticky top-0 flex h-[calc(100dvh-2rem)] min-h-[34rem] flex-col items-center px-[18px] pb-7 pt-9 xl:items-stretch xl:px-[22px]">
         <Link
           href="/"
-          aria-label="StockFloor home"
+          aria-label="Plinto home"
           className="flex min-h-11 items-center gap-[11px] text-ink xl:px-2.5"
         >
           <LogoMark className="h-9 w-9 shrink-0" />
           <span className="hidden font-display text-[1.375rem] font-extrabold tracking-[-0.02em] xl:inline">
-            StockFloor
+            Plinto
           </span>
         </Link>
 

@@ -116,7 +116,7 @@ export function TokenView({ mint }: { mint: string }) {
           <div className="card mx-auto mt-6 max-w-xl p-8 text-center sm:mt-16">
             <h1 className="display text-[28px] text-ink">Token not found</h1>
             <p className="mt-3 break-all text-sm text-ink-2">
-              No StockFloor launch uses the mint <span className="font-mono">{mint}</span>.
+              No Plinto launch uses the mint <span className="font-mono">{mint}</span>.
             </p>
             <Link href="/" className="btn btn-primary mt-6">
               <ChevronLeftIcon />
