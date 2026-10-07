@@ -1,6 +1,7 @@
 import { QUOTE_ALLOWLIST, floorPer100AtListingForPreset, type QuoteAsset } from "@stockfloor/sdk";
 import { CURVE_TRADING_FEE_BPS } from "../config";
 import type { UpgradeStatus } from "../chain/upgradeAuthority";
+import { isListable } from "./impersonation";
 import type { LaunchDataSource, LaunchSummary, PayToken, QuoteMarket } from "./types";
 
 /**
@@ -174,6 +175,35 @@ function buildMockLaunches(): LaunchSummary[] {
       projectedAtGraduation: { vaultQuoteRaw: 212_454_891n, baseSupplyRaw: 1_000_000_000_000_000n },
       chain: null,
     },
+    {
+      // A brand imitation like the ones launched on mainnet: hidden from the list, flagged on its page.
+      mint: "HfZLQjDq9MaaGsd4HaiDjBjXhKXXB4Eq1PVpG6M4Rsiw",
+      launchAddress: "4bCK3A1JJ4knqbkLXUQASCdHeGd67GKu6UAxCDroTBW9",
+      config: "4SocU52WQRv8qZ515a2Fti8ncXcCM6g1TyqCMjvdH5Yz",
+      pool: "6auDu4LKgo7MMEehEFuCkezn4phNjB6F2zyfiRQGeUGJ",
+      dammPool: null,
+      vault: "71HadbpcUUi1dmEPRZJU1cT3B67YZ5rheCrxJDJcBpm7",
+      name: "Plinto Official",
+      symbol: "PLINTO",
+      imageUrl: null,
+      creator: "6R4usph1F5sdBphbLxPZiKLV3Xgk6LineFH9CCbPJVJa",
+      createdAt: Date.UTC(2026, 8, 15, 11, 0),
+      baseDecimals: 6,
+      quote: quoteBySymbol("SPYx"),
+      preset: "flat",
+      vaultSharePct: 30,
+      exitFeeBps: 200,
+      phase: "presale",
+      thresholdQuoteRaw: 146_389_081n,
+      quoteReserveRaw: 12_000_000n,
+      priceUsd: 0.0000012,
+      vaultRaw: 0n,
+      supplyRaw: 1_050_000_000_000_000n,
+      migrationFeeHarvested: false,
+      quotePaused: false,
+      projectedAtGraduation: { vaultQuoteRaw: 43_916_724n, baseSupplyRaw: 1_000_000_000_000_000n },
+      chain: null,
+    },
   ];
   return launches.map(withFeeModel);
 }
@@ -199,7 +229,7 @@ export class MockDataSource implements LaunchDataSource {
 
   async listLaunches(): Promise<LaunchSummary[]> {
     await this.delay();
-    return [...this.launches].sort((a, b) => b.createdAt - a.createdAt);
+    return this.launches.filter(isListable).sort((a, b) => b.createdAt - a.createdAt);
   }
 
   async getLaunch(mint: string): Promise<LaunchSummary | null> {

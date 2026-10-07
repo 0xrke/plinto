@@ -256,7 +256,7 @@ describe("ChainDataSource", () => {
     expect(metadataReads()).toBe(before);
   });
 
-  it("hides launches whose name or ticker imitates the Plinto brand", async () => {
+  it("hides brand imitations from the list but still opens their page (which warns)", async () => {
     const fake = launchState({ createdAt: NOW - 100n }).state;
     const real = launchState({ createdAt: NOW, input: { name: "Tidepool", symbol: "TIDE" } }).state;
     const reader = new FakeReader();
@@ -265,7 +265,7 @@ describe("ChainDataSource", () => {
     const { source } = sourceWith(reader, [fake, real]);
 
     expect((await source.listLaunches()).map((l) => l.symbol)).toEqual(["TIDE"]);
-    expect(await source.getLaunch(fake.launch.baseMint.toBase58())).toBeNull();
+    expect((await source.getLaunch(fake.launch.baseMint.toBase58()))?.symbol).toBe("PLNT");
     expect((await source.getLaunch(real.launch.baseMint.toBase58()))?.symbol).toBe("TIDE");
   });
 

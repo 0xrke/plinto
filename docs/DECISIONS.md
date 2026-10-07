@@ -550,3 +550,11 @@ Format: **decision** · alternatives · why. These supersede the matching bullet
   line instead); the split legend adds "· 10% fees"; one reserved-name message under the name and ticker row;
   neutral placeholders; "Launch a token" everywhere. Home: "Top floors" lists only live floors, desktop only, and
   disappears when there are none. Demo data: one notice per page, never labelled "Local fork".
+
+## 2026-10-07 — Existing Plinto look-alike launches
+- Launches whose name or ticker matches the reserved-name rule (`isReservedTokenName`) already exist on
+  mainnet, created before the program check. The app leaves them out of every list (chain and mock data
+  sources, `lib/data/impersonation.ts`) but still opens their page, so a shared link does not dead-end.
+- Their page shows a full-width red alert above the header: "This is NOT an official Plinto token".
+  Trading stays available, so holders who were misled can still sell or redeem.
+- The mock data includes one such launch (`$PLINTO`, reachable only by URL) to show the banner.

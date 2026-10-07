@@ -219,3 +219,21 @@ describe("<TokenView /> after migration", () => {
     expect(screen.queryByText(/indexer/)).toBeNull();
   });
 });
+
+describe("<TokenView /> brand imitations", () => {
+  it("puts a red 'not an official Plinto token' alert above the header of a Plinto look-alike, in both phases", async () => {
+    for (const phase of ["presale", "graduated"] as const) {
+      const launch = { ...summary(phase), name: "Plinto Official", symbol: "PL1NTO" };
+      renderToken(launch);
+      const alert = await screen.findByRole("alert", { name: "This is NOT an official Plinto token" });
+      expect(alert.textContent).toContain("$PL1NTO");
+      cleanup();
+    }
+  });
+
+  it("shows no such alert on an ordinary token", async () => {
+    renderToken(summary("presale"));
+    await screen.findByRole("heading", { name: "How it works" });
+    expect(screen.queryByRole("alert", { name: /official Plinto/ })).toBeNull();
+  });
+});

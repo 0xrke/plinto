@@ -27,6 +27,8 @@ import { PresaleTradePanel } from "./PresaleTradePanel";
 import { PriceChartCard } from "./PriceChartCard";
 import { RedeemPanel } from "./RedeemPanel";
 import { TokenHeader } from "./TokenHeader";
+import { ImpersonationBanner } from "./ImpersonationBanner";
+import { isImpersonation } from "@/lib/data/impersonation";
 import { VaultStats } from "./VaultStats";
 
 /** Anchor of the trade panel. */
@@ -209,6 +211,7 @@ function GraduatedView({ launch }: { launch: LaunchSummary }) {
     <TokenColumns
       top={
         <>
+          {isImpersonation(launch) && <ImpersonationBanner symbol={launch.symbol} />}
           <TokenHeader launch={launch} />
           <PriceChartCard launch={launch} />
           <section aria-labelledby="meter-heading" className="card p-4 sm:p-5">
@@ -268,6 +271,7 @@ function PresaleView({ launch }: { launch: LaunchSummary }) {
     <TokenColumns
       top={
         <>
+          {isImpersonation(launch) && <ImpersonationBanner symbol={launch.symbol} />}
           <TokenHeader launch={launch} />
           <PriceChartCard launch={launch} />
           <section aria-labelledby="curve-heading" className="card p-4 sm:p-5">

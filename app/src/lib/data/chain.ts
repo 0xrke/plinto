@@ -25,11 +25,11 @@ import {
   type ChainReader,
   type CurvePreset,
   type LaunchState,
-  isReservedTokenName,
 } from "@stockfloor/sdk";
 import { decodeMetaplexMetadata, imageUrlFromUri, metadataAddress, resolveTokenImageUrl, type TokenMetadata } from "../chain/metadata";
 import type { PriceProvider, UsdPrice } from "../chain/prices";
 import { readUpgradeStatus, type UpgradeStatus } from "../chain/upgradeAuthority";
+import { isListable } from "./impersonation";
 import type { LaunchDataSource, LaunchPhase, LaunchSummary, PayToken, QuoteMarket } from "./types";
 
 /** SDK read functions the data source uses (injectable for tests). */
@@ -264,7 +264,7 @@ export class ChainDataSource implements LaunchDataSource {
     }
     // One broken launch must not hide the others; a failure of every read is an RPC problem.
     if (states.length === 0 && firstError) throw firstError;
-    const summaries = (await this.summarize(states)).filter((s) => !isReservedTokenName(s.name, s.symbol));
+    const summaries = (await this.summarize(states)).filter(isListable);
     return summaries.sort((a, b) => b.createdAt - a.createdAt);
   }
 
@@ -311,9 +311,7 @@ export class ChainDataSource implements LaunchDataSource {
     const state = await this.sdk.fetchLaunchState(this.reader, { launch: address }, { includePositions: true });
     if (!state) return null;
     const [summary] = await this.summarize([state]);
-    // Brand imitations are hidden even where the deployed program does not reject them yet.
-    if (!summary || isReservedTokenName(summary.name, summary.symbol)) return null;
-    return summary;
+    return summary ?? null;
   }
 
   async getQuoteMarkets(): Promise<QuoteMarket[]> {
