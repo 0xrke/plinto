@@ -4,16 +4,16 @@ import { ClosingCta } from "./ClosingCta";
 import { Hero } from "./Hero";
 import { LiveFloorsView } from "./LiveFloors";
 import { loadLiveFloors } from "./liveFloorsData";
-import { LabSection } from "./lab/LabSection";
 import { Rules } from "./Rules";
+import { StorySection } from "./scroll/StorySection";
 import { TopBar } from "./TopBar";
 
 const CONTAINER = "mx-auto w-full max-w-[1120px] px-5 sm:px-10 lg:px-12";
 
 /**
  * The landing at "/": a plain white page, edge to edge, with the site footer under a hairline. A server component with no
- * wallet, React Query or web3 client code; FloorLab (the split sandbox and the launch story) is the
- * only client island, fed launch constants by the server. Live floors are read
+ * wallet, React Query or web3 client code; the scroll story (four pinned chapters) is the only client
+ * island, fed launch constants by the server. Live floors are read
  * on the server, so the page relies on the route's ISR (`revalidate = 60`) and never waits on RPC.
  */
 export async function Landing({ source }: { source?: LaunchDataSource } = {}) {
@@ -26,7 +26,7 @@ export async function Landing({ source }: { source?: LaunchDataSource } = {}) {
         </div>
         <main id="main" className={`${CONTAINER} pb-12 sm:pb-20`}>
           <Hero />
-          <LabSection />
+          <StorySection />
           <Rules />
           <LiveFloorsView launches={live} />
           <ClosingCta />

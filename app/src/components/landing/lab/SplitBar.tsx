@@ -20,14 +20,29 @@ function segmentScale(progress: number, i: number): number {
   return Math.min(1, Math.max(0, (progress - STAGGER * i) / span));
 }
 
+/** Whole percent of the raise, e.g. 40. */
+const pctOf = (m: LaunchMath, usd: number) => Math.round((usd / m.raiseUsd) * 100);
+
 /**
  * Where the raise goes: a 12px bar in four segments (floor, market, creator, platform) and a
- * three-item legend ("Floor $5,000 · Market $4,000 · Fees $1,000"). Shared by the sandbox and the
- * story; the story passes `progress` to grow the segments one after another.
+ * three-item legend ("Floor $5,000 · Market $4,000 · Fees $1,000", or with `legend="pct"`
+ * "Floor 50% · Market 40% · Fees 10%"). Shared by the sandbox, the story and the floor-share
+ * chapter; the story passes `progress` to grow the segments one after another.
  */
-export function SplitBar({ m, progress = 1, className = "" }: { m: LaunchMath; progress?: number; className?: string }) {
+export function SplitBar({
+  m,
+  progress = 1,
+  legend = "usd",
+  className = "",
+}: {
+  m: LaunchMath;
+  progress?: number;
+  legend?: "usd" | "pct";
+  className?: string;
+}) {
   const s = m.split;
   const fees = s.creatorUsd + s.platformUsd;
+  const value = (usd: number) => (legend === "pct" ? `${pctOf(m, usd)}%` : formatUsdWhole(usd));
   return (
     <div className={className}>
       <div role="img" aria-label={splitAriaLabel(m)} className="flex h-3 gap-0.5 overflow-hidden rounded-full bg-track">
@@ -43,19 +58,19 @@ export function SplitBar({ m, progress = 1, className = "" }: { m: LaunchMath; p
         ))}
       </div>
       <p className="tnum mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[13px] text-ink-2">
-        <LegendItem dot="bg-floor-bar" label="Floor" usd={s.floorUsd} strong />
-        <LegendItem dot="bg-iris" label="Market" usd={s.poolUsd} />
-        <LegendItem dot="bg-butter" label="Fees" usd={fees} />
+        <LegendItem dot="bg-floor-bar" label="Floor" value={value(s.floorUsd)} strong />
+        <LegendItem dot="bg-iris" label="Market" value={value(s.poolUsd)} />
+        <LegendItem dot="bg-butter" label="Fees" value={value(fees)} />
       </p>
     </div>
   );
 }
 
-function LegendItem({ dot, label, usd, strong = false }: { dot: string; label: string; usd: number; strong?: boolean }) {
+function LegendItem({ dot, label, value, strong = false }: { dot: string; label: string; value: string; strong?: boolean }) {
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
       <span aria-hidden className={`h-2 w-2 rounded-full ${dot}`} />
-      {label} <span className={strong ? "font-bold text-floor" : "font-semibold text-ink"}>{formatUsdWhole(usd)}</span>
+      {label} <span className={strong ? "font-bold text-floor" : "font-semibold text-ink"}>{value}</span>
     </span>
   );
 }

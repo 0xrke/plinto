@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import { IconTile } from "@/components/ui/Tiles";
 import { CloseIcon, LockIcon, VaultIcon, type IconProps } from "@/components/ui/icons";
 import styles from "./landing.module.css";
+import { RULES_ID } from "./scroll/anchors";
 
 // README, "What the program guarantees" and "Who could still hurt the floor".
 const CANT: { Icon: ComponentType<IconProps>; title: string }[] = [
@@ -12,18 +13,20 @@ const CANT: { Icon: ComponentType<IconProps>; title: string }[] = [
 
 const RISKS = [
   "Buying far above the floor.",
-  "The SPYx issuer can pause, freeze or move vault tokens.",
+  // Every allowlisted floor asset is an xStock from the same issuer (README, "Not for US persons").
+  "The xStocks issuer can pause, freeze or move vault tokens.",
   "Unaudited, and still upgradeable by our key.",
 ];
 
 export function Rules() {
   return (
     <section
+      id={RULES_ID}
       aria-labelledby="rules-title"
       className={`grid gap-6 py-10 sm:py-16 lg:grid-cols-2 lg:items-start lg:gap-8 ${styles.reveal}`}
     >
       <div>
-        <h2 id="rules-title" className="heading text-ink sm:text-[28px]">
+        <h2 id="rules-title" tabIndex={-1} className="heading text-ink sm:text-[28px]">
           What the code can&apos;t do
         </h2>
         <ul className="mt-6 flex flex-wrap gap-3">

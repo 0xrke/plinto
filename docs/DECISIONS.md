@@ -612,3 +612,25 @@ Format: **decision** · alternatives · why. These supersede the matching bullet
 - Accessibility: autoplay waits for half the card (or half the viewport); an explicit Play runs whenever any
   of it shows. Keyboard changes are spoken by `aria-valuetext` only; the sandbox status line speaks after a
   pointer drag, and the story's live caption only for stepper/Back/Next.
+
+## 2026-10-08 — Scroll story: review fixes
+- Step cards are `position: sticky` inside their step (narrow: just under the stage; wide: level with the
+  stage's middle; landscape phones: 8px from the top), so the active caption stays readable for the whole
+  step. The card is its own stacking context (`isolation: isolate`) and the narrow stage sits at `z-index: 2`,
+  so the slider never draws over or catches taps on the stage.
+- Runway after the last step lives on the steps column (narrow 30svh, wide half the stage height, landscape
+  `50svh − 8px`), so the stage stays pinned until the last step reaches q = 1.
+- No page-wide `scroll-padding-top`: it doubled with the controls' `scroll-margin-top` (focus landed below the
+  viewport) and shortened PageDown. Controls keep `scroll-margin-top`; the focus guard also pulls a control up
+  from below the fold.
+- Inactive steps dim to 0.65 (was 0.4) so their text keeps WCAG AA contrast.
+- "Skip the story" now lands on Rules, the first section after the story, so the risk box is never skipped on
+  the way to a buy button. The issuer line is asset-neutral ("The xStocks issuer …"): every allowlisted floor
+  asset is an xStock (README).
+- One payback number at redeem: the chart head shows the after-fee figure and the paper tile says "Burned".
+- Copy: "A crypto floor can sink …" (not a certainty); "A stock floor follows its own market" and "Pick what
+  holds the floor" (true for gold too); footnote "Fees simplified; the rest is SDK math."; the stage bars in
+  chapter 04 lose their names (each step already names its stage).
+- Screen readers get chapter 03's chart numbers as sr-only text in steps 2 and 3; picker rows are named groups
+  ("Calm", "Volatile"). Reduced-motion stills mount only on the server and under reduced motion. `--p` is no
+  longer written (nothing read it).

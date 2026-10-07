@@ -363,7 +363,9 @@ describe("client import graph", () => {
   const root = join(__dirname, "..", "..", "..");
   const dirs: Array<[string, string[]]> = [
     [join(root, "lib", "landing", "sim"), ["fromSdk.ts"]],
-    [join(root, "components", "landing", "lab"), ["LabSection.tsx"]],
+    [join(root, "components", "landing", "lab"), []],
+    [join(root, "components", "landing", "scroll"), ["StorySection.tsx"]],
+    [join(root, "components", "landing", "chapters"), []],
   ];
   const banned = [
     /^@stockfloor\/sdk/,
@@ -375,6 +377,8 @@ describe("client import graph", () => {
     /^@tanstack\//,
     /wallet/i,
     /^bn\.js$/,
+    /^decimal\.js/,
+    /^@\/lib\/format$/,
   ];
   const specifiers = (src: string) =>
     [...src.matchAll(/(?:import|export)[^"';]*?from\s*["']([^"']+)["']|import\s*\(\s*["']([^"']+)["']\s*\)|import\s+["']([^"']+)["']/g)].map(
@@ -390,16 +394,17 @@ describe("client import graph", () => {
         const src = readFileSync(join(dir, file), "utf8");
         for (const spec of specifiers(src)) {
           for (const re of banned) expect(re.test(spec), `${file} imports ${spec}`).toBe(false);
-          // Relative imports stay inside the folder and never reach the server-only constants file.
+          // Relative imports stay inside the landing's client folders and never reach the server-only
+          // constants file or the server component that reads it.
           if (spec.startsWith(".")) {
-            expect(spec.startsWith("./"), `${file} imports ${spec}`).toBe(true);
-            expect(/fromSdk|LabSection/.test(spec), `${file} imports ${spec}`).toBe(false);
+            expect(/^\.\/|^\.\.\/(lab|scroll|chapters)\//.test(spec), `${file} imports ${spec}`).toBe(true);
+            expect(/fromSdk|StorySection/.test(spec), `${file} imports ${spec}`).toBe(false);
           }
-          if (spec.startsWith("@/")) expect(/fromSdk|LabSection/.test(spec), `${file} imports ${spec}`).toBe(false);
+          if (spec.startsWith("@/")) expect(/fromSdk|StorySection/.test(spec), `${file} imports ${spec}`).toBe(false);
         }
         checked++;
       }
     }
-    expect(checked).toBeGreaterThanOrEqual(5);
+    expect(checked).toBeGreaterThanOrEqual(25);
   });
 });

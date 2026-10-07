@@ -1,0 +1,220 @@
+/*
+ * Scroll chapter shell: a tall section whose stage is position: sticky while the steps scroll past.
+ * Native scrolling only: no scroll snapping, no scroll-behavior. The driver (progress.ts) writes
+ * --q0…--qN and data-active; without it (no JS, reduced motion) stage CSS reads
+ * var(--qN, 1) and shows the final frame. Only opacity transitions here.
+ *
+ * Wide: steps left, sticky stage right. Narrow: the stage sticks to the top (at most 55svh) and the
+ * steps scroll under it as cards. Reduced motion: no stage, no pinning; each step shows its still.
+ */
+
+.chapter {
+  --stage-h: min(55svh, 480px);
+  --step-h: 60svh;
+  position: relative;
+  overflow-x: clip;
+  padding-block: 48px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.numeral {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-violet);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/*
+ * The runway after the last step lives on the steps column, not on the last step: a sticky card is
+ * held inside its step's content box, so padding on the step would let the card slide under the
+ * stage while the step is still active. 30svh keeps the stage pinned until the last q reaches 1.
+ */
+.steps {
+  grid-area: 1 / 1;
+  padding-top: calc(var(--stage-h) + 16px);
+  padding-bottom: 30svh;
+  min-width: 0;
+}
+
+.step {
+  min-height: var(--step-h);
+  transition: opacity 200ms ease;
+}
+
+.step[data-active="false"]:not(:focus-within) {
+  opacity: 0.65;
+}
+
+/*
+ * The card sticks just under the stage for the whole of its step, so the active caption stays
+ * readable while its step drives the stage; the next step's card pushes it out. Sticky also makes
+ * the card a stacking context, and isolation keeps controls' z-index (the slider's z-10) inside it,
+ * under the stage.
+ */
+.card {
+  position: sticky;
+  top: calc(var(--stage-h) + 16px);
+  isolation: isolate;
+  background: var(--color-cloud);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--color-ink);
+}
+
+.card :where(input, button, select, a, [tabindex]) {
+  scroll-margin-top: calc(var(--stage-h) + 16px);
+}
+
+.still {
+  display: none;
+}
+
+.stage {
+  grid-area: 1 / 1;
+  align-self: start;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: var(--stage-h);
+  background: var(--color-surface);
+  min-width: 0;
+}
+
+/* 16px fade under the narrow stage, so cards slide under it softly. */
+.stage::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+  height: 16px;
+  background: linear-gradient(var(--color-surface), transparent);
+  pointer-events: none;
+}
+
+.stageInner {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+
+@media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
+  .chapter {
+    --stage-h: min(640px, 82svh);
+    --step-h: var(--step-h-wide, 70svh);
+    padding-block: 64px;
+  }
+
+  .grid {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    column-gap: 48px;
+  }
+
+  /*
+   * Runway after the last step: the stage unpins when the grid's bottom passes the stage's bottom,
+   * and the last step only reaches q = 1 when its bottom crosses the reading line (50svh). The gap
+   * between the two (stage top + stage height − 50svh = half the stage) keeps the stage pinned
+   * through the last frame.
+   */
+  .steps {
+    grid-area: 1 / 1;
+    padding-top: 0;
+    padding-bottom: calc(var(--stage-h) / 2);
+  }
+
+  /* Sticks a little above the reading line, level with the stage's middle. */
+  .card {
+    top: max(16px, calc(50svh - 64px));
+    background: none;
+    padding: 0;
+    font-size: 22px;
+    line-height: 1.4;
+  }
+
+  .card :where(input, button, select, a, [tabindex]) {
+    scroll-margin-top: 16px;
+  }
+
+  .stage {
+    grid-area: 1 / 2;
+    top: max(16px, calc(50svh - var(--stage-h) / 2));
+    background: none;
+  }
+
+  .stage::after {
+    display: none;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .chapter {
+    --stage-h: calc(100svh - 16px);
+  }
+
+  .grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    column-gap: 24px;
+  }
+
+  .steps {
+    padding-bottom: calc(50svh - 8px);
+  }
+
+  .stage {
+    top: 8px;
+  }
+
+  /* A short viewport: stick at the top so tall cards (the picker) fit below. */
+  .card {
+    top: 8px;
+    font-size: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage {
+    display: none;
+  }
+
+  .steps {
+    grid-area: 1 / 1 / auto / -1;
+    padding-top: 0;
+    padding-bottom: 0;
+    display: grid;
+    gap: 16px;
+  }
+
+  .step {
+    min-height: auto;
+    transition: none;
+  }
+
+  .step[data-active="false"]:not(:focus-within) {
+    opacity: 1;
+  }
+
+  .card {
+    position: static;
+  }
+
+  .card :where(input, button, select, a, [tabindex]) {
+    scroll-margin-top: 0;
+  }
+
+  .still {
+    display: block;
+    margin-top: 12px;
+  }
+}
