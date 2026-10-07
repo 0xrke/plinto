@@ -15,19 +15,8 @@ export function useActionGate(options: { requireAttestation?: boolean } = {}): {
   const { dataSource } = useData();
   const cluster = useCluster();
   if (!connected) return { ready: false, reason: "Connect a wallet to continue." };
-  if (options.requireAttestation !== false && !attested)
-    return {
-      ready: false,
-      reason: (
-        <>
-          Confirm your eligibility in the{" "}
-          <a href="#disclosures" className="link font-semibold">
-            disclosures
-          </a>{" "}
-          first.
-        </>
-      ),
-    };
+  // The eligibility checkbox sits right under the trade panel's button.
+  if (options.requireAttestation !== false && !attested) return { ready: false, reason: "Confirm eligibility above." };
   if (dataSource.kind === "chain") {
     if (cluster.isPending) return { ready: false, reason: "Checking the cluster…" };
     if (cluster.isError || !cluster.data) return { ready: false, reason: "Could not reach the RPC endpoint." };

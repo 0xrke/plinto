@@ -3,17 +3,19 @@
 import { useEffect, useId, useState } from "react";
 import Decimal from "decimal.js";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { maxLossFraction, uiToRaw } from "@stockfloor/sdk";
+import { uiToRaw } from "@stockfloor/sdk";
 import { DEFAULT_SLIPPAGE_BPS } from "@/lib/config";
 import type { LaunchSummary, PayToken } from "@/lib/data/types";
 import { useCluster, useData, usePayTokenPrices, useRefreshChainData, useTokenBalance, useTxFlow } from "@/lib/data/context";
 import { PAY_TOKEN_DECIMALS, estimateSellUsd, estimateTokensOut, parseUiNumber } from "@/lib/estimates";
-import { formatMaxLoss, formatNumber, formatPercent, formatTokenAmount, formatUsd, parseTokenInput, rawToDecimal } from "@/lib/format";
+import { formatNumber, formatPercent, formatTokenAmount, formatUsd, parseTokenInput, rawToDecimal } from "@/lib/format";
 import { buyAveragePriceUsd, presaleBuyButtonLabel, projectedFloorUsd } from "@/lib/metrics";
 import { isQuoteError, quoteLaunchTrade } from "@/lib/tradeQuote";
+import { useAttestation } from "@/lib/attestation";
 import { AmountField } from "@/components/ui/AmountField";
+import { AttestationCheckbox } from "@/components/ui/AttestationCheckbox";
 import { SwapIcon } from "@/components/ui/icons";
-import { BaseChip, BuyButtonLabel, DetailRow, FinePrint, ReceiveTile, RiskRow, SwapArrow, TokenPicker } from "./TradeBits";
+import { BaseChip, BuyButtonLabel, DetailRow, FinePrint, ReceiveTile, SwapArrow, TokenPicker } from "./TradeBits";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { useActionGate } from "./useActionGate";
 
@@ -38,6 +40,7 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
   const baseBalance = useTokenBalance(launch.mint);
   const quoteBalance = useTokenBalance(launch.quote.asset.mint);
   const gate = useActionGate();
+  const { attested } = useAttestation();
   const routing = useJupiterRouting();
   const refresh = useRefreshChainData();
   const [flow, dispatch] = useTxFlow();
@@ -96,7 +99,6 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
   // at this buy's average price when an exact curve quote exists.
   const avgPriceUsd = side === "buy" && exactQuote ? buyAveragePriceUsd(launch, exactQuote.amountIn, exactQuote.amountOut) : null;
   const buyPriceUsd = avgPriceUsd ?? launch.priceUsd;
-  const estMaxLoss = estFloor !== null && estFloor > 0 ? maxLossFraction(buyPriceUsd, estFloor) : null;
 
   const canSubmit = curveOpen && gate.ready && amountRaw !== null && amountRaw > 0n && !inputError && !quoteError && !pending;
 
@@ -153,22 +155,19 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
 
   return (
     <section aria-labelledby={`${id}-heading`} className="rail-section">
-      <h2 id={`${id}-heading`} className="heading text-[21px] text-ink lg:text-[22px]">
-        Trade on the curve
+      <h2 id={`${id}-heading`} className="sr-only">
+        Trade
       </h2>
 
       {launch.quotePaused ? (
-        <p className="tile-risk mt-4 px-4 py-3 text-sm text-risk">
+        <p className="tile-risk px-4 py-3 text-sm text-risk">
           {quote.symbol} is paused by its issuer. Trading on the curve resumes when it is unpaused.
         </p>
       ) : launch.phase !== "presale" ? (
-        <p className="tile-cream mt-4 px-4 py-3 text-sm leading-relaxed text-graduating">
-          The curve is complete. Trading resumes on DAMM v2 once the pool migrates, and redemption opens after the
-          vault harvest. Anyone can run the crank below to move it forward.
-        </p>
+        <p className="tile-cream px-4 py-3 text-sm leading-relaxed text-graduating">Curve complete. Trading and redemption open after migration.</p>
       ) : (
         <>
-          <div role="group" aria-label="Trade side" className="segmented mt-4">
+          <div role="group" aria-label="Trade side" className="segmented">
             {(["buy", "sell"] as const).map((s) => (
               <button key={s} type="button" aria-pressed={side === s} onClick={() => switchSide(s)} className="capitalize">
                 {s}
@@ -235,40 +234,23 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
 
           <p className="mt-3 flex gap-2.5 text-[13px] leading-normal text-ink-2">
             <SwapIcon className="mt-0.5 shrink-0 text-presale" />
-            <span>
-              No floor during the presale. The floor is funded at graduation
-              {estFloor !== null ? ` (estimated ${formatUsd(estFloor)} per token)` : ""}. Until then you can sell back to
-              the curve.
-            </span>
+            <span>No floor until graduation. You can sell back to the curve.</span>
           </p>
 
           {!routing.available && side === "buy" ? (
             <p className="field-hint mt-2">
-              Paying with USDC or SOL routes through Jupiter, which works on mainnet only.
-              {routing.localFork ? ` On this local fork, pay with ${quote.symbol} directly (the faucet in the header has some).` : ""}
+              USDC/SOL: mainnet only.{routing.localFork ? " Use the faucet." : ""}
             </p>
           ) : null}
 
           <dl className="mt-4 flex flex-col gap-2.5 text-[13.5px]" aria-live="polite">
-            <DetailRow label="Minimum after 1% slippage">{minText ?? "—"}</DetailRow>
+            <DetailRow label="Min received">{minText ?? "—"}</DetailRow>
             {exactQuote?.partialFill ? (
               <p className="text-xs text-graduating">
                 This buy completes the curve: it uses {quoteAmount(exactQuote.amountIn)} and the rest stays in your wallet.
               </p>
             ) : null}
-            <DetailRow label="Curve price">{formatUsd(launch.priceUsd)}</DetailRow>
-            {side === "buy" ? (
-              <DetailRow label="Average price for this buy">{avgPriceUsd !== null ? formatUsd(avgPriceUsd) : "—"}</DetailRow>
-            ) : null}
-            <DetailRow label="Curve fee">
-              {formatPercent(launch.curveFeeBps / 10_000, { digits: 2 })}
-              {launch.feeSplit ? ", to the platform" : ""}
-            </DetailRow>
-            {side === "buy" ? (
-              <RiskRow label="Max loss for this buy if it graduates (est.)">
-                {estMaxLoss !== null ? formatMaxLoss(estMaxLoss) : "—"}
-              </RiskRow>
-            ) : null}
+            {/* The max loss if it graduates is the buy button's own sentence; no second copy here. */}
           </dl>
 
           {side === "buy" ? (
@@ -287,8 +269,20 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
             </button>
           )}
           <div className="mt-3 space-y-2">
+            {!attested ? <AttestationCheckbox /> : null}
             {!gate.ready ? <p className="field-hint">{gate.reason}</p> : null}
-            <FinePrint summary={exactQuote ? "Exact curve quote, max slippage 1%" : "Curve-price estimate, max slippage 1%"}>
+            <FinePrint summary="Max slippage 1%">
+              <dl className="space-y-1.5">
+                <DetailRow label="Curve price">{formatUsd(launch.priceUsd)}</DetailRow>
+                {side === "buy" ? (
+                  <DetailRow label="Average price for this buy">{avgPriceUsd !== null ? formatUsd(avgPriceUsd) : "—"}</DetailRow>
+                ) : null}
+                <DetailRow label="Curve fee">
+                  {formatPercent(launch.curveFeeBps / 10_000, { digits: 2 })}
+                  {launch.feeSplit ? ", to the platform" : ""}
+                </DetailRow>
+                {estFloor !== null ? <DetailRow label="Est. floor at graduation">{formatUsd(estFloor)}</DetailRow> : null}
+              </dl>
               {side === "buy" ? (
                 <p>
                   There is no floor until graduation. If the curve never completes, the only exit is selling back to the

@@ -136,11 +136,11 @@ describe("page components render the on-chain launch from the local fork", () =>
     );
     await screen.findByText("Floor at graduation", {}, { timeout: 30_000 });
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: uiName } });
-    fireEvent.change(screen.getByLabelText("Symbol"), { target: { value: "uifl" } });
+    fireEvent.change(screen.getByLabelText("Ticker"), { target: { value: "uifl" } });
     fireEvent.change(screen.getByLabelText(/^Amount in SPYx/), { target: { value: "0.05" } });
     // A first buy is a curve trade: the form asks for the non-US attestation.
     fireEvent.click(screen.getByRole("checkbox", { name: /not a US person/ }));
-    const launchButton = screen.getByRole("button", { name: "Launch token" }) as HTMLButtonElement;
+    const launchButton = screen.getByRole("button", { name: "Launch a token" }) as HTMLButtonElement;
     await waitFor(() => expect(launchButton.disabled).toBe(false), { timeout: 15_000 });
     await act(async () => {
       fireEvent.click(launchButton);
@@ -224,10 +224,10 @@ describe("page components render the on-chain launch from the local fork", () =>
     expect(screen.getByText(/Meteora's keeper does not migrate the pool for you/)).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: uiName } });
-    fireEvent.change(screen.getByLabelText("Symbol"), { target: { value: "ui50" } });
+    fireEvent.change(screen.getByLabelText("Ticker"), { target: { value: "ui50" } });
     fireEvent.change(screen.getByLabelText(/^Amount in SPYx/), { target: { value: "0.02" } });
     attest();
-    const launchButton = screen.getByRole("button", { name: "Launch token" }) as HTMLButtonElement;
+    const launchButton = screen.getByRole("button", { name: "Launch a token" }) as HTMLButtonElement;
     await waitFor(() => expect(launchButton.disabled).toBe(false), { timeout: 15_000 });
     await act(async () => {
       fireEvent.click(launchButton);

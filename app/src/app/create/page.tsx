@@ -12,7 +12,7 @@ export default function CreatePage() {
   return (
     <CreateLaunchForm
       intro={
-        <header className="mb-7 max-w-[640px] sm:mb-8">
+        <header className="mb-5 max-w-[640px]">
           <nav aria-label="Breadcrumb">
             <ol className="flex items-center gap-2 text-[15px] text-ink-3">
               <li>
@@ -28,11 +28,9 @@ export default function CreatePage() {
               </li>
             </ol>
           </nav>
-          <h1 className="display mt-4 text-balance text-[36px] text-ink sm:text-[50px]">Launch a token with a floor</h1>
-          <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
-            Your presale runs on a Meteora Dynamic Bonding Curve quoted in a tokenized stock. At graduation, the vault
-            share of the raise becomes a floor that every holder can redeem against. No team allocation, no admin
-            withdraw.
+          <h1 className="display mt-4 text-balance text-[36px] text-ink sm:text-[50px]">Launch a token</h1>
+          <p className="mt-3 text-[17px] leading-relaxed text-ink-2">
+            Part of the raise becomes a floor every holder can redeem.
           </p>
         </header>
       }

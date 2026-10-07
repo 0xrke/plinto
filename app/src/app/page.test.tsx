@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StubLaunchActions } from "@/lib/data/actions";
@@ -50,31 +50,31 @@ describe("home page", () => {
     expect(steps.textContent).not.toMatch(/Trading fees from the locked pool also go to the vault/);
   });
 
-  it("features the graduated launch with the largest vault and counts launches by phase", async () => {
+  it("lists only the live floors in the rail", async () => {
     renderHome();
-    const featured = await screen.findByRole("region", { name: "Featured floor" });
+    const rail = await screen.findByRole("region", { name: "Top floors" });
     const launches = await new MockDataSource(0).listLaunches();
     const live = launches.filter((l) => l.phase === "graduated" && l.migrationFeeHarvested);
-    const biggest = live.reduce((a, b) =>
-      a.quote.priceUsd * Number(a.vaultRaw) / 10 ** a.quote.asset.decimals >=
-      b.quote.priceUsd * Number(b.vaultRaw) / 10 ** b.quote.asset.decimals
-        ? a
-        : b,
-    );
-    expect(await within(featured).findByText(biggest.name)).toBeTruthy();
-    expect(within(featured).getByText(`$${biggest.symbol} vault · Floor live`)).toBeTruthy();
-    expect(within(featured).getByRole("link", { name: `Buy $${biggest.symbol} on its token page` }).getAttribute("href")).toBe(
-      `/t/${biggest.mint}`,
-    );
-    const phases = screen.getByRole("region", { name: "Launches by phase" });
-    expect(within(phases).getByText("Floor live").previousElementSibling?.textContent).toContain(String(live.length));
+    const tokenRows = () =>
+      within(rail)
+        .getAllByRole("link")
+        .filter((r) => r.getAttribute("href")?.startsWith("/t/"));
+    await waitFor(() => expect(tokenRows().length).toBeGreaterThanOrEqual(live.length));
+    expect(new Set(tokenRows().map((r) => r.getAttribute("href")))).toEqual(new Set(live.map((l) => `/t/${l.mint}`)));
+    // Only live floors: no presale estimates or "waiting for migration" rows.
+    expect(rail.textContent).not.toMatch(/est\. at graduation|Waiting for/);
   });
 
-  it("keeps the honest headline qualifier", () => {
+  it("has one call to action and states the honest qualifier once in the hero", () => {
     renderHome();
-    expect(screen.getByText(/The floor protects from zero, not from loss/).textContent).toMatch(
-      /fixed amount per token, so buying far above it can\s+lose most of the purchase/,
-    );
+    const hero = screen.getByRole("region", { name: /Token launches with a stock-backed floor/ });
+    const links = within(hero).getAllByRole("link");
+    expect(links.map((l) => l.textContent?.trim())).toEqual(["Launch a token"]);
+    expect(links[0]!.getAttribute("href")).toBe("/create");
+    expect(within(hero).getByText("The floor protects from zero, not from loss.")).toBeTruthy();
+    // The cut blocks stay cut.
+    expect(screen.queryByRole("region", { name: "Launches by phase" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Featured floor" })).toBeNull();
   });
 
   it("orders the launch grid with live floors first", async () => {

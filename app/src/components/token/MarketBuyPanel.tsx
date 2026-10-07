@@ -3,16 +3,18 @@
 import { useEffect, useId, useState } from "react";
 import Decimal from "decimal.js";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { maxLossFraction, uiToRaw } from "@stockfloor/sdk";
+import { uiToRaw } from "@stockfloor/sdk";
 import { DEFAULT_SLIPPAGE_BPS } from "@/lib/config";
 import type { LaunchSummary, PayToken } from "@/lib/data/types";
 import { useData, usePayTokenPrices, useRefreshChainData, useTokenBalance, useTxFlow } from "@/lib/data/context";
 import { PAY_TOKEN_DECIMALS, estimateSellUsd, estimateTokensOut, floorValueUsd, parseUiNumber } from "@/lib/estimates";
-import { formatMaxLoss, formatNumber, formatTokenAmount, formatUsd, parseTokenInput, rawToDecimal } from "@/lib/format";
+import { formatNumber, formatTokenAmount, formatUsd, parseTokenInput, rawToDecimal } from "@/lib/format";
 import { buyAveragePriceUsd, buyButtonLabel, launchFloorUsd } from "@/lib/metrics";
 import { isQuoteError, quoteLaunchTrade } from "@/lib/tradeQuote";
+import { useAttestation } from "@/lib/attestation";
 import { AmountField } from "@/components/ui/AmountField";
-import { BaseChip, BuyButtonLabel, DetailRow, FinePrint, ReceiveTile, RiskRow, SwapArrow, TokenPicker } from "./TradeBits";
+import { AttestationCheckbox } from "@/components/ui/AttestationCheckbox";
+import { BaseChip, BuyButtonLabel, DetailRow, FinePrint, ReceiveTile, SwapArrow, TokenPicker } from "./TradeBits";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { useJupiterRouting } from "./PresaleTradePanel";
 import { useActionGate } from "./useActionGate";
@@ -28,6 +30,7 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
   const { actions } = useData();
   const prices = usePayTokenPrices();
   const gate = useActionGate();
+  const { attested } = useAttestation();
   const routing = useJupiterRouting();
   const refresh = useRefreshChainData();
   const baseBalance = useTokenBalance(launch.mint);
@@ -74,7 +77,6 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
   // impact included), which in a thin pool is well above the spot price.
   const avgPriceUsd = side === "buy" && exactQuote ? buyAveragePriceUsd(launch, exactQuote.amountIn, exactQuote.amountOut) : null;
   const buyPriceUsd = avgPriceUsd ?? launch.priceUsd;
-  const maxLoss = maxLossFraction(buyPriceUsd, floorUsd);
 
   let payUsd = 0;
   if (side === "buy" && amount !== null) {
@@ -143,10 +145,10 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
 
   return (
     <section aria-labelledby={`${id}-heading`} className="rail-section">
-      <h2 id={`${id}-heading`} className="heading text-[21px] text-ink lg:text-[22px]">
-        {side === "buy" ? "Buy on the market" : "Sell on the market"}
+      <h2 id={`${id}-heading`} className="sr-only">
+        Trade
       </h2>
-      <div role="group" aria-label="Trade side" className="segmented mt-4">
+      <div role="group" aria-label="Trade side" className="segmented">
         {(["buy", "sell"] as const).map((s) => (
           <button key={s} type="button" aria-pressed={side === s} onClick={() => switchSide(s)} className="capitalize">
             {s}
@@ -225,10 +227,7 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
       </div>
 
       {!routing.available ? (
-        <p className="field-hint mt-3">
-          USDC and SOL route through Jupiter, which works on mainnet only.
-          {routing.localFork ? ` On this local fork, trade with ${quote.symbol} directly.` : ""}
-        </p>
+        <p className="field-hint mt-3">USDC/SOL: mainnet only.</p>
       ) : null}
 
       {launch.quotePaused ? (
@@ -240,21 +239,13 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
       <dl className="mt-4 flex flex-col gap-2.5 text-[13.5px]" aria-live="polite">
         {side === "buy" ? (
           <>
-            <DetailRow label="Minimum after 1% slippage">{exactQuote ? baseAmount(exactQuote.minOut) : "—"}</DetailRow>
-            <DetailRow label="Average price for this buy">{avgPriceUsd !== null ? formatUsd(avgPriceUsd) : "—"}</DetailRow>
+            {/* The max loss of this buy is the button's mandated sentence below; no second copy here. */}
             <DetailRow label="Worth at the floor" valueClassName="!text-floor">
               {tokensOut > 0 ? `≈ ${formatUsd(atFloorUsd)}` : "—"}
             </DetailRow>
-            {/*
-              The button below must keep the mandated "… Max loss if you buy now: −Z%" sentence, and
-              the "Price and floor" card states the same measure at the spot price. This row is the
-              one that moves with the amount typed, so it says so.
-            */}
-            <RiskRow label="Max loss for this buy">{formatMaxLoss(maxLoss)}</RiskRow>
           </>
         ) : (
           <>
-            {exactQuote ? <DetailRow label="Minimum after 1% slippage">{quoteAmount(exactQuote.minOut)}</DetailRow> : null}
             <DetailRow label="Floor (redeem instead)" valueClassName="!text-floor">
               {formatUsd(floorUsd)} per token
             </DetailRow>
@@ -278,8 +269,19 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
         </button>
       )}
       <div className="mt-3 space-y-2">
+        {!attested ? <AttestationCheckbox /> : null}
         {!gate.ready ? <p className="field-hint">{gate.reason}</p> : null}
-        <FinePrint summary={side === "buy" ? (exactQuote ? "Exact pool quote, max slippage 1%" : "Estimates at spot, max slippage 1%") : "Max slippage 1%"}>
+        <FinePrint summary="Max slippage 1%">
+          <dl className="space-y-1.5">
+            {side === "buy" ? (
+              <>
+                <DetailRow label="Min received">{exactQuote ? baseAmount(exactQuote.minOut) : "—"}</DetailRow>
+                <DetailRow label="Average price for this buy">{avgPriceUsd !== null ? formatUsd(avgPriceUsd) : "—"}</DetailRow>
+              </>
+            ) : exactQuote ? (
+              <DetailRow label="Min received">{quoteAmount(exactQuote.minOut)}</DetailRow>
+            ) : null}
+          </dl>
           {side === "buy" ? (
             <p>
               {exactQuote

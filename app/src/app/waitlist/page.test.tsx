@@ -17,12 +17,11 @@ describe("waitlist page", () => {
     expect(screen.getByText(/Presale\./)).toBeTruthy();
     expect(screen.getByText(/Market opens\./)).toBeTruthy();
     expect(screen.getByText(/Trading\./)).toBeTruthy();
-    // The fee model: half the raise is the floor, 40% the pool, 5% each to the platform and the creator.
-    expect(screen.getByText(/Half the raise becomes the floor/).textContent).toMatch(/40% becomes liquidity/);
-    expect(screen.getByText(/Half the raise becomes the floor/).textContent).toMatch(/5% each/);
-    expect(screen.getByText(/The floor creeps up/).textContent).toMatch(/part of every trading fee/);
+    // The fee model: half the raise is the floor, 40% the pool; fees and the exit fee raise the floor.
+    expect(screen.getByText(/Half the raise becomes the floor/).textContent).toMatch(/40% locked liquidity/);
+    expect(screen.getByText(/push the floor up/).textContent).toMatch(/2% exit fee/);
     expect(screen.getByText(/protects from zero, not from loss/i)).toBeTruthy();
-    expect(screen.getByText(/Not available to US persons/i)).toBeTruthy();
+    expect(screen.getByText(/Not for US persons/i)).toBeTruthy();
   });
 
   it("rejects a malformed address before it reaches the server", async () => {

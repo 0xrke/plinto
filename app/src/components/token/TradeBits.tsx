@@ -123,16 +123,6 @@ export function DetailRow({ label, children, valueClassName = "" }: { label: Rea
   );
 }
 
-/** The rose "Max loss for this buy" line. */
-export function RiskRow({ label, children }: { label: ReactNode; children: ReactNode }) {
-  return (
-    <div className="mt-0.5 flex items-center justify-between gap-3 rounded-[14px] bg-risk-wash px-3 py-2.5">
-      <dt className="font-semibold text-risk-strong">{label}</dt>
-      <dd className="tnum shrink-0 text-right font-extrabold text-risk">{children}</dd>
-    </div>
-  );
-}
-
 /**
  * The buy button's required sentence ("Price $X · Floor $Y · Max loss if you buy now: −Z%"), set on
  * two lines: price and floor small on top, the max loss as the bold line. The text content stays the

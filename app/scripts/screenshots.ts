@@ -39,7 +39,8 @@ const BUY_LABEL = /^Price \$[\d.,]+ · Floor \$[\d.,]+ · Max loss if you buy no
 const CREATE_FORM = {
   name: "Meridian Cycles",
   symbol: "MRDC",
-  uri: "https://meridiancycles.example/token.json",
+  /** Picked in the image drop zone; only previewed, never uploaded (nothing is submitted). */
+  image: resolve(dirname(process.argv[1] ?? "."), "..", "public", "token", "harbor-roasters.png"),
 };
 /** Amounts typed into the token page so both panels show real quotes instead of "—". */
 const BUY_INPUT = "0.02";
@@ -218,8 +219,8 @@ async function main(): Promise<void> {
     await goto(page, "/create");
     await settled(page);
     await page.getByLabel("Name").fill(CREATE_FORM.name);
-    await page.getByLabel("Symbol").fill(CREATE_FORM.symbol);
-    await page.getByLabel(/Token metadata JSON URL/).fill(CREATE_FORM.uri);
+    await page.getByLabel("Ticker").fill(CREATE_FORM.symbol);
+    await page.getByLabel("Token image").setInputFiles(CREATE_FORM.image);
     await page.getByRole("heading", { name: CREATE_FORM.name }).waitFor();
     const floorPreview = page.locator("section[aria-labelledby='preview-heading']");
     await floorPreview.getByText(/^\$[\d.,e−+-]+$/).first().waitFor();

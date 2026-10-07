@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { maxLossFraction } from "@stockfloor/sdk";
 import type { LaunchSummary } from "@/lib/data/types";
-import { formatMaxLoss, formatMultiple, formatProgress, formatUsd } from "@/lib/format";
+import { formatMaxLoss, formatProgress, formatUsd } from "@/lib/format";
 import { launchFloorUsd, presaleProgress, projectedFloorUsd, quoteRawToUsd } from "@/lib/metrics";
 import { PhaseBadge } from "@/components/ui/PhaseBadge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -38,6 +38,16 @@ function ExploreTab() {
   );
 }
 
+/** One labelled number in the card's two-column row. */
+function Figure({ label, value, tone = "text-ink" }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-ink-3">{label}</dt>
+      <dd className={`tnum mt-0.5 truncate text-base font-bold ${tone}`}>{value}</dd>
+    </div>
+  );
+}
+
 export function LaunchCard({ launch }: { launch: LaunchSummary }) {
   const status = launchStatus(launch);
   const graduated = launch.phase === "graduated";
@@ -47,11 +57,11 @@ export function LaunchCard({ launch }: { launch: LaunchSummary }) {
   const raisedUsd = quoteRawToUsd(launch.quoteReserveRaw, launch.quote);
   const thresholdUsd = quoteRawToUsd(launch.thresholdQuoteRaw, launch.quote);
   const maxLoss = maxLossFraction(launch.priceUsd, floorUsd);
-  const multiple = floorUsd > 0 ? launch.priceUsd / floorUsd : Number.POSITIVE_INFINITY;
+  const floorLive = status === "floor-live";
   const href = `/t/${launch.mint}`;
 
   return (
-    <article className="card group relative flex min-w-0 sm:min-h-[340px] flex-col overflow-hidden px-6 pt-6 transition-[box-shadow,transform] hover:-translate-y-0.5 hover:shadow-pop">
+    <article className="card group relative flex min-w-0 sm:min-h-[260px] flex-col overflow-hidden px-6 pt-6 transition-[box-shadow,transform] hover:-translate-y-0.5 hover:shadow-pop">
       <div className="flex items-start justify-between gap-3">
         <TokenAvatar symbol={launch.symbol} imageUrl={launch.imageUrl} size={56} />
         <PhaseBadge phase={launch.phase} label={statusLabel(status)} />
@@ -69,7 +79,7 @@ export function LaunchCard({ launch }: { launch: LaunchSummary }) {
         <LinkIcon className="ml-1 inline-block align-[-2px] text-ink-2" />
       </h3>
       <p className="meta-violet mt-1.5 flex flex-wrap items-center gap-x-1">
-        <span>${launch.symbol}</span> · <span>{launch.quote.asset.symbol}</span> · {statusLabel(status)}
+        <span>${launch.symbol}</span> · <span>{launch.quote.asset.symbol}</span>
         {launch.quote.asset.volatility === "volatile" ? (
           <span className="ml-1">
             <VolatilityTag volatility="volatile" />
@@ -77,58 +87,38 @@ export function LaunchCard({ launch }: { launch: LaunchSummary }) {
         ) : null}
       </p>
 
-      {graduated ? (
-        <>
-          <p className="tnum mt-3 text-sm leading-normal text-ink-2">
-            Price <span>{formatUsd(launch.priceUsd)}</span>
-            {status === "floor-live" && Number.isFinite(multiple) ? (
-              <>
-                , <span>{formatMultiple(multiple)}</span> the floor.
-              </>
-            ) : (
-              ". No floor until the migration fee reaches the vault."
-            )}{" "}
-            Vault share {launch.vaultSharePct}%. Max loss now{" "}
-            <span className="font-bold text-risk">{formatMaxLoss(maxLoss)}</span>.
-          </p>
-          <div className="mt-4">
-            <FloorMeter priceUsd={launch.priceUsd} floorUsd={floorUsd} maxLoss={maxLoss} compact />
-          </div>
-        </>
-      ) : (
-        <>
-          <p className="tnum mt-3 text-sm leading-normal text-ink-2">
-            {launch.phase === "graduating" ? (
-              <>Curve complete. Waiting for migration. </>
-            ) : (
-              <>
-                Curve price <span>{formatUsd(launch.priceUsd)}</span>.{" "}
-              </>
-            )}
-            {hasEstimate ? (
-              <>
-                <span>Floor at graduation (est.)</span> <span>{formatUsd(floorUsd)}</span>.{" "}
-              </>
-            ) : null}
-            Vault share {launch.vaultSharePct}%
-            {launch.floorPer100AtListingUsd !== null
-              ? ` (floor ${formatUsd(launch.floorPer100AtListingUsd)} per $100 at listing)`
-              : ""}
-            .
-          </p>
-          <div className="mt-4">
-            <ProgressBar value={progress} label={`${launch.name} progress to graduation`} />
-          </div>
-        </>
-      )}
+      <dl className="mt-4 grid grid-cols-2 gap-3">
+        <Figure label="Price" value={formatUsd(launch.priceUsd)} />
+        {graduated ? (
+          <Figure
+            label="Floor"
+            value={floorLive ? formatUsd(floorUsd) : "Pending"}
+            tone={floorLive ? "text-floor" : "text-ink-3"}
+          />
+        ) : (
+          <Figure label="Est. floor" value={hasEstimate ? formatUsd(floorUsd) : "—"} tone="text-floor" />
+        )}
+      </dl>
+
+      <div className="mt-4">
+        {graduated ? (
+          <FloorMeter priceUsd={launch.priceUsd} floorUsd={floorUsd} maxLoss={maxLoss} compact />
+        ) : (
+          <ProgressBar value={progress} label={`${launch.name} progress to graduation`} />
+        )}
+      </div>
 
       <div className="mt-auto flex items-end justify-between gap-3 pt-4">
         <div className="min-w-0 pb-4">
           {graduated ? (
-            <>
-              <p className="text-xs text-ink-3">Floor</p>
-              <p className="tnum mt-0.5 truncate text-base font-bold text-floor">{formatUsd(floorUsd)}</p>
-            </>
+            floorLive ? (
+              <>
+                <p className="text-xs text-ink-3">Max loss</p>
+                <p className="tnum mt-0.5 truncate text-base font-bold text-risk">{formatMaxLoss(maxLoss)}</p>
+              </>
+            ) : (
+              <p className="text-xs text-ink-3">Floor opens after the vault harvest</p>
+            )
           ) : (
             <>
               <p className="tnum text-xs text-ink-3">

@@ -3,8 +3,8 @@ import { useId, type ReactNode } from "react";
 
 /**
  * The signature midnight card: title and subtitle top-left, an optional Gauge top-right, the one
- * number that matters in big white numerals, and a footer with an "i How it works" link bottom-left
- * and a butter NotchedCta tucked into the bottom-right corner.
+ * number that matters in big white numerals, and an optional footer: an "i How it works" link
+ * bottom-left and a butter NotchedCta tucked into the bottom-right corner.
  *
  * Put the figure in `children`, usually <MidnightValue> plus a line of `text-on-dark` copy.
  */
@@ -15,7 +15,7 @@ export function MidnightCard({
   gauge,
   children,
   cta,
-  howItWorksHref = "/#how-it-works",
+  howItWorksHref = null,
   howItWorksLabel = "How it works",
   className = "",
   minHeight = 330,
@@ -29,7 +29,7 @@ export function MidnightCard({
   children?: ReactNode;
   /** A <NotchedCta> (a real button or link). Omit for a card without an action. */
   cta?: ReactNode;
-  /** Null hides the link. */
+  /** An "i How it works" footer link; omitted or null hides it (each page has its own explainer). */
   howItWorksHref?: string | null;
   howItWorksLabel?: string;
   className?: string;

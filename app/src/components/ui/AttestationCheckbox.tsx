@@ -17,8 +17,7 @@ export function AttestationCheckbox({ className = "" }: { className?: string }) 
         onChange={(e) => setAttested(e.target.checked)}
       />
       <span className="text-ink-2">
-        I confirm that I am not a US person, and that I am not located in or a resident of a jurisdiction where xStocks
-        or this product are restricted.
+        I&apos;m not a US person or in a restricted jurisdiction.
       </span>
     </label>
   );

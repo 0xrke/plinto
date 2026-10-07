@@ -10,14 +10,24 @@ import { useData } from "@/lib/data/context";
  */
 export function NetworkPill() {
   const { dataSource } = useData();
-  const text = `${networkLabel(RPC_URL)}${dataSource.kind === "mock" ? " · Demo data" : ""}`;
+  // Demo data reads nothing from the network, so it is not labelled with one.
+  const text = dataSource.kind === "mock" ? "Demo data" : networkLabel(RPC_URL);
   return (
     <div
       className="flex h-[52px] w-[52px] items-center justify-center gap-[9px] rounded-[18px] bg-midnight text-[13px] font-semibold text-white xl:w-full xl:px-3"
-      title={IS_LOCAL_RPC ? `${text}. Local fork at ${RPC_URL}: transactions never reach mainnet` : `${text}. ${RPC_URL}`}
+      title={
+        dataSource.kind === "mock"
+          ? "Demo data: the launches are simulated"
+          : IS_LOCAL_RPC
+            ? `${text}. Local fork at ${RPC_URL}: transactions never reach mainnet`
+            : `${text}. ${RPC_URL}`
+      }
       data-testid="network-badge"
     >
-      <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${IS_LOCAL_RPC ? "bg-butter" : "bg-mint"}`} />
+      <span
+        aria-hidden
+        className={`h-2 w-2 shrink-0 rounded-full ${dataSource.kind === "mock" ? "bg-violet" : IS_LOCAL_RPC ? "bg-butter" : "bg-mint"}`}
+      />
       <span className="sr-only xl:not-sr-only xl:truncate">{text}</span>
     </div>
   );

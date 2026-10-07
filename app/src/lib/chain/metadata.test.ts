@@ -27,6 +27,14 @@ describe("imageUrlFromUri", () => {
     expect(imageUrlFromUri("javascript:alert(1)")).toBeNull();
     expect(imageUrlFromUri("")).toBeNull();
   });
+
+  it("accepts plain http only to a loopback host, the local upload backend (tests run against a local RPC)", () => {
+    expect(imageUrlFromUri("http://localhost:3000/api/upload/0123.png")).toBe("http://localhost:3000/api/upload/0123.png");
+    expect(imageUrlFromUri("http://127.0.0.1:3000/api/upload/0123.png")).toBe("http://127.0.0.1:3000/api/upload/0123.png");
+    expect(isJsonMetadataUri("http://localhost:3000/api/upload/0123.json")).toBe(true);
+    expect(imageUrlFromUri("http://localhost.evil.example/logo.png")).toBeNull();
+    expect(imageUrlFromUri("http://192.168.1.10/logo.png")).toBeNull();
+  });
 });
 
 describe("resolveTokenImageUrl", () => {

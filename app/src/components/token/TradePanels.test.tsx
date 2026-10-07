@@ -106,9 +106,25 @@ describe("<MarketBuyPanel />", () => {
     expect(select.value).toBe("QUOTE");
     await waitFor(() => expect((screen.getByRole("option", { name: "USDC" }) as HTMLOptionElement).disabled).toBe(true));
     expect((screen.getByRole("option", { name: "SOL" }) as HTMLOptionElement).disabled).toBe(true);
-    expect(await screen.findByText(/USDC and SOL route through Jupiter, which works on mainnet only\. On this local fork, trade with SPYx directly\./)).toBeTruthy();
+    expect(await screen.findByText("USDC/SOL: mainnet only.")).toBeTruthy();
     // The label stays the honest price / floor / max-loss sentence.
     expect(screen.getByRole("button", { name: buyButtonLabel(launch.priceUsd, launchFloorUsd(launch)) })).toBeTruthy();
+  });
+});
+
+describe("eligibility next to the buy button", () => {
+  it("shows the attestation under the button until it is confirmed, with a one-line reason", async () => {
+    const launch = (await new MockDataSource(0).listLaunches()).find((l) => l.phase === "graduated")!;
+    render(
+      <Providers dataSource={new MockDataSource(0)}>
+        <MarketBuyPanel launch={launch} />
+      </Providers>,
+    );
+    const box = screen.getByRole("checkbox", { name: /not a US person/ });
+    expect(screen.getByText("Confirm eligibility above.")).toBeTruthy();
+    fireEvent.click(box);
+    await waitFor(() => expect(screen.queryByRole("checkbox", { name: /not a US person/ })).toBeNull());
+    expect(screen.queryByText("Confirm eligibility above.")).toBeNull();
   });
 });
 
@@ -131,7 +147,9 @@ describe("<MarketBuyPanel /> in a thin pool", () => {
     expect(avg / launch.priceUsd).toBeGreaterThan(1.1);
     expect(screen.getByRole("button", { name: buyButtonLabel(avg, floor) })).toBeTruthy();
     expect(screen.getByText("Average price for this buy")).toBeTruthy();
-    expect(screen.getByText(formatMaxLoss(maxLossFraction(avg, floor)))).toBeTruthy();
+    // The button's mandated sentence is the only max-loss figure in the panel.
+    expect(screen.getByRole("button", { name: new RegExp(formatMaxLoss(maxLossFraction(avg, floor))) })).toBeTruthy();
+    expect(screen.queryByText("Max loss for this buy")).toBeNull();
   });
 });
 
@@ -150,8 +168,8 @@ describe("<PresaleTradePanel />", () => {
     const raw = uiToRaw("0.5", 8, launch.quote.multiplier);
     const q = quoteTrade(state, "buy", raw);
     expect(screen.getByText(`${formatTokenAmount(q.amountOut, 6)} $TIDE`)).toBeTruthy();
-    expect(screen.getByText("Minimum after 1% slippage")).toBeTruthy();
-    expect(screen.getByText(/Paying with USDC or SOL routes through Jupiter, which works on mainnet only\./)).toBeTruthy();
+    expect(screen.getByText("Min received")).toBeTruthy();
+    expect(screen.getByText("USDC/SOL: mainnet only. Use the faucet.")).toBeTruthy();
 
     // The buy button shows the price, the estimated floor at graduation and the max loss if it graduates,
     // at this buy's average price.
@@ -159,7 +177,7 @@ describe("<PresaleTradePanel />", () => {
     const label = presaleBuyButtonLabel(avg, projectedFloorUsd(launch));
     expect(label).toMatch(/^Price \$[\d.,]+ · Floor at graduation \(est\.\) \$[\d.,]+ · Max loss if it graduates: −[\d.]+%$/);
     expect(screen.getByRole("button", { name: label })).toBeTruthy();
-    expect(screen.getByText("Max loss for this buy if it graduates (est.)")).toBeTruthy();
+    expect(screen.queryByText("Max loss if it graduates (est.)")).toBeNull();
     expect(screen.getByText(/There is no floor until graduation/)).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("You pay"), { target: { value: "6" } });

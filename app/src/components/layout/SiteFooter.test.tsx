@@ -20,7 +20,7 @@ async function renderFooter(repoUrl?: string) {
 describe("<SiteFooter />", () => {
   it("always links the deployed program on an explorer", async () => {
     await renderFooter();
-    const program = screen.getByRole("link", { name: "stockfloor program" });
+    const program = screen.getByRole("link", { name: "Plinto program" });
     expect(program.getAttribute("href")).toContain(STOCKFLOOR_PROGRAM_ID.toBase58());
     // Nothing invented: with no repository configured there are no dead source links.
     expect(screen.queryByRole("link", { name: "Source code" })).toBeNull();
@@ -45,7 +45,7 @@ describe("<SiteFooter />", () => {
   it("keeps the disclaimers", async () => {
     await renderFooter();
     expect(screen.getByText(/unaudited hackathon code/)).toBeTruthy();
-    expect(screen.getByText(/Not available to US persons/)).toBeTruthy();
-    expect(screen.getByText(/protects holders from a price of zero, not from loss/)).toBeTruthy();
+    expect(screen.getByText(/Not for US persons/)).toBeTruthy();
+    expect(screen.getByText(/The floor protects from zero, not from loss/)).toBeTruthy();
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MIN_THRESHOLD_USD, QUOTE_ALLOWLIST, type LaunchInput } from "@stockfloor/sdk";
+import { MIN_THRESHOLD_USD, QUOTE_ALLOWLIST, RESERVED_NAME_MESSAGE, type LaunchInput } from "@stockfloor/sdk";
 import { THRESHOLD_MAX_USD, thresholdPolicy } from "./config";
 import {
   launchPriceError,
@@ -14,6 +14,10 @@ import {
 const valid: LaunchFormValues = {
   name: "Harbor Coffee Co-op",
   symbol: "HRBR",
+  description: "",
+  website: "",
+  twitter: "",
+  telegram: "",
   metadataUri: "https://example.com/token.json",
   quoteSymbol: "SPYx",
   preset: "gentle",
@@ -51,6 +55,28 @@ describe("validateLaunchForm", () => {
     expect(
       validateLaunchForm({ ...valid, metadataUri: `https://example.com/${"a".repeat(200)}` }).metadataUri,
     ).toBeDefined();
+  });
+
+  it("reserves names and tickers that look like the brand, case, separators and look-alikes included", () => {
+    for (const name of ["Plinto", "PLINTA", "p l i n t o", "PL1NT0 coin", "\u0420L\u0406N\u0422\u041E", "\uFF30\uFF2C\uFF29\uFF2E\uFF34\uFF2F", "Pl\u200Binto"]) {
+      expect(validateLaunchForm({ ...valid, name }).name, name).toBe(RESERVED_NAME_MESSAGE);
+    }
+    for (const symbol of ["PLINTO", "plint", "PL1NT"]) {
+      expect(validateLaunchForm({ ...valid, symbol }).symbol, symbol).toBe(RESERVED_NAME_MESSAGE);
+    }
+    // Only the field that hits is flagged; near misses pass.
+    expect(validateLaunchForm({ ...valid, name: "Plinto" }).symbol).toBeUndefined();
+    for (const name of ["Planet Coffee", "Pint Club", "Plink"]) expect(validateLaunchForm({ ...valid, name }).name, name).toBeUndefined();
+    expect(validateLaunchForm({ ...valid, symbol: "PLAN" }).symbol).toBeUndefined();
+  });
+
+  it("checks the optional description and links", () => {
+    expect(validateLaunchForm({ ...valid, description: "x".repeat(500) }).description).toBeUndefined();
+    expect(validateLaunchForm({ ...valid, description: "x".repeat(501) }).description).toMatch(/500 characters/);
+    expect(validateLaunchForm({ ...valid, website: "https://harbor.coffee", twitter: "https://x.com/h", telegram: "https://t.me/h" })).toEqual({});
+    expect(validateLaunchForm({ ...valid, website: "harbor.coffee" }).website).toBeDefined();
+    expect(validateLaunchForm({ ...valid, twitter: "https://evil.example/h" }).twitter).toBeDefined();
+    expect(validateLaunchForm({ ...valid, telegram: "http://t.me/h" }).telegram).toBeDefined();
   });
 
   it("keeps the vault share within 30..60", () => {

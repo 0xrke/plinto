@@ -4,11 +4,10 @@ import { useId, useState, type ReactNode } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import type { LaunchSummary } from "@/lib/data/types";
 import { useData, useRefreshChainData, useTokenBalance, useTxFlow } from "@/lib/data/context";
-import { formatMultiple, formatPercent, formatSignificantDown, formatTokenAmount, formatUsd, parseTokenInput, rawToDecimal } from "@/lib/format";
+import { formatPercent, formatSignificantDown, formatTokenAmount, formatUsd, parseTokenInput, rawToDecimal } from "@/lib/format";
 import { estimateSellUsd, validateRedeemAmount } from "@/lib/estimates";
-import { floorQuotePerToken, launchFloorUsd, previewRedeem, priceToFloorMultiple } from "@/lib/metrics";
+import { floorQuotePerToken, launchFloorUsd, previewRedeem } from "@/lib/metrics";
 import { quoteMarketSellUsd } from "@/lib/tradeQuote";
-import { Gauge } from "@/components/ui/Gauge";
 import { MidnightCard } from "@/components/ui/MidnightCard";
 import { NotchedCta } from "@/components/ui/Notched";
 import { LockIcon, RedeemIcon } from "@/components/ui/icons";
@@ -73,17 +72,7 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
     `${formatTokenAmount(raw, quote.decimals, { multiplier: launch.quote.multiplier, maxFractionDigits: 8 })} ${quote.symbol}`;
   const exitFee = formatPercent(launch.exitFeeBps / 10_000);
   const title = "Redeem at the floor";
-  const intro = (
-    <>
-      Burn ${launch.symbol}, receive a pro-rata share of the vault in {quote.symbol} minus the {exitFee} exit fee.
-    </>
-  );
-  const caveat = (
-    <>
-      Available to every holder at any time: the program has no pause switch. The {quote.symbol} issuer can pause{" "}
-      {quote.symbol} transfers, and a program upgrade could change the rules (see disclosures).
-    </>
-  );
+  const intro = "Burn tokens for your share of the vault.";
 
   if (!open) {
     return (
@@ -97,18 +86,13 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
             Closed
           </span>
         </div>
-        <p className="mt-1.5 text-[13px] leading-normal text-ink-3">
-          Redemption opens after migration to DAMM v2 and the migration-fee harvest into the vault.
-          {launch.phase === "graduated" ? " The pool has migrated; the harvest is the next crank step." : ""} Then any
-          holder can burn ${launch.symbol} for a pro-rata share of the vault in {quote.symbol}, minus the {exitFee} exit
-          fee.
+        <p className="mt-1 text-[13px] leading-normal text-ink-3">
+          {launch.phase === "graduated" ? "Opens after the vault harvest (crank below)." : "Opens after migration and the vault harvest."}
         </p>
       </section>
     );
   }
 
-  const multiple = priceToFloorMultiple(launch.priceUsd, floorUsd);
-  const multipleKnown = Number.isFinite(multiple) && multiple > 0;
   const netUi = preview ? quoteAmount(preview.net) : null;
 
   return (
@@ -116,15 +100,6 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
       <MidnightCard
         title={title}
         subtitle={<span className="block max-w-[200px]">{intro}</span>}
-        gauge={
-          <Gauge
-            value={multipleKnown ? Math.min(1 / multiple, 1) : 0}
-            label={multipleKnown ? formatMultiple(multiple) : "Live"}
-            caption="Floor live"
-            ariaLabel={multipleKnown ? `Price is ${formatMultiple(multiple)} the floor` : "Floor live"}
-          />
-        }
-        howItWorksHref="/#how-it-works"
         cta={
           <NotchedCta
             icon={<RedeemIcon />}
@@ -188,7 +163,6 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
                     <dd className="mt-2 text-sm font-semibold text-mint">after the {exitFee} fee</dd>
                   </div>
                 </dl>
-                <p className="mt-1 text-[12.5px] text-on-dark-3">Enter an amount for the exact payout.</p>
               </>
             )}
           </div>
@@ -230,7 +204,6 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
                 </>
               )}
               </dl>
-              <p className="border-t border-midnight-line pt-2.5 text-xs text-on-dark-3">{caveat}</p>
             </div>
           </details>
 
@@ -239,8 +212,7 @@ export function RedeemPanel({ launch }: { launch: LaunchSummary }) {
           ) : null}
           {launch.quotePaused ? (
             <p className="rounded-[14px] bg-tile px-3.5 py-2.5 text-[13px] text-risk-on-dark">
-              {quote.symbol} is paused by its issuer. Redemptions work again once it resumes; your tokens and the vault
-              stay untouched.
+              {quote.symbol} is paused by its issuer. Redeem resumes when it unpauses.
             </p>
           ) : null}
         </div>

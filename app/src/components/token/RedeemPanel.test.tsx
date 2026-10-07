@@ -12,6 +12,7 @@ import { DataProvider } from "@/lib/data/context";
 import type { LaunchSummary } from "@/lib/data/types";
 import { formatSignificantDown, formatTokenAmount, formatUsd } from "@/lib/format";
 import { floorQuotePerToken, launchFloorUsd } from "@/lib/metrics";
+import { AttestationCheckbox } from "@/components/ui/AttestationCheckbox";
 import { Disclosures } from "./Disclosures";
 import { RedeemPanel } from "./RedeemPanel";
 import { VaultStats } from "./VaultStats";
@@ -69,8 +70,8 @@ describe("<RedeemPanel />", () => {
     const launch = await harbor();
     render(
       <Providers>
+        <AttestationCheckbox />
         <RedeemPanel launch={launch} />
-        <Disclosures launch={launch} />
       </Providers>,
     );
 
@@ -83,7 +84,7 @@ describe("<RedeemPanel />", () => {
     const button = screen.getByRole("button", { name: `Redeem for ${netLabel}` });
     expect(screen.getAllByText(netLabel).length).toBeGreaterThan(0);
     expect((button as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText(/Confirm your eligibility/)).toBeTruthy();
+    expect(screen.getByText("Confirm eligibility above.")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("checkbox", { name: /not a US person/ }));
     await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
@@ -120,9 +121,7 @@ describe("<RedeemPanel />", () => {
     const panel = await screen.findByRole("region", { name: "Redeem at the floor" });
     // JSX deletes the whitespace between an expression container and a following line break, so
     // `{quote.symbol}\n transfers` renders as "SPYxtransfers". Assert the rendered text, not the JSX.
-    expect(panel.textContent!.replace(/\s+/g, " ")).toContain(
-      "The SPYx issuer can pause SPYx transfers, and a program upgrade could change the rules",
-    );
+    expect(panel.textContent).toContain("Burn tokens for your share of the vault.");
     // Nothing anywhere in the panel may run the quote symbol into a word.
     expect(panel.textContent).not.toMatch(/SPYx[A-Za-z]/);
   });
@@ -145,7 +144,6 @@ describe("<RedeemPanel />", () => {
     const receiveRow = within(panel).getByText("You receive per token").closest("div")!;
     const afterFeeUsd = launchFloorUsd(launch) * (1 - launch.exitFeeBps / 10_000);
     expect(receiveRow.textContent).toContain(`≈ ${formatUsd(afterFeeUsd)}`);
-    expect(within(panel).getByText("Enter an amount for the exact payout.")).toBeTruthy();
 
     // The three "—" placeholders this replaced were the first thing a visitor saw.
     expect(panel.textContent).not.toContain("—");
@@ -159,7 +157,7 @@ describe("<RedeemPanel />", () => {
         <RedeemPanel launch={presale} />
       </Providers>,
     );
-    expect(screen.getByText(/Redemption opens after migration/)).toBeTruthy();
+    expect(screen.getByText("Opens after migration and the vault harvest.")).toBeTruthy();
     expect(screen.queryByLabelText("Amount to redeem")).toBeNull();
   });
 });
@@ -198,7 +196,6 @@ describe("vault guarantees are stated with their exceptions", () => {
     expect(screen.queryByText(/Quote leaves the vault only through redemption\./)).toBeNull();
     expect(screen.queryByText(/nobody can pause it except/)).toBeNull();
     expect(screen.getByText(/The SPYx issuer's permanent delegate and a program upgrade are exceptions/)).toBeTruthy();
-    expect(screen.getByText(/a program upgrade could change the rules/)).toBeTruthy();
   });
 
   it("the post-redemption floor is not promised to hold in USD, only in the quote asset", async () => {

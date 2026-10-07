@@ -1,5 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 import { metaplexMetadataPda } from "@stockfloor/sdk";
+import { IS_LOCAL_RPC } from "../config";
 
 /** Token metadata the UI shows (Metaplex Token Metadata, created by DBC for the base mint). */
 export interface TokenMetadata {
@@ -43,11 +44,19 @@ export function metadataAddress(mint: PublicKey): PublicKey {
   return metaplexMetadataPda(mint);
 }
 
-/** An https URL, or null. Everything else (http, ipfs:, data:, javascript:, junk) is refused. */
-function httpsUrl(value: unknown): string | null {
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * An https URL, or null. Everything else (http, ipfs:, data:, javascript:, junk) is refused, except
+ * plain http to a loopback host while the app runs against a local cluster (`allowLoopbackHttp`): that
+ * is where the development upload backend (`/api/upload`) stores token images and metadata.
+ */
+function httpsUrl(value: unknown, allowLoopbackHttp = IS_LOCAL_RPC): string | null {
   if (typeof value !== "string" || value === "") return null;
   try {
-    return new URL(value).protocol === "https:" ? value : null;
+    const url = new URL(value);
+    if (url.protocol === "https:") return value;
+    return allowLoopbackHttp && url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname) ? value : null;
   } catch {
     return null;
   }

@@ -33,8 +33,7 @@ describe("demo-data banner above the launch list", () => {
     renderList(new MockDataSource(0));
     const banner = await screen.findByRole("status");
     expect(banner.textContent).toContain("Preview with example launches.");
-    expect(banner.textContent).toMatch(/made up/);
-    expect(banner.textContent).toMatch(/buying, redeeming and the crank are switched off/);
+    expect(banner.textContent).toMatch(/Trading is off/);
   });
 
   it("can be dismissed", async () => {

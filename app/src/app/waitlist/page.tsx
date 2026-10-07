@@ -15,7 +15,7 @@ const PHASES = [
   {
     n: "01",
     title: "Presale.",
-    body: "Everyone pays nearly the same price. No floor yet — but you can sell back into the curve for close to what you paid.",
+    body: "Everyone pays about the same; sell back any time.",
     value: "SPYx",
     chip: "bg-presale-soft text-presale",
     valueTone: "text-ink",
@@ -23,7 +23,7 @@ const PHASES = [
   {
     n: "02",
     title: "Market opens.",
-    body: "Half the raise becomes the floor and 40% becomes liquidity, locked for good. The platform and the creator get 5% each.",
+    body: "Half the raise becomes the floor, 40% locked liquidity.",
     value: "50%",
     chip: "bg-graduating-soft text-graduating",
     valueTone: "text-floor",
@@ -31,7 +31,7 @@ const PHASES = [
   {
     n: "03",
     title: "Trading.",
-    body: "The price wanders. The floor creeps up on part of every trading fee and on the 2% left behind by everyone who exits, and never moves down.",
+    body: "Fees and the 2% exit fee push the floor up.",
     value: "2%",
     chip: "bg-floor-soft text-floor",
     valueTone: "text-ink",
@@ -72,8 +72,7 @@ export default function WaitlistPage() {
               Token launches with a <FloorWord />
             </h1>
             <p className="mt-5 max-w-[540px] text-[16px] leading-[1.6] text-ink-2 sm:mt-[26px] sm:text-[18px]">
-              Part of every raise is locked in tokenized stocks the moment the market opens, and any holder can
-              burn their tokens for a share of it at any time.
+              Part of every raise is locked in tokenized stocks — any holder can redeem against it.
             </p>
 
             <div className="mt-7 max-w-[540px] sm:mt-8">
@@ -81,8 +80,7 @@ export default function WaitlistPage() {
             </div>
 
             <p className="mt-[30px] max-w-[540px] border-t border-line pt-4 text-[12.5px] leading-[1.65] text-ink-3">
-              It protects from zero, not from loss: the floor is a fixed amount per token, so a buyer far above
-              it can still lose most of the purchase. Not available to US persons. Unaudited code.
+              Protects from zero, not from loss. Not for US persons. Unaudited.
             </p>
           </main>
         </div>
@@ -104,9 +102,6 @@ export default function WaitlistPage() {
               >
                 How a launch runs
               </h2>
-              <p className="mt-1.5 text-[14px] leading-normal text-ink-3">
-                Three phases. The floor appears at the second one and only ever moves up.
-              </p>
             </div>
 
             <div className="mx-5 sm:mx-4">
@@ -138,8 +133,7 @@ export default function WaitlistPage() {
 
         <footer className="bg-cloud px-5 pb-6 pt-2 text-[12.5px] leading-[1.6] text-ink-3 sm:px-10 sm:pb-8 lg:col-start-1 lg:bg-transparent lg:row-start-2 lg:px-12 lg:pb-[30px] lg:pt-0 xl:px-[72px]">
           <p className="max-w-[600px]">
-            Floor figures are the defaults of the gentle curve at a 50% vault share. The floor is held in SPYx
-            and moves with the S&amp;P 500 in USD.
+            Example figures: 50% floor share.
           </p>
         </footer>
       </div>

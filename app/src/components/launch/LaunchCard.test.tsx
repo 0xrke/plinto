@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { MockDataSource } from "@/lib/data/mock";
 import { formatUsd } from "@/lib/format";
+import { projectedFloorUsd } from "@/lib/metrics";
 import { LaunchCard } from "./LaunchCard";
 
 afterEach(cleanup);
@@ -20,6 +21,7 @@ describe("<LaunchCard />", () => {
     expect(screen.getByText("$0.00000633")).toBeTruthy();
     expect(screen.getByText("$0.000000528")).toBeTruthy();
     expect(screen.getByText(`${MINUS}91.7%`)).toBeTruthy();
+    expect(screen.getByText("Max loss")).toBeTruthy();
     expect(within(screen.getByRole("article")).getByText("SPYx")).toBeTruthy();
   });
 
@@ -29,7 +31,9 @@ describe("<LaunchCard />", () => {
     render(<LaunchCard launch={pending} />);
     expect(screen.getByText("Graduated")).toBeTruthy();
     expect(screen.queryByText("Floor live")).toBeNull();
-    expect(screen.getByText(/No floor until the migration fee reaches the vault/)).toBeTruthy();
+    expect(screen.getByText("Pending", { selector: "dd" })).toBeTruthy();
+    expect(screen.getByText(/Floor opens after the vault harvest/)).toBeTruthy();
+    expect(screen.queryByText(/Max loss/)).toBeNull();
   });
 
   it("renders a presale launch with progress toward graduation", async () => {
@@ -41,12 +45,13 @@ describe("<LaunchCard />", () => {
     const bar = screen.getByRole("progressbar");
     expect(bar.getAttribute("aria-valuenow")).toBe("62");
     expect(screen.getByText("62%")).toBeTruthy();
-    expect(screen.getByText("Floor at graduation (est.)")).toBeTruthy();
-    expect(screen.queryByText(/Max loss/)).toBeNull();
-    // The floor per $100 at listing sits next to the vault share.
-    expect(screen.getByRole("article").textContent).toContain(
-      `Vault share 50% (floor ${formatUsd(tide.floorPer100AtListingUsd!)} per $100 at listing).`,
+    expect(screen.getByText("Est. floor", { selector: "dt" }).nextElementSibling?.textContent).toBe(
+      formatUsd(projectedFloorUsd(tide)!),
     );
+    expect(screen.getByText("Price", { selector: "dt" }).nextElementSibling?.textContent).toBe(formatUsd(tide.priceUsd));
+    expect(screen.queryByText(/Max loss/)).toBeNull();
+    // Numbers only: no sentence paragraphs on the card.
+    expect(screen.getByRole("article").textContent).not.toMatch(/Vault share/);
   });
 
   it("never shows an incomplete curve as 100% complete", () => {

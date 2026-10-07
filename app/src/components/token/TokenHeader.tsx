@@ -3,18 +3,21 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { LaunchSummary } from "@/lib/data/types";
-import { formatUsd, truncateAddress } from "@/lib/format";
+import { formatUsd } from "@/lib/format";
 import { phaseLabel } from "@/lib/phase";
 import { PhaseBadge } from "@/components/ui/PhaseBadge";
 import { QuoteChip } from "@/components/ui/QuoteChip";
 import { TokenAvatar } from "@/components/ui/TokenAvatar";
-import { TokenCover } from "@/components/ui/TokenCover";
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, CopyIcon } from "@/components/ui/icons";
 
+/** Market cap in USD: price × total supply (before graduation the supply minted into the curve). */
+export function marketCapUsd(launch: LaunchSummary): number {
+  return launch.priceUsd * (Number(launch.supplyRaw) / 10 ** launch.baseDecimals);
+}
+
 /**
- * Breadcrumb, the cover built from the logo (profile header like on X: the logo tile overlaps its
- * bottom-left edge), the name and symbol beside the tile, and the chips row (phase, quote asset, vault
- * share and floor per $100 at listing before graduation, mint with a copy button on wider screens).
+ * Breadcrumb, then one row: the logo, the name with $SYMBOL and a copy-mint button, the phase and quote
+ * chips, and (right-aligned on wider screens, under the name on phones) the price and market cap.
  */
 export function TokenHeader({ launch }: { launch: LaunchSummary }) {
   const [copied, setCopied] = useState(false);
@@ -27,7 +30,7 @@ export function TokenHeader({ launch }: { launch: LaunchSummary }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      // Clipboard may be blocked; the mint stays visible.
+      // Clipboard may be blocked; the mint is in the vault details.
     }
   }
 
@@ -48,65 +51,50 @@ export function TokenHeader({ launch }: { launch: LaunchSummary }) {
         </ol>
       </nav>
 
-      <TokenCover
-        symbol={launch.symbol}
-        imageUrl={launch.imageUrl}
-        className="mt-2 h-24 rounded-[24px] sm:mt-3 sm:h-36 sm:rounded-card"
-      />
-
-      {/* Logo tile overlapping the cover, the name beside it; on wider screens the chips sit under the name, on phones below both. */}
-      <div className="grid grid-cols-[64px_minmax(0,1fr)] items-start gap-x-3.5 px-3 sm:grid-cols-[84px_minmax(0,1fr)] sm:gap-x-5 sm:px-5">
+      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-3 sm:mt-2">
         <TokenAvatar
           symbol={launch.symbol}
           imageUrl={launch.imageUrl}
-          size={84}
-          ring
-          className="relative z-10 -mt-8 max-sm:!h-16 max-sm:!w-16 max-sm:!rounded-[19px] sm:row-span-2 sm:-mt-10"
+          size={64}
+          className="max-sm:!h-14 max-sm:!w-14 max-sm:!rounded-[17px]"
         />
-        <div className="min-w-0 pt-2 sm:pt-3">
+        <div className="min-w-0 flex-1 basis-48">
           <div className="flex flex-wrap items-baseline gap-x-2.5">
-            <h1 className="display min-w-0 text-[26px] leading-[1.08] text-ink sm:text-[40px] sm:leading-[1.05] xl:text-[44px]">
+            <h1 className="display min-w-0 text-[26px] leading-[1.08] text-ink sm:text-[34px] sm:leading-[1.05]">
               {launch.name}
             </h1>
-            <span className="hidden text-xl font-bold text-ink-3 sm:inline">${launch.symbol}</span>
+            <span className="inline-flex items-center text-lg font-bold text-ink-3 max-sm:hidden">
+              ${launch.symbol}
+              <button
+                type="button"
+                onClick={copyMint}
+                title={launch.mint}
+                className="-my-2 ml-0.5 flex h-11 w-9 items-center justify-center rounded-full text-violet hover:text-violet-hover"
+                aria-label={`Copy mint address ${launch.mint}`}
+              >
+                {copied ? <CheckIcon size={15} /> : <CopyIcon size={15} />}
+              </button>
+              <span aria-live="polite" className="sr-only">
+                {copied ? "Mint address copied" : ""}
+              </span>
+            </span>
           </div>
           <p className="meta-violet mt-1 text-sm font-semibold sm:hidden">
-            ${launch.symbol} · {launch.quote.asset.symbol} · {floorLive ? "Floor live" : phaseLabel(launch.phase)}
+            ${launch.symbol} · {floorLive ? "Floor live" : phaseLabel(launch.phase)}
           </p>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 max-sm:hidden">
+            <PhaseBadge phase={launch.phase} label={floorLive ? "Floor live" : undefined} />
+            <QuoteChip symbol={launch.quote.asset.symbol} volatility={launch.quote.asset.volatility} />
+          </div>
         </div>
-
-        {/* Presale has one more chip; it drops a "calm" volatility tag (never a risk tag) so the row stays on one line. */}
-        <div
-          className={`col-span-2 mt-3.5 flex flex-wrap items-center gap-1.5 max-sm:[&>*]:px-2.5 max-sm:[&>*]:text-[12.5px] sm:col-span-1 sm:col-start-2 sm:mt-2.5 sm:gap-2 ${
-            presale && launch.quote.asset.volatility === "calm" ? "[&_b+span]:hidden" : ""
-          }`}
-        >
-          <PhaseBadge phase={launch.phase} label={floorLive ? "Floor live" : undefined} />
-          <QuoteChip symbol={launch.quote.asset.symbol} volatility={launch.quote.asset.volatility} prefix="Quote" />
-          {presale ? (
-            <span className="chip tnum">
-              Vault share <b>{launch.vaultSharePct}%</b>
-            </span>
-          ) : null}
-          {presale && launch.floorPer100AtListingUsd !== null ? (
-            <span className="chip tnum" title="What $100 bought at the listing price redeems for at the floor, after the exit fee">
-              Floor per $100 <b className="text-floor">{formatUsd(launch.floorPer100AtListingUsd)}</b>
-            </span>
-          ) : null}
-          <span className="chip tnum pr-1 max-sm:hidden" title={launch.mint}>
-            Mint {truncateAddress(launch.mint, 4)}
-            <button
-              type="button"
-              onClick={copyMint}
-              className="-my-2 flex h-11 w-9 items-center justify-center rounded-full text-violet hover:text-violet-hover"
-              aria-label={`Copy mint address ${launch.mint}`}
-            >
-              {copied ? <CheckIcon size={15} /> : <CopyIcon size={15} />}
-            </button>
-            <span aria-live="polite" className="sr-only">
-              {copied ? "Mint address copied" : ""}
-            </span>
-          </span>
+        <div className="sm:text-right max-sm:w-full max-sm:flex max-sm:items-baseline max-sm:gap-3">
+          <p className="text-[13px] font-medium text-ink-3 max-sm:sr-only">{presale ? "Curve price" : "Price"}</p>
+          <p className="tnum text-[26px] font-extrabold leading-tight tracking-[-0.02em] text-ink sm:text-[30px]">
+            {formatUsd(launch.priceUsd)}
+          </p>
+          <p className="tnum text-[13px] text-ink-3">
+            Mcap <b className="font-bold text-ink-2">{formatUsd(marketCapUsd(launch), { compact: true })}</b>
+          </p>
         </div>
       </div>
     </header>

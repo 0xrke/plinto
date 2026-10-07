@@ -25,6 +25,7 @@ import {
   type ChainReader,
   type CurvePreset,
   type LaunchState,
+  isReservedTokenName,
 } from "@stockfloor/sdk";
 import { decodeMetaplexMetadata, imageUrlFromUri, metadataAddress, resolveTokenImageUrl, type TokenMetadata } from "../chain/metadata";
 import type { PriceProvider, UsdPrice } from "../chain/prices";
@@ -263,7 +264,7 @@ export class ChainDataSource implements LaunchDataSource {
     }
     // One broken launch must not hide the others; a failure of every read is an RPC problem.
     if (states.length === 0 && firstError) throw firstError;
-    const summaries = await this.summarize(states);
+    const summaries = (await this.summarize(states)).filter((s) => !isReservedTokenName(s.name, s.symbol));
     return summaries.sort((a, b) => b.createdAt - a.createdAt);
   }
 
@@ -310,7 +311,9 @@ export class ChainDataSource implements LaunchDataSource {
     const state = await this.sdk.fetchLaunchState(this.reader, { launch: address }, { includePositions: true });
     if (!state) return null;
     const [summary] = await this.summarize([state]);
-    return summary ?? null;
+    // Brand imitations are hidden even where the deployed program does not reject them yet.
+    if (!summary || isReservedTokenName(summary.name, summary.symbol)) return null;
+    return summary;
   }
 
   async getQuoteMarkets(): Promise<QuoteMarket[]> {

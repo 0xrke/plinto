@@ -36,8 +36,37 @@ Environment:
 | `NEXT_PUBLIC_PRIORITY_FEE_MICROLAMPORTS` | `100000` on mainnet, `0` locally | Priority fee (micro-lamports per compute unit) on every app transaction: launch (also used for the launch composer's size accounting), trades, redeem and every crank step. Jupiter Ultra swaps set their own |
 | `STOCKFLOOR_RPC_URL` | `NEXT_PUBLIC_RPC_URL` | Server-side RPC for the route handlers (faucet, JSON API) |
 | `STOCKFLOOR_NEXT_DIST_DIR` | `.next` | Build directory, so several builds can coexist in one checkout |
+| `PINATA_JWT` | unset | Server-only. Pinata JWT (scope `pinFileToIPFS`) for the token image upload on `/create` (`/api/upload`). Never use a `NEXT_PUBLIC_` name for it |
+| `UPLOAD_CLIENT_IP_HEADER` | `x-real-ip` on Vercel, else unset | Server-only. Header the hosting platform sets (and overwrites) with the client address, for the upload rate limit, for example `cf-connecting-ip` behind Cloudflare |
+| `UPLOAD_TRUSTED_PROXY_HOPS` | `1` | Server-only. Proxies in front of the app that append to `x-forwarded-for`; the upload rate limit keys on the hop the outermost of them appended (used when `UPLOAD_CLIENT_IP_HEADER` is unset) |
+| `PINATA_GATEWAY` | `https://gateway.pinata.cloud/ipfs/` | Server-only. https gateway base for the stored image and metadata URIs, for example a dedicated `https://<name>.mypinata.cloud/ipfs/` |
 
 `NEXT_PUBLIC_*` values are inlined at build time. Never put a keyed RPC URL in a committed file.
+
+### Token image upload
+
+`/create` takes an image file (PNG, JPEG, WebP or GIF, at most 1 MB), a description and optional
+website / X / Telegram links. On Launch, before any transaction is built, the browser posts them to
+`/api/upload`, which stores the image and then a Metaplex metadata JSON
+(`{ name, symbol, description, image, properties.files, external_url, extensions }`) and returns the
+JSON's URI; that URI goes into the token. Storage backends, in order:
+
+1. **Pinata (IPFS)** when `PINATA_JWT` is set. The JSON is pinned as `metadata/metadata.json` so its URI
+   ends in `.json` (the app and most indexers only read a token URI as JSON when the path says so).
+2. **Local directory** `app/.uploads` (gitignored), served by `/api/upload/<id>`, when Pinata is not set
+   and the server is `next dev` or a `STOCKFLOOR_LOCAL_BUILD=1` build. Its `http://localhost` URIs are
+   only shown while the app runs against a local RPC.
+3. Otherwise the route answers **501** and the form opens "Advanced: use my own metadata URL", which is
+   always available as a fallback.
+
+The route checks the image type by its magic bytes (no SVG) and parses its structure (well-formed to
+its end marker, no trailing bytes, at most 4096×4096 px), caps the image at 1 MB, the body at
+1 MB + 32 KiB and the JSON at 8 KiB, refuses names and tickers reserved for the platform brand,
+accepts a cross-site browser post only from its own origin, and allows 10 uploads per 10 minutes per
+client address and 200 per 10 minutes in all (in memory, per instance). The client address comes from
+`UPLOAD_CLIENT_IP_HEADER` or the trusted `x-forwarded-for` hop, never from the hop the client wrote; on a
+bare `next start` with no proxy every address is forgeable and only the global budget holds. Pinata errors are logged by status only; the JWT and the
+upstream body never reach the client.
 
 ## Deploying the app
 

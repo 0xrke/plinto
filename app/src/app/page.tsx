@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { PageColumns } from "@/components/layout/PageColumns";
-import { FeaturedFloorSlot } from "@/components/home/FeaturedFloorSlot";
 import { FloorsNow } from "@/components/home/FloorsNow";
-import { PhaseTiles } from "@/components/home/PhaseTiles";
 import { LaunchList } from "@/components/launch/LaunchList";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { IconTile } from "@/components/ui/Tiles";
@@ -12,21 +10,21 @@ const STEPS = [
   {
     title: "Presale on a bonding curve",
     tone: "presale",
-    summary: "Pay in a tokenized stock. While the curve fills, you can sell back at close to what you paid.",
+    summary: "Pay in a tokenized stock; sell back any time.",
     details:
       "Buyers pay in a tokenized stock such as SPYx, straight into the curve. The flat or gently rising curve fills toward the graduation threshold the creator set. Nobody, not the creator and not us, can take that money out while it fills. On mainnet, USDC and SOL can be routed into that asset through Jupiter first.",
   },
   {
     title: "Graduation",
     tone: "graduating",
-    summary: "A fixed share of the raise moves into the vault, most of the rest seeds a locked Meteora DAMM v2 pool.",
+    summary: "30–60% of the raise becomes the vault; the rest is locked liquidity.",
     details:
       "The vault share is 30 to 60% of the raise (default 50%); the platform 5% and the creator 5% are paid out, and the rest seeds the pool, whose liquidity is locked permanently. Your cover changes here in one transaction, from close to what you paid down to the floor. Anyone can complete the curve at any time.",
   },
   {
     title: "Free market with a floor",
     tone: "floor",
-    summary: "Redeem any time for a pro-rata share of the vault. The 2% exit fee stays in the vault; the floor only rises.",
+    summary: "Redeem for your vault share any time; the 2% exit fee stays in.",
     details:
       "Redeeming burns your tokens. 30% of the locked pool's trading fees (after Meteora's share) also go to the vault; the creator gets 50% and the platform 20%. The program has no admin withdraw; the quote issuer's controls and program upgradeability are disclosed on every token page.",
   },
@@ -35,30 +33,23 @@ const STEPS = [
 function Hero() {
   return (
     <section aria-labelledby="home-title">
-      <p className="eyebrow">Launchpad on Meteora DBC</p>
       <h1
         id="home-title"
-        className="display mt-2 max-w-[620px] text-[38px] leading-[1.04] text-ink sm:text-[44px] xl:text-[50px] xl:leading-[1.02]"
+        className="display max-w-[620px] text-[38px] leading-[1.04] text-ink sm:text-[44px] xl:text-[50px] xl:leading-[1.02]"
       >
-        Token launches with a floor in tokenized S&amp;P&nbsp;500
+        Token launches with a stock-backed floor
       </h1>
       <p className="mt-[18px] max-w-[610px] text-base leading-[1.6] text-ink-2 sm:text-[17px]">
-        A large share of every raise becomes a redeemable vault in stocks the moment the market opens. The token
-        can go up without limit, and while the vault holds its stock token, it cannot fall to zero.
+        Part of every raise is locked in tokenized stocks. Holders can redeem against it any time.
       </p>
       <div className="mt-[26px] flex flex-wrap gap-3">
-        <Link href="#launches" className="btn btn-primary px-[26px]">
-          Explore launches
-          <ChevronRightIcon size={16} strokeWidth={2} />
-        </Link>
-        <Link href="/create" className="btn btn-secondary px-6">
-          <PlusCircleIcon size={18} className="text-violet" />
+        <Link href="/create" className="btn btn-primary px-[26px]">
+          <PlusCircleIcon size={18} />
           Launch a token
         </Link>
       </div>
-      <p className="mt-[18px] max-w-[640px] text-[13px] leading-[1.55] text-ink-3 [text-wrap:pretty]">
-        The floor protects from zero, not from loss. It is a fixed amount per token, so buying far above it can
-        lose most of the purchase. Every token page shows the maximum loss before you buy.
+      <p className="mt-[18px] max-w-[640px] text-[13px] leading-[1.55] text-ink-3">
+        The floor protects from zero, not from loss.
       </p>
     </section>
   );
@@ -95,18 +86,15 @@ function HowItWorks() {
 export default function HomePage() {
   return (
     <PageColumns
-      railLabel="Floors and how it works"
+      railLabel="Top floors and how it works"
       main={
         <>
           <Hero />
-          <FeaturedFloorSlot slot="main" />
-          <PhaseTiles />
           <LaunchList />
         </>
       }
       rail={
         <>
-          <FeaturedFloorSlot slot="rail" />
           <FloorsNow />
           <HowItWorks />
         </>

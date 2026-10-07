@@ -43,7 +43,9 @@
     "vitest.e2e.config.mts",
     ".next/dev/types/**/*.ts",
     ".next-screens/types/**/*.ts",
-    ".next-screens/dev/types/**/*.ts"
+    ".next-screens/dev/types/**/*.ts",
+    ".next-review3931/types/**/*.ts",
+    ".next-review3931/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

@@ -2,13 +2,11 @@
 
 import { useId } from "react";
 import type { LaunchSummary } from "@/lib/data/types";
-import { AttestationCheckbox } from "@/components/ui/AttestationCheckbox";
 import type { UpgradeStatus } from "@/lib/chain/upgradeAuthority";
 import { useProgramUpgradeStatus } from "@/lib/data/context";
 import { FEE_COPY } from "@/lib/config";
 import { formatPercent, truncateAddress } from "@/lib/format";
-import { IconTile } from "@/components/ui/Tiles";
-import { InfoIcon } from "@/components/ui/icons";
+import { Details } from "@/components/ui/Details";
 
 function upgradeStatusText(status: UpgradeStatus | undefined): string {
   if (!status) return "Checking the upgrade authority on this cluster…";
@@ -22,70 +20,71 @@ function upgradeStatusText(status: UpgradeStatus | undefined): string {
   }
 }
 
+/** BRIEF-mandated risk disclosures, collapsed under one always-visible line. */
 export function Disclosures({ launch }: { launch: LaunchSummary }) {
   const id = useId();
   const quote = launch.quote.asset;
   const upgrade = useProgramUpgradeStatus();
 
   return (
-    <section id="disclosures" aria-labelledby={`${id}-heading`} className="card below-header p-5 sm:p-7">
-      <div className="flex items-center gap-3">
-        <IconTile tone="neutral" size={40}>
-          <InfoIcon />
-        </IconTile>
-        <div>
-          <h2 id={`${id}-heading`} className="heading text-[22px] text-ink sm:text-2xl">
-            Disclosures
-          </h2>
-          <p className="text-[13px] text-ink-3">Read these before you buy or redeem.</p>
-        </div>
-      </div>
-      <ul className="mt-5 space-y-3 text-[13.5px] leading-relaxed text-ink-2 [&>li]:relative [&>li]:pl-4 [&>li]:before:absolute [&>li]:before:left-0 [&>li]:before:top-[0.6em] [&>li]:before:h-1.5 [&>li]:before:w-1.5 [&>li]:before:rounded-full [&>li]:before:bg-iris">
-        <li>
-          <span className="font-bold text-ink">{quote.symbol} is a tracker certificate.</span> It tracks{" "}
-          {quote.underlying} and gives no voting rights and no direct ownership of the underlying shares.
-        </li>
-        <li>
-          <span className="font-bold text-ink">The issuer controls the quote asset.</span> The {quote.symbol}{" "}
-          issuer can pause transfers, freeze accounts, and move tokens through a permanent delegate, and could add a
-          transfer hook later. While {quote.symbol} is paused, redemptions and harvests fail until it resumes.
-        </li>
-        <li>
-          <span className="font-bold text-ink">The floor moves with the underlying in USD.</span> The vault holds{" "}
-          {quote.symbol}, so the floor in dollars rises and falls with {quote.underlying}.
-        </li>
-        <li>
-          <span className="font-bold text-ink">The floor protects from zero, not from loss.</span> If you buy
-          above the floor, you can lose the difference. Redemptions pay a pro-rata share of the vault minus a{" "}
-          {formatPercent(launch.exitFeeBps / 10_000)} exit fee that stays in the vault.
-        </li>
-        <li>
-          <span className="font-bold text-ink">Where the fees go.</span>{" "}
-          {launch.feeSplit ? (
-            <>
-              {FEE_COPY.presale} {FEE_COPY.graduation} {FEE_COPY.trading} {FEE_COPY.exit}
-            </>
-          ) : (
-            <>
-              This launch was created before the platform and creator fee split (launch v2): every fee it harvests
-              (curve, migration and pool fees) goes into the vault, and the platform and the creator take no cut. The{" "}
-              {formatPercent(launch.exitFeeBps / 10_000)} exit fee stays in the vault.
-            </>
-          )}
-        </li>
-        <li>
-          <span className="font-bold text-ink">The programs are upgradeable.</span> The Plinto program has no
-          admin, pause or withdraw instruction, but its deployer can upgrade it until the upgrade authority is
-          revoked, and an upgrade could change the rules, including how vault funds move. {upgradeStatusText(upgrade.data)}{" "}
-          Meteora DBC and DAMM v2 are upgradeable by Meteora; an upgrade there could stop or divert fees that are not
-          yet harvested into the vault.
-        </li>
-        <li>
-          <span className="font-bold text-ink">Unaudited software.</span> Plinto is hackathon code that has
-          not been audited. Smart contract bugs can lose funds.
-        </li>
-      </ul>
-      <AttestationCheckbox className="mt-6" />
+    <section id="disclosures" aria-labelledby={`${id}-heading`} className="card below-header px-5 py-3 sm:px-7">
+      <Details
+        summaryClassName="w-full !items-start py-1"
+        summary={
+          <span className="flex flex-1 flex-col">
+            <h2 id={`${id}-heading`} className="text-[17px] font-bold text-ink">
+              Risks &amp; disclosures
+            </h2>
+            <span className="text-[13px] font-normal text-ink-3">Unaudited. The floor protects from zero, not from loss.</span>
+          </span>
+        }
+      >
+        <ul className="mb-3 mt-3 space-y-3 text-[13.5px] leading-relaxed text-ink-2 [&>li]:relative [&>li]:pl-4 [&>li]:before:absolute [&>li]:before:left-0 [&>li]:before:top-[0.6em] [&>li]:before:h-1.5 [&>li]:before:w-1.5 [&>li]:before:rounded-full [&>li]:before:bg-iris">
+          <li>
+            <span className="font-bold text-ink">{quote.symbol} is a tracker certificate.</span> It tracks{" "}
+            {quote.underlying} and gives no voting rights and no direct ownership of the underlying shares.
+          </li>
+          <li>
+            <span className="font-bold text-ink">The issuer controls the quote asset.</span> The {quote.symbol}{" "}
+            issuer can pause transfers, freeze accounts, and move tokens through a permanent delegate, and could add a
+            transfer hook later. While {quote.symbol} is paused, redemptions and harvests fail until it resumes.
+          </li>
+          <li>
+            <span className="font-bold text-ink">The floor moves with the underlying in USD.</span> The vault holds{" "}
+            {quote.symbol}, so the floor in dollars rises and falls with {quote.underlying}.
+          </li>
+          <li>
+            <span className="font-bold text-ink">The floor protects from zero, not from loss.</span> If you buy
+            above the floor, you can lose the difference. Redemptions pay a pro-rata share of the vault minus a{" "}
+            {formatPercent(launch.exitFeeBps / 10_000)} exit fee that stays in the vault.
+          </li>
+          <li>
+            <span className="font-bold text-ink">Where the fees go.</span>{" "}
+            {launch.feeSplit ? (
+              <>
+                {FEE_COPY.presale} {FEE_COPY.graduation} {FEE_COPY.trading} {FEE_COPY.exit}
+              </>
+            ) : (
+              <>
+                This launch was created before the platform and creator fee split (launch v2): every fee it harvests
+                (curve, migration and pool fees) goes into the vault, and the platform and the creator take no cut. The{" "}
+                {formatPercent(launch.exitFeeBps / 10_000)} exit fee stays in the vault.
+              </>
+            )}
+          </li>
+          <li>
+            <span className="font-bold text-ink">The programs are upgradeable.</span> The Plinto program has no
+            admin, pause or withdraw instruction, but its deployer can upgrade it until the upgrade authority is
+            revoked, and an upgrade could change the rules, including how vault funds move. {upgradeStatusText(upgrade.data)}{" "}
+            Meteora DBC and DAMM v2 are upgradeable by Meteora; an upgrade there could stop or divert fees that are not
+            yet harvested into the vault.
+          </li>
+          <li>
+            <span className="font-bold text-ink">Unaudited software.</span> Plinto is hackathon code that has
+            not been audited. Smart contract bugs can lose funds.
+          </li>
+        </ul>
+      </Details>
     </section>
   );
 }

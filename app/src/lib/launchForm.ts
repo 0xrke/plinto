@@ -10,14 +10,28 @@ import {
 } from "@stockfloor/sdk";
 import type { PriceSource } from "./chain/prices";
 import { THRESHOLD_POLICY, VAULT_SHARE_MAX, VAULT_SHARE_MIN, type ThresholdPolicy } from "./config";
+import {
+  MAX_URI_BYTES,
+  descriptionError,
+  tokenLinkError,
+  tokenNameError,
+  tokenSymbolError,
+  utf8Length,
+} from "./upload/metadata";
 
 export interface LaunchFormValues {
   name: string;
   symbol: string;
+  /** Stored in the uploaded metadata JSON (optional). */
+  description: string;
+  /** Optional links stored in the uploaded metadata JSON. */
+  website: string;
+  twitter: string;
+  telegram: string;
   /**
-   * Token URI written into the immutable Metaplex metadata: a metadata JSON document
-   * (`{ name, symbol, description, image }`, what wallets and explorers read) or, as a fallback, a
-   * bare image URL.
+   * "Use my own metadata URL" (Advanced): a metadata JSON document or a bare image URL, written into
+   * the immutable Metaplex metadata as is. When set, nothing is uploaded and the image, description and
+   * links of the form are not used.
    */
   metadataUri: string;
   quoteSymbol: string;
@@ -28,10 +42,6 @@ export interface LaunchFormValues {
 }
 
 export type LaunchFormErrors = Partial<Record<keyof LaunchFormValues, string>>;
-
-function utf8Length(value: string): number {
-  return new TextEncoder().encode(value).length;
-}
 
 const usdWhole = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -78,15 +88,18 @@ export function validateThresholdUsd(input: string, policy: ThresholdPolicy = TH
 /** Client-side validation of the create form. The SDK and the program validate again. */
 export function validateLaunchForm(values: LaunchFormValues, policy: ThresholdPolicy = THRESHOLD_POLICY): LaunchFormErrors {
   const errors: LaunchFormErrors = {};
-  const name = values.name.trim();
-  if (name.length === 0) errors.name = "Enter a token name.";
-  // Token metadata limits are in UTF-8 bytes (32 for the name, 200 for the URI).
-  else if (utf8Length(name) > 32) errors.name = "Use at most 32 bytes (fewer characters for emoji or accents).";
-
-  const symbol = values.symbol.trim();
-  if (symbol.length === 0) errors.symbol = "Enter a symbol.";
-  else if (!/^[A-Z0-9]{2,10}$/.test(symbol.toUpperCase()))
-    errors.symbol = "Use 2 to 10 letters or digits.";
+  // Token metadata limits are in UTF-8 bytes (32 for the name, 200 for the URI). Names and tickers that
+  // look like the platform brand are reserved (the program refuses them too).
+  const name = tokenNameError(values.name.trim());
+  if (name) errors.name = name;
+  const symbol = tokenSymbolError(values.symbol.trim());
+  if (symbol) errors.symbol = symbol;
+  const description = descriptionError(values.description.trim());
+  if (description) errors.description = description;
+  for (const kind of ["website", "twitter", "telegram"] as const) {
+    const link = tokenLinkError(kind, values[kind].trim());
+    if (link) errors[kind] = link;
+  }
 
   const url = values.metadataUri.trim();
   if (url.length > 0) {
@@ -96,7 +109,8 @@ export function validateLaunchForm(values: LaunchFormValues, policy: ThresholdPo
     } catch {
       errors.metadataUri = "Enter a valid URL.";
     }
-    if (!errors.metadataUri && utf8Length(url) > 200) errors.metadataUri = "Use a URL of at most 200 bytes.";
+    if (!errors.metadataUri && utf8Length(url) > MAX_URI_BYTES)
+      errors.metadataUri = `Use a URL of at most ${MAX_URI_BYTES} bytes.`;
   }
 
   if (

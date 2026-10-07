@@ -48,8 +48,7 @@ function DemoNotice() {
     >
       <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-graduating" />
       <p className="min-w-0 flex-1 py-1 [text-wrap:pretty]">
-        <b className="font-bold text-ink">Preview with example launches.</b> They are made up and not connected to a
-        chain, so buying, redeeming and the crank are switched off.
+        <b className="font-bold text-ink">Preview with example launches.</b> Trading is off.
         {LIVE_APP_URL ? (
           <>
             {" "}
@@ -57,7 +56,6 @@ function DemoNotice() {
             <a href={LIVE_APP_URL} className="link underline">
               {LIVE_APP_URL.replace(/^https?:\/\//, "")}
             </a>
-            .
           </>
         ) : null}
       </p>
@@ -101,7 +99,7 @@ export function LaunchList() {
       {isPending ? (
         <div className="grid gap-5 sm:grid-cols-2 lg:max-[1119px]:grid-cols-1" aria-busy="true" aria-live="polite">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="card flex min-h-[340px] animate-pulse flex-col gap-4 p-6" aria-hidden>
+            <div key={i} className="card flex min-h-[260px] animate-pulse flex-col gap-4 p-6" aria-hidden>
               <div className="flex justify-between">
                 <span className="h-14 w-14 rounded-[17px] bg-lilac" />
                 <span className="h-7 w-24 rounded-full bg-lilac" />
@@ -123,8 +121,7 @@ export function LaunchList() {
         </div>
       ) : launches.length === 0 ? (
         <div className="card flex flex-col items-center p-10 text-center text-sm text-ink-2">
-          <p className="card-title text-lg text-ink">No launches in this view yet.</p>
-          <p className="mt-1">Start one: the creator sets the quote asset, the vault share and the raise.</p>
+          <p className="card-title text-lg text-ink">No launches yet.</p>
           <Link href="/create" className="btn btn-primary mt-5">
             <PlusCircleIcon size={18} />
             Launch a token

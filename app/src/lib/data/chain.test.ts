@@ -256,6 +256,19 @@ describe("ChainDataSource", () => {
     expect(metadataReads()).toBe(before);
   });
 
+  it("hides launches whose name or ticker imitates the Plinto brand", async () => {
+    const fake = launchState({ createdAt: NOW - 100n }).state;
+    const real = launchState({ createdAt: NOW, input: { name: "Tidepool", symbol: "TIDE" } }).state;
+    const reader = new FakeReader();
+    reader.set(metadataAddress(fake.launch.baseMint), account(encodeMetadata(fake.launch.baseMint, "Official Pl1nto", "PLNT", ""), PublicKey.default));
+    reader.set(metadataAddress(real.launch.baseMint), account(encodeMetadata(real.launch.baseMint, "Tidepool", "TIDE", ""), PublicKey.default));
+    const { source } = sourceWith(reader, [fake, real]);
+
+    expect((await source.listLaunches()).map((l) => l.symbol)).toEqual(["TIDE"]);
+    expect(await source.getLaunch(fake.launch.baseMint.toBase58())).toBeNull();
+    expect((await source.getLaunch(real.launch.baseMint.toBase58()))?.symbol).toBe("TIDE");
+  });
+
   it("reads the image out of a metadata JSON document, once per mint, and survives a failed read", async () => {
     const withJson = launchState({ input: { name: "Tidepool", symbol: "TIDE" } }).state;
     const broken = launchState({ createdAt: NOW - 100n, input: { name: "Broken", symbol: "BRKN" } }).state;
