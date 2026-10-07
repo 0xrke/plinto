@@ -612,3 +612,8 @@ Format: **decision** · alternatives · why. These supersede the matching bullet
 - Accessibility: autoplay waits for half the card (or half the viewport); an explicit Play runs whenever any
   of it shows. Keyboard changes are spoken by `aria-valuetext` only; the sandbox status line speaks after a
   pointer drag, and the story's live caption only for stepper/Back/Next.
+
+## 2026-10-08 — Scroll-driven landing tried and reverted
+- A scroll-driven version (sticky chapters: how it works, pick the floor asset, floor share, stages
+  scrubbed by scroll) was built in `f566b96`. The founder preferred the previous landing, so it was
+  reverted in full; the split sandbox and the button-driven "Follow your $100" story are back.
