@@ -2,6 +2,9 @@ import type { ReactNode } from "react";
 import type { PayToken } from "@/lib/data/types";
 import { QuoteCoin } from "@/components/ui/QuoteChip";
 import { ArrowDownIcon, InfoIcon } from "@/components/ui/icons";
+import { formatMaxLoss, formatUsd } from "@/lib/format";
+import { maxLossFraction } from "@stockfloor/sdk";
+import { buyButtonLabel, presaleBuyButtonLabel } from "@/lib/metrics";
 
 /*
  * Pieces shared by the market and curve trade panels, drawn after the Pastel trade panel: the
@@ -124,19 +127,25 @@ export function DetailRow({ label, children, valueClassName = "" }: { label: Rea
 }
 
 /**
- * The buy button's required sentence ("Price $X · Floor $Y · Max loss if you buy now: −Z%"), set on
- * two lines: price and floor small on top, the max loss as the bold line. The text content stays the
- * exact sentence (the separator between the lines is kept for screen readers and copy).
+ * The honest risk line above a buy button: the max loss (bold, risk-coloured) and, small under it, the
+ * price and the floor it is measured against. `data-label` keeps the whole sentence ("Price $X · Floor $Y
+ * · Max loss if you buy now: −Z%") for tests and copy. Before graduation the floor is the estimate at
+ * graduation; without one there is nothing to bound the loss, so nothing is shown.
  */
-export function BuyButtonLabel({ label }: { label: string }) {
-  const cut = label.lastIndexOf(" · ");
-  if (cut < 0) return <>{label}</>;
+export function BuyRisk({ priceUsd, floorUsd, presale = false }: { priceUsd: number; floorUsd: number | null; presale?: boolean }) {
+  if (floorUsd === null || !(floorUsd > 0)) return null;
+  const z = maxLossFraction(priceUsd, floorUsd);
+  const label = presale ? presaleBuyButtonLabel(priceUsd, floorUsd) : buyButtonLabel(priceUsd, floorUsd);
   return (
-    <span className="flex flex-col items-center gap-0.5 leading-tight">
-      <span className="tnum text-[12.5px] font-semibold opacity-90">{label.slice(0, cut)}</span>
-      <span className="sr-only"> · </span>
-      <span className="tnum text-[15.5px] font-extrabold">{label.slice(cut + 3)}</span>
-    </span>
+    <div data-testid="buy-risk" data-label={label} className="mt-4 rounded-[14px] bg-cloud px-3.5 py-2.5 text-[13px]">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-ink-2">{presale ? "Max loss if it graduates" : "Max loss if you buy now"}</span>
+        <span className={`tnum font-extrabold ${z > 0 ? "text-risk" : "text-ink"}`}>{formatMaxLoss(z)}</span>
+      </div>
+      <p className="tnum mt-0.5 text-[12px] text-ink-3">
+        Price {formatUsd(priceUsd)} · {presale ? "Floor at graduation (est.)" : "Floor"} {formatUsd(floorUsd)}
+      </p>
+    </div>
   );
 }
 

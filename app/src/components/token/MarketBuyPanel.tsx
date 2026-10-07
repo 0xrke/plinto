@@ -9,12 +9,12 @@ import type { LaunchSummary, PayToken } from "@/lib/data/types";
 import { useData, usePayTokenPrices, useRefreshChainData, useTokenBalance, useTxFlow } from "@/lib/data/context";
 import { PAY_TOKEN_DECIMALS, estimateSellUsd, estimateTokensOut, floorValueUsd, parseUiNumber } from "@/lib/estimates";
 import { formatNumber, formatTokenAmount, formatUsd, parseTokenInput, rawToDecimal } from "@/lib/format";
-import { buyAveragePriceUsd, buyButtonLabel, launchFloorUsd } from "@/lib/metrics";
+import { buyAveragePriceUsd, launchFloorUsd } from "@/lib/metrics";
 import { isQuoteError, quoteLaunchTrade } from "@/lib/tradeQuote";
 import { useAttestation } from "@/lib/attestation";
 import { AmountField } from "@/components/ui/AmountField";
 import { AttestationCheckbox } from "@/components/ui/AttestationCheckbox";
-import { BaseChip, BuyButtonLabel, DetailRow, FinePrint, ReceiveTile, SwapArrow, TokenPicker } from "./TradeBits";
+import { BaseChip, BuyRisk, DetailRow, FinePrint, ReceiveTile, SwapArrow, TokenPicker } from "./TradeBits";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { useJupiterRouting } from "./PresaleTradePanel";
 import { useActionGate } from "./useActionGate";
@@ -239,7 +239,7 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
       <dl className="mt-4 flex flex-col gap-2.5 text-[13.5px]" aria-live="polite">
         {side === "buy" ? (
           <>
-            {/* The max loss of this buy is the button's mandated sentence below; no second copy here. */}
+            {/* The max loss of this buy is the risk line above the button; no second copy here. */}
             <DetailRow label="Worth at the floor" valueClassName="!text-floor">
               {tokensOut > 0 ? `≈ ${formatUsd(atFloorUsd)}` : "—"}
             </DetailRow>
@@ -254,15 +254,18 @@ export function MarketBuyPanel({ launch }: { launch: LaunchSummary }) {
       </dl>
 
       {side === "buy" ? (
-        <button
-          type="button"
-          className="btn btn-primary btn-lg mt-4 h-auto min-h-[58px] w-full whitespace-normal py-2.5 text-center disabled:opacity-90 disabled:shadow-none"
-          disabled={!canSubmit}
-          aria-busy={pending}
-          onClick={onSubmit}
-        >
-          <BuyButtonLabel label={buyButtonLabel(buyPriceUsd, floorUsd)} />
-        </button>
+        <>
+          <BuyRisk priceUsd={buyPriceUsd} floorUsd={floorUsd} />
+          <button
+            type="button"
+            className="btn btn-primary btn-lg mt-3 w-full disabled:opacity-90 disabled:shadow-none"
+            disabled={!canSubmit}
+            aria-busy={pending}
+            onClick={onSubmit}
+          >
+            {pending ? "Sending…" : `Buy $${launch.symbol}`}
+          </button>
+        </>
       ) : (
         <button type="button" className="btn btn-primary btn-lg mt-4 w-full disabled:opacity-90 disabled:shadow-none" disabled={!canSubmit} aria-busy={pending} onClick={onSubmit}>
           {pending ? "Sending…" : `Sell $${launch.symbol}`}

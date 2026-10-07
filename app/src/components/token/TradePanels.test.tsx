@@ -78,8 +78,14 @@ function chainSource(balances: Record<string, bigint>): LaunchDataSource {
   };
 }
 
+/** The buy button is "Buy $SYM"; the honest price / floor / max-loss sentence is the risk line above it. */
+function buyButtonWithRisk(label: string): HTMLButtonElement {
+  expect(screen.getByTestId("buy-risk").dataset.label).toBe(label);
+  return screen.getByRole("button", { name: /^Buy \$/ }) as HTMLButtonElement;
+}
+
 describe("<MarketBuyPanel />", () => {
-  it("keeps the buy button label exactly 'Price $X · Floor $Y · Max loss if you buy now: −Z%'", async () => {
+  it("shows 'Price $X · Floor $Y · Max loss if you buy now: −Z%' above a short buy button", async () => {
     const launches = await new MockDataSource(0).listLaunches();
     for (const launch of launches.filter((l) => l.phase === "graduated")) {
       const { unmount } = render(
@@ -89,7 +95,7 @@ describe("<MarketBuyPanel />", () => {
       );
       const label = buyButtonLabel(launch.priceUsd, launchFloorUsd(launch));
       expect(label).toMatch(/^Price \$[\d.,]+ · Floor \$[\d.,]+ · Max loss if you buy now: (−[\d.]+|0)%$/);
-      expect(screen.getByRole("button", { name: label }).textContent).toBe(label);
+      expect(buyButtonWithRisk(label).textContent).toBe(`Buy $${launch.symbol}`);
       unmount();
     }
   });
@@ -107,8 +113,8 @@ describe("<MarketBuyPanel />", () => {
     await waitFor(() => expect((screen.getByRole("option", { name: "USDC" }) as HTMLOptionElement).disabled).toBe(true));
     expect((screen.getByRole("option", { name: "SOL" }) as HTMLOptionElement).disabled).toBe(true);
     expect(await screen.findByText("USDC/SOL: mainnet only.")).toBeTruthy();
-    // The label stays the honest price / floor / max-loss sentence.
-    expect(screen.getByRole("button", { name: buyButtonLabel(launch.priceUsd, launchFloorUsd(launch)) })).toBeTruthy();
+    // The risk line stays the honest price / floor / max-loss sentence.
+    buyButtonWithRisk(buyButtonLabel(launch.priceUsd, launchFloorUsd(launch)));
   });
 });
 
@@ -139,16 +145,16 @@ describe("<MarketBuyPanel /> in a thin pool", () => {
     );
     await screen.findByText(/^Balance: 5\.0285\d* SPYx/);
     const floor = launchFloorUsd(launch);
-    expect(screen.getByRole("button", { name: buyButtonLabel(launch.priceUsd, floor) })).toBeTruthy();
+    buyButtonWithRisk(buyButtonLabel(launch.priceUsd, floor));
     fireEvent.change(screen.getByLabelText("You pay"), { target: { value: "0.0033" } });
     const q = quoteLaunchTrade(launch, "buy", uiToRaw("0.0033", 8, launch.quote.multiplier), 100);
     if (!q || "error" in q) throw new Error("no quote");
     const avg = buyAveragePriceUsd(launch, q.amountIn, q.amountOut)!;
     expect(avg / launch.priceUsd).toBeGreaterThan(1.1);
-    expect(screen.getByRole("button", { name: buyButtonLabel(avg, floor) })).toBeTruthy();
+    buyButtonWithRisk(buyButtonLabel(avg, floor));
     expect(screen.getByText("Average price for this buy")).toBeTruthy();
-    // The button's mandated sentence is the only max-loss figure in the panel.
-    expect(screen.getByRole("button", { name: new RegExp(formatMaxLoss(maxLossFraction(avg, floor))) })).toBeTruthy();
+    // The risk line is the only max-loss figure in the panel.
+    expect(screen.getByTestId("buy-risk").textContent).toContain(formatMaxLoss(maxLossFraction(avg, floor)));
     expect(screen.queryByText("Max loss for this buy")).toBeNull();
   });
 });
@@ -171,18 +177,18 @@ describe("<PresaleTradePanel />", () => {
     expect(screen.getByText("Min received")).toBeTruthy();
     expect(screen.getByText("USDC/SOL: mainnet only. Use the faucet.")).toBeTruthy();
 
-    // The buy button shows the price, the estimated floor at graduation and the max loss if it graduates,
+    // The risk line shows the price, the estimated floor at graduation and the max loss if it graduates,
     // at this buy's average price.
     const avg = buyAveragePriceUsd(launch, q.amountIn, q.amountOut)!;
     const label = presaleBuyButtonLabel(avg, projectedFloorUsd(launch));
     expect(label).toMatch(/^Price \$[\d.,]+ · Floor at graduation \(est\.\) \$[\d.,]+ · Max loss if it graduates: −[\d.]+%$/);
-    expect(screen.getByRole("button", { name: label })).toBeTruthy();
+    buyButtonWithRisk(label);
     expect(screen.queryByText("Max loss if it graduates (est.)")).toBeNull();
     expect(screen.getByText(/There is no floor until graduation/)).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("You pay"), { target: { value: "6" } });
     expect(screen.getByText("Amount exceeds your SPYx balance.")).toBeTruthy();
-    expect((screen.getByRole("button", { name: presaleBuyButtonLabel(launch.priceUsd, projectedFloorUsd(launch)) }) as HTMLButtonElement).disabled).toBe(true);
+    expect(buyButtonWithRisk(presaleBuyButtonLabel(launch.priceUsd, projectedFloorUsd(launch))).disabled).toBe(true);
   });
 });
 
@@ -208,7 +214,7 @@ describe("trade panels pass the displayed quote to the action", () => {
     const displayed = quoteLaunchTrade(launch, "buy", raw, 100);
     if (!displayed || "error" in displayed) throw new Error("no quote");
     expect(screen.getByText(`${formatTokenAmount(displayed.minOut, 6)} $TIDE`)).toBeTruthy();
-    const button = await screen.findByRole("button", { name: /^Price .* · Max loss if it graduates: / });
+    const button = await screen.findByRole("button", { name: /^Buy \$/ });
     await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(button);
     await waitFor(() => expect(requests).toHaveLength(1));

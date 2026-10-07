@@ -558,3 +558,12 @@ Format: **decision** · alternatives · why. These supersede the matching bullet
 - Their page shows a full-width red alert above the header: "This is NOT an official Plinto token".
   Trading stays available, so holders who were misled can still sell or redeem.
 - The mock data includes one such launch (`$PLINTO`, reachable only by URL) to show the banner.
+
+## 2026-10-07 — Buy button: short label, risk line above it
+- Founder request: the buy button carried too much text. The button now says only "Buy $SYM".
+- The honest-risk sentence the brief puts on the button (BRIEF: "Price $X · Floor $Y · Max loss if you
+  buy now: −Z%") moves into a compact line directly above it (`BuyRisk` in `TradeBits.tsx`): the max
+  loss bold in the risk colour, price and floor small under it. Same numbers, same live update with the
+  amount typed; before graduation it uses the estimated floor at graduation, as before.
+- Kept rather than removed: the floor and its max loss are the product's point, and a buyer cannot
+  work them out from the page alone.

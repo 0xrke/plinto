@@ -9,13 +9,13 @@ import type { LaunchSummary, PayToken } from "@/lib/data/types";
 import { useCluster, useData, usePayTokenPrices, useRefreshChainData, useTokenBalance, useTxFlow } from "@/lib/data/context";
 import { PAY_TOKEN_DECIMALS, estimateSellUsd, estimateTokensOut, parseUiNumber } from "@/lib/estimates";
 import { formatNumber, formatPercent, formatTokenAmount, formatUsd, parseTokenInput, rawToDecimal } from "@/lib/format";
-import { buyAveragePriceUsd, presaleBuyButtonLabel, projectedFloorUsd } from "@/lib/metrics";
+import { buyAveragePriceUsd, projectedFloorUsd } from "@/lib/metrics";
 import { isQuoteError, quoteLaunchTrade } from "@/lib/tradeQuote";
 import { useAttestation } from "@/lib/attestation";
 import { AmountField } from "@/components/ui/AmountField";
 import { AttestationCheckbox } from "@/components/ui/AttestationCheckbox";
 import { SwapIcon } from "@/components/ui/icons";
-import { BaseChip, BuyButtonLabel, DetailRow, FinePrint, ReceiveTile, SwapArrow, TokenPicker } from "./TradeBits";
+import { BaseChip, BuyRisk, DetailRow, FinePrint, ReceiveTile, SwapArrow, TokenPicker } from "./TradeBits";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { useActionGate } from "./useActionGate";
 
@@ -250,19 +250,21 @@ export function PresaleTradePanel({ launch }: { launch: LaunchSummary }) {
                 This buy completes the curve: it uses {quoteAmount(exactQuote.amountIn)} and the rest stays in your wallet.
               </p>
             ) : null}
-            {/* The max loss if it graduates is the buy button's own sentence; no second copy here. */}
-          </dl>
+                      </dl>
 
           {side === "buy" ? (
-            <button
-              type="button"
-              className="btn btn-primary btn-lg mt-4 h-auto min-h-[58px] w-full whitespace-normal py-2.5 text-center disabled:opacity-90 disabled:shadow-none"
-              disabled={!canSubmit}
-              onClick={onSubmit}
-              aria-busy={pending}
-            >
-              <BuyButtonLabel label={presaleBuyButtonLabel(buyPriceUsd, estFloor)} />
-            </button>
+            <>
+              <BuyRisk priceUsd={buyPriceUsd} floorUsd={estFloor} presale />
+              <button
+                type="button"
+                className="btn btn-primary btn-lg mt-3 w-full disabled:opacity-90 disabled:shadow-none"
+                disabled={!canSubmit}
+                onClick={onSubmit}
+                aria-busy={pending}
+              >
+                {pending ? "Sending…" : `Buy $${launch.symbol}`}
+              </button>
+            </>
           ) : (
             <button type="button" className="btn btn-primary btn-lg mt-4 w-full disabled:opacity-90 disabled:shadow-none" disabled={!canSubmit} onClick={onSubmit} aria-busy={pending}>
               {pending ? "Sending…" : `Sell $${launch.symbol} to the curve`}

@@ -187,16 +187,17 @@ describe("<TokenView /> after migration", () => {
     expect(within(screen.getByRole("banner")).getByText("Price")).toBeTruthy();
   });
 
-  it("states the max loss once: the meter at the spot price, the mandated sentence on the button", async () => {
+  it("states the max loss once: the meter at the spot price, the risk line above the buy button", async () => {
     renderToken(summary("redeemable"));
     await screen.findByRole("heading", { name: "Price and floor" });
     expect(screen.queryByText("Max loss now")).toBeNull();
     expect(screen.queryByText("Max loss for this buy")).toBeNull();
     expect(screen.queryByText("Price ÷ floor")).toBeNull();
-    // "Max loss if you buy now" is reserved for the buy button's required sentence.
+    // "Max loss if you buy now" is reserved for the risk line right above the buy button.
     const mandated = screen.getAllByText(/Max loss if you buy now/);
     expect(mandated).toHaveLength(1);
-    expect(mandated[0]!.closest("button")).not.toBeNull();
+    expect(mandated[0]!.closest('[data-testid="buy-risk"]')).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Buy $HRBR" })).toBeTruthy();
   });
 
   it("keeps the floor per $100 at listing and today's in the vault details", async () => {
