@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import type { LaunchMath } from "@/lib/landing/sim/launch";
 import { STAGES, netFlowAt, stageAt, storyFrame, type StoryFrame } from "@/lib/landing/sim/story";
 import { formatUsdCents, formatUsdWhole } from "@/lib/landing/sim/format";
-import { PRESALE_FILL } from "@/components/ui/ProgressBar";
+import { PRESALE_FILL } from "@/components/ui/presaleFill";
 import { RedeemBar } from "./RedeemBar";
 import { SplitBar } from "./SplitBar";
 import { StoryChart } from "./StoryChart";
