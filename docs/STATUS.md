@@ -1,6 +1,16 @@
 # Status — 2026-09-25 (ET)
 
 
+## Interactive landing — 2026-10-07 (local, not committed by this step)
+- `/` now has two interactive widgets in one client island: "Set the split" (floor-share and trading sliders,
+  depth chart in "your $100") and "Follow your $100" (presale → graduation → trading → selloff → redeem).
+  Numbers come from SDK-anchored closed-form math; only the trading path is an illustration. Details in
+  `docs/DECISIONS.md`.
+- **Tests (2026-10-07):** app tests 432 passed (42 files); a known flake in `TokenView.test.tsx` ("floor drawn on
+  the chart", `price-chart` not found) fails about 1 run in 3, also in isolation, unrelated to the landing. App
+  `tsc --noEmit` clean; local mock build passes. First-load JS of `/` (gzip, 9 chunks): 196.9 KB, of which the
+  landing island is 14.1 KB.
+
 ## Landing at `/`, app under `/app` — 2026-10-07 (local, not committed by this step)
 - `/` is a server-rendered landing (no wallet or web3 client code, ISR 60 s); the app lives at `/app`,
   `/app/create`, `/app/t/[mint]`; `/create` and `/t/:mint` redirect with 308. Details in `docs/DECISIONS.md`.

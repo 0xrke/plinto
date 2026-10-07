@@ -171,7 +171,7 @@ describe("<TokenView /> after migration", () => {
     expect(screen.getByText("Migrated. Redemption opens after the vault harvest — run the crank.")).toBeTruthy();
     expect(screen.getByText("Opens after the vault harvest (crank below).")).toBeTruthy();
     // No floor line on the chart until the floor is live.
-    expect((await screen.findByTestId("price-chart")).dataset.floor).toBe("");
+    expect((await screen.findByTestId("price-chart", undefined, { timeout: 3000 })).dataset.floor).toBe("");
   });
 
   it("once the fee is in the vault: floor live, redeem any time, the floor drawn on the chart", async () => {
@@ -183,7 +183,9 @@ describe("<TokenView /> after migration", () => {
     expect(current.textContent).toContain("Floor live");
     expect(within(stepper).getByText("Redeem any time")).toBeTruthy();
     expect(screen.queryByText(/Redemption opens after the vault harvest/)).toBeNull();
-    expect(Number((await screen.findByTestId("price-chart")).dataset.floor)).toBeCloseTo(launchFloorUsd(launch), 15);
+    // The chart route is not served here: the card retries once (about 1 s) before drawing its fallback.
+    const chart = await screen.findByTestId("price-chart", undefined, { timeout: 3000 });
+    expect(Number(chart.dataset.floor)).toBeCloseTo(launchFloorUsd(launch), 15);
     expect(within(screen.getByRole("banner")).getByText("Price")).toBeTruthy();
   });
 

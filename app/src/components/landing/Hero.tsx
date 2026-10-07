@@ -1,16 +1,12 @@
 import Link from "next/link";
 import { FloorWord } from "@/components/ui/FloorWord";
 import { PlusCircleIcon } from "@/components/ui/icons";
-import { PhaseChart } from "@/components/waitlist/PhaseChart";
 import { LANDING_ROUTES } from "@/lib/landing/routes";
 
-/** No scroll reveal: the h1 is the LCP. PhaseChart is the page's only client island. */
+/** No scroll reveal: the h1 is the LCP. One column; the floor lab right below carries the visuals. */
 export function Hero() {
   return (
-    <section
-      aria-labelledby="hero-title"
-      className="py-12 sm:py-20 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,520px)] lg:items-center lg:gap-12"
-    >
+    <section aria-labelledby="hero-title" className="pt-10 pb-2 sm:pt-12">
       <div>
         <h1
           id="hero-title"
@@ -33,9 +29,6 @@ export function Hero() {
         <p className="mt-6 max-w-[540px] border-t border-line pt-4 text-[13px] text-ink-3">
           The floor protects from zero, not from loss.
         </p>
-      </div>
-      <div className="mt-10 rounded-card bg-cloud p-3 sm:p-4 lg:mt-0">
-        <PhaseChart />
       </div>
     </section>
   );

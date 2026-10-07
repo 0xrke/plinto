@@ -591,3 +591,24 @@ Format: **decision** · alternatives · why. These supersede the matching bullet
   vault on Solscan instead, so the heading never promises cards it does not show.
 - The root title and description (`lib/siteMeta.ts`) are the landing's, so its meta, Open Graph and Twitter
   texts agree. The canonical is set only when a site URL is known.
+
+## 2026-10-07 — Interactive landing: "Set the split" and "Follow your $100"
+- Founder request: less text, more interaction. Two widgets in one client island (`FloorLab`, fed SDK
+  constants by the server through `simConstantsFromSdk()`): a sandbox (floor-share slider 30–60% and a
+  "trading after listing" slider over a constant-product depth chart) and a 15-second story (presale →
+  graduation → trading → selloff → redeem) with Play/Pause, a stepper, Back/Next and a scrubber. Both share
+  the floor share. Removed from the landing: PhaseChart (still on /waitlist), RaiseSplit, NoOneCan, WorstCase;
+  "What the code can't do" and "What can still hurt" merged into `Rules`.
+- Engine: `app/src/lib/landing/sim/` is closed-form and pure (no SDK, config or web3 imports; an import-graph
+  test enforces it); `sim.test.ts` anchors it to the SDK's `previewLaunch`, `floorPer100AtListing` and
+  `priceImpactPct`. "Your $100" is $100 bought at the listing price: the floor pays back $34.88 at the
+  defaults (flat curve, 50%, $10,000 raise, 2% exit fee). Ignored: the 0.2% DBC migration liquidity fee, the
+  1% pool fee, rounding and fee accrual into the vault.
+- Illustrative: only the story's trading and selloff path (fixed waypoints, no randomness), labelled
+  "Illustration"; every other number is SDK math. The sandbox's selling stops at the floor (the leftmost stop
+  is exactly `sellToFloorUsd`), because below the floor holders redeem instead of selling; the curve past that
+  point is drawn faint. The story's y axis stays zoomed out after trading, so the finished frame shows the
+  whole rise and fall. The 2% exit fee is named where $35.59 (floor value) becomes $34.88 (paid back).
+- Accessibility: autoplay waits for half the card (or half the viewport); an explicit Play runs whenever any
+  of it shows. Keyboard changes are spoken by `aria-valuetext` only; the sandbox status line speaks after a
+  pointer drag, and the story's live caption only for stepper/Back/Next.

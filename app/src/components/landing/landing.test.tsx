@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { MockDataSource } from "@/lib/data/mock";
 import type { LaunchDataSource, LaunchSummary } from "@/lib/data/types";
 import { launchFloorUsd, quoteRawToUsd } from "@/lib/metrics";
@@ -10,12 +11,52 @@ import { Hero } from "./Hero";
 import { Landing } from "./Landing";
 import { LiveFloorsView } from "./LiveFloors";
 import { loadLiveFloors, pickLiveFloors } from "./liveFloorsData";
-import { NoOneCan } from "./NoOneCan";
-import { RaiseSplit } from "./RaiseSplit";
+import { simConstantsFromSdk } from "@/lib/landing/sim/fromSdk";
+import { launchMath } from "@/lib/landing/sim/launch";
+import { FLOW_STOP_COUNT, flowUsdAt } from "@/lib/landing/sim/market";
+import { STAGES, STORY_END, storyFrame } from "@/lib/landing/sim/story";
+import { FloorLab } from "./lab/FloorLab";
+import { LabSection } from "./lab/LabSection";
+import { flowLabel, sandboxReadout } from "./lab/SplitSandbox";
+import { ILLUSTRATION, STORY_FOOTNOTE, scrubberValueText, stageCaption, storyChartLabel } from "./lab/storyCopy";
+import { Rules } from "./Rules";
 import { TopBar } from "./TopBar";
-import { WorstCase } from "./WorstCase";
 
-afterEach(cleanup);
+const OVERCLAIM = /guarantee|risk-free|can.?t lose|cannot lose|profit|\bsafe\b|protected/i;
+
+/** The story's hooks read IntersectionObserver and matchMedia; jsdom has neither. Never in view here. */
+class NeverInView {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+  takeRecords() {
+    return [];
+  }
+}
+
+beforeEach(() => {
+  vi.stubGlobal("IntersectionObserver", NeverInView);
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: false,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+  }));
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+/** Words a sighted reader sees: text outside sr-only and aria-hidden nodes. */
+function visibleWords(root: Element): number {
+  const clone = root.cloneNode(true) as Element;
+  for (const el of clone.querySelectorAll(".sr-only, [aria-hidden='true'], script, style")) el.remove();
+  return (clone.textContent ?? "").split(/\s+/).filter((w) => /[A-Za-z0-9$]/.test(w)).length;
+}
 
 const mockLaunches = () => new MockDataSource(0).listLaunches();
 
@@ -119,23 +160,31 @@ describe("landing sections", () => {
     expect(screen.getByRole("link", { name: "Open app" }).getAttribute("href")).toBe("/app");
   });
 
-  it("raise split: labelled bar and the four amounts", () => {
-    render(<RaiseSplit />);
-    expect(screen.getByRole("img", { name: "Floor 50%, locked pool 40%, creator 5%, platform 5%" })).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Where a $10,000 raise goes");
-    for (const amount of ["$5,000", "$4,000"]) expect(screen.getByText(amount)).toBeTruthy();
-    expect(screen.getAllByText("$500")).toHaveLength(2);
-    expect(screen.getByText(/Creators pick the floor share: 30–60%/).textContent).toMatch(/2% exit fee add to it\./);
+  it("rules: what the code can't do, and what can still hurt", () => {
+    render(<Rules />);
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("What the code can't do");
+    for (const t of ["No withdraw", "No unlock", "No pause"]) expect(screen.getByText(t)).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("What can still hurt");
+    expect(screen.getAllByRole("listitem")).toHaveLength(6);
   });
 
-  it("worst case: $34.88 back, $65.12 at risk, no max-loss percentage", () => {
-    const { container } = render(<WorstCase />);
-    expect(screen.getByText("$100 bought at the opening price redeems for $34.88.")).toBeTruthy();
-    expect(screen.getByRole("img", { name: "Of $100: $34.88 back from the floor, $65.12 at risk" })).toBeTruthy();
-    expect(screen.getByText("$34.88 back")).toBeTruthy();
-    expect(screen.getByText("$65.12 at risk")).toBeTruthy();
-    expect(screen.getAllByRole("listitem")).toHaveLength(3);
-    expect(container.textContent).not.toMatch(/64\.4|65%/);
+  it("floor lab: the sandbox defaults come from the SDK math", () => {
+    render(<LabSection />);
+    const sandbox = screen.getByRole("region", { name: "Set the split" });
+    for (const v of ["$156.25", "$34.88", "2.8×", "$1,614"]) expect(within(sandbox).getAllByText(new RegExp(v.replace("$", "\\$"))).length).toBeGreaterThan(0);
+    expect(within(sandbox).getByText(/SPYx/)).toBeTruthy();
+  });
+
+  it("floor lab: the server renders the story's finished frame", () => {
+    const html = renderToString(<LabSection />);
+    expect(html).toContain("$34.88 back");
+    expect(html).toContain("$65.12 lost");
+    expect(html).not.toMatch(/64\.4|65%/);
+    // The story's chip links to the sandbox's floor-share slider.
+    const { container } = render(<LabSection />);
+    const chip = container.querySelector("#follow-your-100 a[href^='#']");
+    expect(chip).not.toBeNull();
+    expect(container.querySelector(chip!.getAttribute("href")!)?.getAttribute("type")).toBe("range");
   });
 
   it("closing call to action links to the app and to create", () => {
@@ -144,10 +193,36 @@ describe("landing sections", () => {
     expect(screen.getByRole("link", { name: "Launch a token" }).getAttribute("href")).toBe("/app/create");
   });
 
-  it("never overclaims", () => {
-    const sections = [<Hero key="h" />, <RaiseSplit key="r" />, <NoOneCan key="n" />, <WorstCase key="w" />, <ClosingCta key="c" />];
-    const { container } = render(<>{sections}<LiveFloorsView launches={null} /></>);
-    expect(container.textContent).not.toMatch(/guarantee|risk-free|can.?t lose|cannot lose|profit/i);
+  it("never overclaims, in any caption or label", async () => {
+    const { container } = render(await Landing({ source: new MockDataSource(0) }));
+    const texts = [container.textContent ?? ""];
+    for (const el of container.querySelectorAll("[aria-label], [aria-valuetext]")) {
+      texts.push(el.getAttribute("aria-label") ?? "", el.getAttribute("aria-valuetext") ?? "");
+    }
+    const k = simConstantsFromSdk();
+    for (let v = k.vaultShareMinPct; v <= k.vaultShareMaxPct; v++) {
+      const m = launchMath(k, v);
+      for (const s of STAGES) texts.push(stageCaption(m, s.key));
+      texts.push(storyChartLabel(m));
+      for (let t = 0; t <= STORY_END; t += 0.5) texts.push(scrubberValueText(m, storyFrame(m, t)));
+      for (let i = 0; i < FLOW_STOP_COUNT; i++) {
+        const x = flowUsdAt(m, i);
+        texts.push(flowLabel(x), ...Object.values(sandboxReadout(m, x)).filter((o): o is string => typeof o === "string"));
+      }
+    }
+    texts.push(ILLUSTRATION, STORY_FOOTNOTE);
+    for (const t of texts) expect(t.replace("The floor protects from zero, not from loss.", "")).not.toMatch(OVERCLAIM);
+  });
+
+  it("keeps the copy short: at most 220 visible words with the lab rendered", async () => {
+    const { container } = render(await Landing({ source: new MockDataSource(0) }));
+    const words = visibleWords(container.querySelector("main")!);
+    expect(words).toBeLessThanOrEqual(220);
+  });
+
+  it("names SPYx's moving dollar value once", async () => {
+    const { container } = render(<FloorLab k={simConstantsFromSdk()} />);
+    expect(container.textContent!.match(/S&P 500/g)).toHaveLength(1);
   });
 });
 
@@ -159,6 +234,13 @@ describe("<Landing />", () => {
     expect(main).not.toBeNull();
     const sections = main!.querySelectorAll("section");
     expect(sections).toHaveLength(6);
+    expect([...main!.querySelectorAll("h2")].map((h) => h.textContent)).toEqual([
+      "Set the split",
+      "Follow your $100",
+      "What the code can't do",
+      "Live on Solana mainnet",
+      "See your max loss before you buy.",
+    ]);
     for (const s of sections) {
       const id = s.getAttribute("aria-labelledby");
       expect(id && container.querySelector(`#${id}`)).toBeTruthy();

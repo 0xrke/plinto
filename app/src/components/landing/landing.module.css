@@ -9,29 +9,12 @@
   }
 }
 
-@keyframes grow {
-  from {
-    transform: scaleX(0);
-  }
-}
-
 @media (prefers-reduced-motion: no-preference) {
   @supports (animation-timeline: view()) {
     .reveal {
       animation: rise linear both;
       animation-timeline: view();
       animation-range: entry 0% entry 40%;
-    }
-
-    /*
-     * Time delays do not apply to scroll-driven animations, so the stagger shifts each segment's
-     * range instead: --i is the segment index (0..3).
-     */
-    .grow {
-      transform-origin: left;
-      animation: grow linear both;
-      animation-timeline: view();
-      animation-range: entry calc(10% + var(--i, 0) * 8%) entry calc(60% + var(--i, 0) * 8%);
     }
   }
 }

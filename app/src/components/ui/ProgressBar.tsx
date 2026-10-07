@@ -1,7 +1,10 @@
 import { formatProgress } from "@/lib/format";
 
+/** The presale (sky) fill, shared with the landing's animated raise bar. */
+export const PRESALE_FILL = "linear-gradient(90deg, #9cc8ff, #5b8ff0)";
+
 const TONES = {
-  presale: { track: "bg-presale-track", fill: "linear-gradient(90deg, #9cc8ff, #5b8ff0)" },
+  presale: { track: "bg-presale-track", fill: PRESALE_FILL },
   graduating: { track: "bg-graduating-track", fill: "linear-gradient(90deg, #f7ec97, #e9d24a)" },
 } as const;
 
