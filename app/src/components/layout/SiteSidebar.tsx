@@ -23,7 +23,7 @@ export function SiteSidebar() {
   const current = activeNav(pathname);
   return (
     <aside className="hidden w-[88px] shrink-0 border-r border-line bg-surface lg:block xl:w-[228px]">
-      <div className="sticky top-0 flex h-[calc(100dvh-2rem)] min-h-[34rem] flex-col items-center px-[18px] pb-7 pt-9 xl:items-stretch xl:px-[22px]">
+      <div className="sticky top-0 flex h-dvh min-h-[34rem] flex-col items-center px-[18px] pb-7 pt-9 xl:items-stretch xl:px-[22px]">
         <Link
           href="/"
           aria-label="Plinto home"
