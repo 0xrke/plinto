@@ -2,9 +2,8 @@ import Link from "next/link";
 import { FloorWord } from "@/components/ui/FloorWord";
 import { PlusCircleIcon } from "@/components/ui/icons";
 import { LANDING_ROUTES } from "@/lib/landing/routes";
-import { SKIP_STORY_HREF } from "./scroll/anchors";
 
-/** No scroll reveal: the h1 is the LCP. One column; the scroll chapters right below carry the visuals. */
+/** No scroll reveal: the h1 is the LCP. One column; the floor lab right below carries the visuals. */
 export function Hero() {
   return (
     <section aria-labelledby="hero-title" className="pt-10 pb-2 sm:pt-12">
@@ -16,7 +15,7 @@ export function Hero() {
           Token launches with a <FloorWord />
         </h1>
         <p className="mt-5 max-w-[540px] text-[16px] leading-[1.6] text-ink-2 sm:mt-6 sm:text-[18px]">
-          Part of every raise locks in a tokenized stock.
+          Part of every raise is locked in tokenized stocks. Holders redeem against it once the market opens.
         </p>
         <div className="mt-7 grid gap-3 sm:flex">
           <Link href={LANDING_ROUTES.app} className="btn btn-primary w-full sm:w-auto">
@@ -27,9 +26,6 @@ export function Hero() {
             Launch a token
           </Link>
         </div>
-        <a href={SKIP_STORY_HREF} className="link mt-4 inline-block text-[14px]">
-          Skip the story
-        </a>
         <p className="mt-6 max-w-[540px] border-t border-line pt-4 text-[13px] text-ink-3">
           The floor protects from zero, not from loss.
         </p>

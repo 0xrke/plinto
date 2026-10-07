@@ -5,29 +5,23 @@ import { formatUsdCents, formatUsdWhole } from "@/lib/landing/sim/format";
 /** Every visible sentence of the story lives here, so tests can scan it for overclaims. */
 
 export const STORY_TITLE = "Follow your $100";
+export const STORY_FOOTNOTE = "Made-up trades. Every other number is SDK math.";
 export const ILLUSTRATION = "Illustration";
-/**
- * The scroll story's footnote: the made-up part, the stock price it holds still, and the fees the
- * sim leaves out (LP fees into the vault, the migration fee, the pool fee).
- */
-export const storyFootnote = (symbol = "SPYx"): string =>
-  `Made-up trades; ${symbol} price held flat. Fees simplified; the rest is SDK math.`;
 
 export const floorSharePct = (m: LaunchMath): number => Math.round(m.v * 100);
 
-/** `symbol` is the floor asset named at graduation (labels only; the math is the same for every asset). */
-export function stageCaption(m: LaunchMath, key: StageKey, symbol = "SPYx"): string {
+export function stageCaption(m: LaunchMath, key: StageKey): string {
   switch (key) {
     case "presale":
       return "Buyers fill the curve. You buy $100 at the top.";
     case "graduation":
-      return `Raise complete: ${floorSharePct(m)}% locks in ${symbol} as the floor.`;
+      return `Raise complete: ${floorSharePct(m)}% locks in SPYx as the floor.`;
     case "trading":
       return "Trading opens. A thin market swings hard.";
     case "selloff":
       return "Everyone sells. The price falls to the floor.";
     case "redeem":
-      return `Burn tokens for your share of the floor, less ${m.exitFeePct}%.`;
+      return `Burn your tokens for your share of the floor, less a ${m.exitFeePct}% fee.`;
   }
 }
 

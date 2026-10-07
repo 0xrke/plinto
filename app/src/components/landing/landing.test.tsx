@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { MockDataSource } from "@/lib/data/mock";
 import type { LaunchDataSource, LaunchSummary } from "@/lib/data/types";
@@ -13,15 +13,16 @@ import { LiveFloorsView } from "./LiveFloors";
 import { loadLiveFloors, pickLiveFloors } from "./liveFloorsData";
 import { simConstantsFromSdk } from "@/lib/landing/sim/fromSdk";
 import { launchMath } from "@/lib/landing/sim/launch";
+import { FLOW_STOP_COUNT, flowUsdAt } from "@/lib/landing/sim/market";
 import { STAGES, STORY_END, storyFrame } from "@/lib/landing/sim/story";
-import { ILLUSTRATION, scrubberValueText, stageCaption, storyChartLabel, storyFootnote } from "./lab/storyCopy";
-import { QUOTE_ASSETS } from "./scroll/quoteAssets";
-import { ScrollStory } from "./scroll/ScrollStory";
-import { StorySection } from "./scroll/StorySection";
+import { FloorLab } from "./lab/FloorLab";
+import { LabSection } from "./lab/LabSection";
+import { flowLabel, sandboxReadout } from "./lab/SplitSandbox";
+import { ILLUSTRATION, STORY_FOOTNOTE, scrubberValueText, stageCaption, storyChartLabel } from "./lab/storyCopy";
 import { Rules } from "./Rules";
 import { TopBar } from "./TopBar";
 
-const OVERCLAIM = /guarantee|risk-free|can.?t lose|cannot lose|profit|\bsafe\b|protected|uncorrelated|independent/i;
+const OVERCLAIM = /guarantee|risk-free|can.?t lose|cannot lose|profit|\bsafe\b|protected/i;
 
 /** The story's hooks read IntersectionObserver and matchMedia; jsdom has neither. Never in view here. */
 class NeverInView {
@@ -50,13 +51,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/**
- * Words a sighted reader sees: text outside sr-only and aria-hidden nodes. The pinned stages are
- * aria-hidden, and the reduced-motion stills (hidden unless motion is reduced) repeat them.
- */
+/** Words a sighted reader sees: text outside sr-only and aria-hidden nodes. */
 function visibleWords(root: Element): number {
   const clone = root.cloneNode(true) as Element;
-  for (const el of clone.querySelectorAll(".sr-only, [aria-hidden='true'], [data-still], script, style")) el.remove();
+  for (const el of clone.querySelectorAll(".sr-only, [aria-hidden='true'], script, style")) el.remove();
   return (clone.textContent ?? "").split(/\s+/).filter((w) => /[A-Za-z0-9$]/.test(w)).length;
 }
 
@@ -170,31 +168,23 @@ describe("landing sections", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(6);
   });
 
-  it("scroll story: the server renders every chapter's final frame from the SDK math", () => {
-    const html = renderToString(<StorySection />);
-    for (const id of ["how-it-works", "why-stocks", "floor-share", "follow-your-100"]) expect(html).toContain(`id="${id}"`);
+  it("floor lab: the sandbox defaults come from the SDK math", () => {
+    render(<LabSection />);
+    const sandbox = screen.getByRole("region", { name: "Set the split" });
+    for (const v of ["$156.25", "$34.88", "2.8×", "$1,614"]) expect(within(sandbox).getAllByText(new RegExp(v.replace("$", "\\$"))).length).toBeGreaterThan(0);
+    expect(within(sandbox).getByText(/SPYx/)).toBeTruthy();
+  });
+
+  it("floor lab: the server renders the story's finished frame", () => {
+    const html = renderToString(<LabSection />);
     expect(html).toContain("$34.88 back");
     expect(html).toContain("$65.12 lost");
-    expect(html).toContain("Raise complete: 50% locks in SPYx as the floor.");
-    expect(html).toContain(storyFootnote("SPYx"));
-    // SPYx is the default pick; scroll variables are only written on the client.
-    expect(html).toMatch(/value="SPYx"[^>]*checked|checked[^>]*value="SPYx"/);
-    for (const tag of html.match(/<section[^>]*>/g)!) expect(tag).not.toMatch(/--p:|--q\d:|data-active/);
-  });
-
-  it("scroll story: the pick and the share are shared across chapters", () => {
-    const { container } = render(<StorySection />);
-    fireEvent.click(screen.getByRole("radio", { name: /^NVDAx/ }));
-    expect(container.querySelector("#follow-your-100")!.textContent).toContain("locks in NVDAx");
-    const slider = screen.getByRole("slider", { name: /Floor share/ });
-    fireEvent.change(slider, { target: { value: "60" } });
-    expect(container.querySelector("#follow-your-100")!.textContent).toContain("Raise complete: 60% locks in NVDAx");
-    expect(container.querySelector("#follow-your-100")!.textContent).toContain("$45.06");
-  });
-
-  it("scroll story: chapter 03 shows only percentages", () => {
-    const { container } = render(<StorySection />);
-    expect(container.querySelector("#floor-share")!.textContent).not.toContain("$");
+    expect(html).not.toMatch(/64\.4|65%/);
+    // The story's chip links to the sandbox's floor-share slider.
+    const { container } = render(<LabSection />);
+    const chip = container.querySelector("#follow-your-100 a[href^='#']");
+    expect(chip).not.toBeNull();
+    expect(container.querySelector(chip!.getAttribute("href")!)?.getAttribute("type")).toBe("range");
   });
 
   it("closing call to action links to the app and to create", () => {
@@ -212,33 +202,27 @@ describe("landing sections", () => {
     const k = simConstantsFromSdk();
     for (let v = k.vaultShareMinPct; v <= k.vaultShareMaxPct; v++) {
       const m = launchMath(k, v);
-      for (const s of STAGES) for (const a of QUOTE_ASSETS) texts.push(stageCaption(m, s.key, a.symbol));
+      for (const s of STAGES) texts.push(stageCaption(m, s.key));
       texts.push(storyChartLabel(m));
       for (let t = 0; t <= STORY_END; t += 0.5) texts.push(scrubberValueText(m, storyFrame(m, t)));
+      for (let i = 0; i < FLOW_STOP_COUNT; i++) {
+        const x = flowUsdAt(m, i);
+        texts.push(flowLabel(x), ...Object.values(sandboxReadout(m, x)).filter((o): o is string => typeof o === "string"));
+      }
     }
-    for (const a of QUOTE_ASSETS) texts.push(storyFootnote(a.symbol));
-    texts.push(ILLUSTRATION);
+    texts.push(ILLUSTRATION, STORY_FOOTNOTE);
     for (const t of texts) expect(t.replace("The floor protects from zero, not from loss.", "")).not.toMatch(OVERCLAIM);
   });
 
-  it("keeps the copy short: at most 260 visible words with the story rendered", async () => {
+  it("keeps the copy short: at most 220 visible words with the lab rendered", async () => {
     const { container } = render(await Landing({ source: new MockDataSource(0) }));
     const words = visibleWords(container.querySelector("main")!);
-    expect(words).toBeGreaterThan(100);
-    expect(words).toBeLessThanOrEqual(260);
+    expect(words).toBeLessThanOrEqual(220);
   });
 
-  it("keeps every story step to 12 words or fewer", () => {
-    const { container } = render(<ScrollStory k={simConstantsFromSdk()} />);
-    const steps = container.querySelectorAll("[data-step]");
-    expect(steps.length).toBe(3 + 3 + 3 + 5);
-    for (const step of steps) {
-      const card = step.cloneNode(true) as Element;
-      for (const el of card.querySelectorAll(".sr-only, [data-still], fieldset, input, label, [aria-hidden='true']")) el.remove();
-      for (const p of card.querySelectorAll("p")) {
-        expect(p.textContent!.trim().split(/\s+/).length, p.textContent!).toBeLessThanOrEqual(12);
-      }
-    }
+  it("names SPYx's moving dollar value once", async () => {
+    const { container } = render(<FloorLab k={simConstantsFromSdk()} />);
+    expect(container.textContent!.match(/S&P 500/g)).toHaveLength(1);
   });
 });
 
@@ -249,11 +233,9 @@ describe("<Landing />", () => {
     const main = container.querySelector("main#main");
     expect(main).not.toBeNull();
     const sections = main!.querySelectorAll("section");
-    expect(sections).toHaveLength(8);
+    expect(sections).toHaveLength(6);
     expect([...main!.querySelectorAll("h2")].map((h) => h.textContent)).toEqual([
-      "How it works",
-      "Why stocks",
-      "Floor share",
+      "Set the split",
       "Follow your $100",
       "What the code can't do",
       "Live on Solana mainnet",
@@ -262,19 +244,6 @@ describe("<Landing />", () => {
     for (const s of sections) {
       const id = s.getAttribute("aria-labelledby");
       expect(id && container.querySelector(`#${id}`)).toBeTruthy();
-    }
-    // "Skip the story" jumps over the four chapters to Rules, the first section after them, so the
-    // risk box is never skipped on the way to a buy button.
-    const skip = screen.getByRole("link", { name: "Skip the story" });
-    const target = container.querySelector(skip.getAttribute("href")!);
-    expect(target?.tagName).toBe("SECTION");
-    expect(target!.querySelector("h2")!.textContent).toBe("What the code can't do");
-    expect(target!.querySelector("h2")!.getAttribute("tabindex")).toBe("-1");
-    expect(target!.textContent).toContain("The xStocks issuer can pause, freeze or move vault tokens.");
-    for (const id of ["how-it-works", "why-stocks", "floor-share", "follow-your-100"]) {
-      const chapter = container.querySelector(`#${id}`)!;
-      expect(skip.compareDocumentPosition(chapter) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(chapter.compareDocumentPosition(target!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
     // Mock data is never shown as live: the fallback card renders instead.
     expect(screen.getByText(/See the first vault/)).toBeTruthy();

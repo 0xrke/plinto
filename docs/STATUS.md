@@ -1,15 +1,6 @@
 # Status — 2026-09-25 (ET)
 
 
-## Scroll story review fixes — 2026-10-08 (local, not committed by this step)
-- Fixed from the UX, a11y and honesty review: sticky step cards (captions stay readable on phone and desktop),
-  stage pinned through each chapter's last frame, no page-wide scroll-padding (focus and PageDown fixed),
-  slider no longer above the stage, skip link lands on Rules, asset-neutral issuer line, one payback number at
-  redeem, softer chapter 02 copy. Details in `docs/DECISIONS.md` (2026-10-08).
-- **Tests (2026-10-08):** app tests 490 passed (49 files), three runs, no flakes; `tsc --noEmit` clean; local
-  mock build passes. First-load JS of `/` (gzip, modern, 8 chunks): 147.6 KB; the landing island is 13.2 KB
-  with no SDK, decimal.js or web3.
-
 ## Interactive landing — 2026-10-07 (local, not committed by this step)
 - `/` now has two interactive widgets in one client island: "Set the split" (floor-share and trading sliders,
   depth chart in "your $100") and "Follow your $100" (presale → graduation → trading → selloff → redeem).

@@ -16,19 +16,7 @@ const slabStart = STAGES[1]!.start;
 const xOf = (t: number) => (t / STORY_END) * VB;
 const pctX = (t: number) => (t / STORY_END) * 100;
 
-export function StoryChart({
-  m,
-  frame,
-  floorLabel = "Floor",
-  heightClassName = "h-[210px] lg:h-[300px]",
-}: {
-  m: LaunchMath;
-  frame: StoryFrame;
-  /** The slab's label, e.g. "Floor · NVDAx". */
-  floorLabel?: string;
-  /** Overrides the chart's height (the scroll stage lets it flex; stills are short). */
-  heightClassName?: string;
-}) {
+export function StoryChart({ m, frame }: { m: LaunchMath; frame: StoryFrame }) {
   const gid = useId().replace(/:/g, "");
   // Depends on the launch only; the clock re-renders this ~60 times a second.
   const label = useMemo(() => storyChartLabel(m), [m]);
@@ -41,15 +29,12 @@ export function StoryChart({
   const slabTop = m.floorPer100GrossUsd * frame.floorSlabProgress;
   const redeem = frame.stage === "redeem";
   const head = { left: pctX(frame.t), top: pctY(frame.valueOf100) };
-  // At redeem the head sits on the floor (gross), but the label shows what the floor pays back
-  // after the exit fee: the same figure as the redeem bar, so the frame shows one payback number.
-  const headValue = redeem ? m.floorPer100Usd : frame.valueOf100;
   // Keep the head label inside the plot: flip it left near the right edge, below near the top.
   const labelX = head.left > 78 ? "-translate-x-full -ml-2" : "ml-2";
   const labelY = head.top < 14 ? "mt-2" : "-mt-7";
 
   return (
-    <div role="img" aria-label={label} className={`relative overflow-hidden rounded-tile bg-midnight ${heightClassName}`}>
+    <div role="img" aria-label={label} className="relative h-[210px] overflow-hidden rounded-tile bg-midnight lg:h-[300px]">
       <span
         aria-hidden
         className={`pill pill-sm absolute left-3 top-3 z-10 motion-safe:transition-colors ${
@@ -129,10 +114,10 @@ export function StoryChart({
         </span>
         {slabTop > 0 ? (
           <span
-            className="absolute ml-1.5 whitespace-nowrap pt-0.5 text-[11px] font-bold text-mint"
+            className="absolute ml-1.5 pt-0.5 text-[11px] font-bold text-mint"
             style={{ left: `${pctX(slabStart)}%`, top: `${Math.min(92, pctY(slabTop))}%` }}
           >
-            {floorLabel}
+            Floor
           </span>
         ) : null}
         {frame.stage === "presale" ? (
@@ -148,7 +133,7 @@ export function StoryChart({
           className={`tnum absolute whitespace-nowrap rounded-full bg-tile px-2 py-0.5 text-[12px] font-bold text-white ${labelX} ${labelY}`}
           style={{ left: `${head.left}%`, top: `${head.top}%` }}
         >
-          {formatUsdCents(headValue)}
+          {formatUsdCents(frame.valueOf100)}
         </span>
       </div>
     </div>

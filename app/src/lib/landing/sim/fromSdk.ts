@@ -13,7 +13,7 @@ import {
 import type { SimConstants } from "./types";
 
 /**
- * Server-only: imports the SDK barrel. Only the landing's server component (StorySection) and tests may
+ * Server-only: imports the SDK barrel. Only the landing's server component (LabSection) and tests may
  * import this file; the client island receives the result as props.
  */
 export function simConstantsFromSdk(): SimConstants {

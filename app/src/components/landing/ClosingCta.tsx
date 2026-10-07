@@ -1,13 +1,11 @@
 import Link from "next/link";
 import { LANDING_ROUTES } from "@/lib/landing/routes";
 import styles from "./landing.module.css";
-import { GET_STARTED_ID } from "./scroll/anchors";
 
 // The risk line sits above every buy button (docs/DECISIONS.md, 2026-10-07).
 export function ClosingCta() {
   return (
     <section
-      id={GET_STARTED_ID}
       aria-labelledby="cta-title"
       className={`card-midnight relative overflow-hidden px-6 py-10 sm:px-12 sm:py-14 ${styles.reveal}`}
     >
@@ -21,7 +19,7 @@ export function ClosingCta() {
         <path d="M14 50.5h36v-8l-36 4.5z" fill="#ffffff" stroke="#ffffff" strokeWidth="4" strokeLinejoin="round" />
         <path d="M13.7 37.7L25.1 27.4l8 5.7L50.3 17.1" fill="none" stroke="#ffffff" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      <h2 id="cta-title" tabIndex={-1} className="display relative max-w-[640px] text-[32px] text-white sm:text-[44px]">
+      <h2 id="cta-title" className="display relative max-w-[640px] text-[32px] text-white sm:text-[44px]">
         See your max loss before you buy.
       </h2>
       <div className="relative mt-7 grid gap-3 sm:flex">
