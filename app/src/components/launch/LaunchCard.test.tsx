@@ -16,7 +16,7 @@ describe("<LaunchCard />", () => {
     render(<LaunchCard launch={harbor} />);
 
     const link = screen.getByRole("link", { name: "Harbor Coffee Co-op" });
-    expect(link.getAttribute("href")).toBe(`/t/${harbor.mint}`);
+    expect(link.getAttribute("href")).toBe(`/app/t/${harbor.mint}`);
     expect(screen.getByText("Floor live")).toBeTruthy();
     expect(screen.getByText("$0.00000633")).toBeTruthy();
     expect(screen.getByText("$0.000000528")).toBeTruthy();

@@ -68,7 +68,7 @@ $0.000000515 backed by 0.651763 SPYx (≈ $494.80) in the vault, and the buy but
 
 | [![The create form with its live launch preview](docs/screenshots/create-preview.png)](docs/screenshots/create-preview.png) | [![The list of launches](docs/screenshots/launches.png)](docs/screenshots/launches.png) |
 |---|---|
-| <sub>**`/create`, local mainnet fork, 2026-09-16.** The preview prices the launch before it exists: a $1,000 raise at a 50% vault share opens the market with a floor of $0.0000005 per token, 31.3% of the graduation price, so a buyer at the open can lose at most 68.7%.</sub> | <sub>**The launch list, local mainnet fork, 2026-09-16.** Two presales filling toward their threshold, two graduated tokens with a live floor. Kestrel Outfitters used a 70% vault share, which is why its worst case is −46% and Harbor Roasters' is −72.5%.</sub> |
+| <sub>**`/create` (now `/app/create`), local mainnet fork, 2026-09-16.** The preview prices the launch before it exists: a $1,000 raise at a 50% vault share opens the market with a floor of $0.0000005 per token, 31.3% of the graduation price, so a buyer at the open can lose at most 68.7%.</sub> | <sub>**The launch list, local mainnet fork, 2026-09-16.** Two presales filling toward their threshold, two graduated tokens with a live floor. Kestrel Outfitters used a 70% vault share, which is why its worst case is −46% and Harbor Roasters' is −72.5%.</sub> |
 
 [<img src="docs/screenshots/token-mobile.png" alt="The same token page at phone width" width="260">](docs/screenshots/token-mobile.png)
 
@@ -882,9 +882,10 @@ pnpm --filter @stockfloor/app build:local # production build of the same thing
 hosted on example data or a loopback RPC — see [Deploying the app](app/README.md#deploying-the-app).
 
 Pages:
-- `/`: launch list
-- `/create`: form with a live floor preview
-- `/t/[mint]`: phase stepper, curve trade panel, floor meter, max-loss buy label, redeem panel, vault stats,
+- `/`: landing
+- `/app`: launch list
+- `/app/create`: form with a live floor preview
+- `/app/t/[mint]`: phase stepper, curve trade panel, floor meter, max-loss buy label, redeem panel, vault stats,
   permissionless crank panel and disclosures
 
 Mock data needs no cluster. See [`app/README.md`](app/README.md) for the chain data source, the wallet

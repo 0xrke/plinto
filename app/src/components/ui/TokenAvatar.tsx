@@ -56,6 +56,8 @@ export function TokenAvatar({
         alt=""
         width={size}
         height={size}
+        loading="lazy"
+        decoding="async"
         data-avatar="logo"
         className={`shrink-0 bg-surface object-cover shadow-tile ${ringClass} ${className}`}
         style={{ width: size, height: size, borderRadius: radius }}

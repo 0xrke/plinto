@@ -860,7 +860,7 @@ export function CreateLaunchForm({
         actions={
           submit.status === "done" ? (
             submit.ok && submit.mint ? (
-              <Link href={`/t/${submit.mint}`} className="btn btn-floor">
+              <Link href={`/app/t/${submit.mint}`} className="btn btn-floor">
                 Open the token page
               </Link>
             ) : (

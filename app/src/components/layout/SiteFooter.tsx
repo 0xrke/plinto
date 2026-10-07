@@ -43,7 +43,7 @@ export function SiteFooter() {
               </li>
             ))}
             <li>
-              <Link href="/create" className="link">
+              <Link href="/app/create" className="link">
                 Launch a token
               </Link>
             </li>

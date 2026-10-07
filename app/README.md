@@ -28,7 +28,7 @@ Environment:
 | `NEXT_PUBLIC_SITE_URL` | unset (Vercel's production URL when it is set) | Public origin of the deployment, used as the metadata base for link previews (Open Graph / Twitter card) |
 | `NEXT_PUBLIC_REPO_URL` | unset | Source repository (https). When set, the footer links to the code, `docs/architecture.md` and the README security section; when unset those links are hidden rather than guessed |
 | `NEXT_PUBLIC_LIVE_APP_URL` | unset | The chain-connected deployment. Named by the demo-data banner of a preview build |
-| `NEXT_PUBLIC_DEMO_THRESHOLDS` | unset | `1` switches `/create` to the demo threshold policy: quick picks $50 / $100 / $1,000 (default $1,000) and a $1 minimum (the SDK's `MIN_THRESHOLD_USD`), for cheap demo launches. Unset (or any other value): quick picks $10,000 (default) / $25,000 / $50,000 and a $10,000 minimum. The maximum is $100,000 either way. UI-level only; the program has no USD oracle |
+| `NEXT_PUBLIC_DEMO_THRESHOLDS` | unset | `1` switches `/app/create` to the demo threshold policy: quick picks $50 / $100 / $1,000 (default $1,000) and a $1 minimum (the SDK's `MIN_THRESHOLD_USD`), for cheap demo launches. Unset (or any other value): quick picks $10,000 (default) / $25,000 / $50,000 and a $10,000 minimum. The maximum is $100,000 either way. UI-level only; the program has no USD oracle |
 | `STOCKFLOOR_LOCAL_BUILD` | unset | `1` marks a production build as local (fork or demo data), which is what the deploy guard below asks for |
 | `NEXT_PUBLIC_WS_URL` | RPC port + 1 | WebSocket endpoint, only if it is not the RPC port + 1 |
 | `NEXT_PUBLIC_ALLOW_MAINNET` | unset | First mainnet send switch. Sending through a non-loopback RPC needs `1` here **and** `STOCKFLOOR_ALLOW_MAINNET=1` (checkpoint C2 only), the same two-switch rule as the CLI (`--allow-mainnet` + `STOCKFLOOR_ALLOW_MAINNET=1`). With neither, the app sends only to a loopback surfnet or local validator; with only one, it sends nowhere and says which switch is missing |
@@ -36,7 +36,7 @@ Environment:
 | `NEXT_PUBLIC_PRIORITY_FEE_MICROLAMPORTS` | `100000` on mainnet, `0` locally | Priority fee (micro-lamports per compute unit) on every app transaction: launch (also used for the launch composer's size accounting), trades, redeem and every crank step. Jupiter Ultra swaps set their own |
 | `STOCKFLOOR_RPC_URL` | `NEXT_PUBLIC_RPC_URL` | Server-side RPC for the route handlers (faucet, JSON API) |
 | `STOCKFLOOR_NEXT_DIST_DIR` | `.next` | Build directory, so several builds can coexist in one checkout |
-| `PINATA_JWT` | unset | Server-only. Pinata JWT (scope `pinFileToIPFS`) for the token image upload on `/create` (`/api/upload`). Never use a `NEXT_PUBLIC_` name for it |
+| `PINATA_JWT` | unset | Server-only. Pinata JWT (scope `pinFileToIPFS`) for the token image upload on `/app/create` (`/api/upload`). Never use a `NEXT_PUBLIC_` name for it |
 | `UPLOAD_CLIENT_IP_HEADER` | `x-real-ip` on Vercel, else unset | Server-only. Header the hosting platform sets (and overwrites) with the client address, for the upload rate limit, for example `cf-connecting-ip` behind Cloudflare |
 | `UPLOAD_TRUSTED_PROXY_HOPS` | `1` | Server-only. Proxies in front of the app that append to `x-forwarded-for`; the upload rate limit keys on the hop the outermost of them appended (used when `UPLOAD_CLIENT_IP_HEADER` is unset) |
 | `PINATA_GATEWAY` | `https://gateway.pinata.cloud/ipfs/` | Server-only. https gateway base for the stored image and metadata URIs, for example a dedicated `https://<name>.mypinata.cloud/ipfs/` |
@@ -45,7 +45,7 @@ Environment:
 
 ### Token image upload
 
-`/create` takes an image file (PNG, JPEG, WebP or GIF, at most 1 MB), a description and optional
+`/app/create` takes an image file (PNG, JPEG, WebP or GIF, at most 1 MB), a description and optional
 website / X / Telegram links. On Launch, before any transaction is built, the browser posts them to
 `/api/upload`, which stores the image and then a Metaplex metadata JSON
 (`{ name, symbol, description, image, properties.files, external_url, extensions }`) and returns the
@@ -106,8 +106,9 @@ answers with the same sentence instead of a developer message.
 
 ## Pages and routes
 
-- `/` launches list: phase, progress to graduation, price, floor, max loss, quote asset.
-- `/create` launch form with a live `previewLaunch` preview and an optional creator first buy. Submitting
+- `/` landing page (no app chrome).
+- `/app` launches list: phase, progress to graduation, price, floor, max loss, quote asset.
+- `/app/create` launch form with a live `previewLaunch` preview and an optional creator first buy. Submitting
   runs the SDK launch composer's transactions with step-by-step progress (see below).
   - **Token metadata JSON URL**: the value goes into DBC's `initialize_virtual_pool_with_spl_token` as the
     token `uri` and from there into the immutable Metaplex metadata account, which is what Phantom,
@@ -141,13 +142,15 @@ answers with the same sentence instead of a developer message.
   - Once a launch is on chain — and while a retry is pending, because a retry re-sends the transactions
     built from the original input — every parameter fieldset is disabled, so the preview can never
     promise a floor or a threshold other than the launched one.
-- `/t/[mint]` token page: phase stepper; presale progress and curve trade panel, whose buy button reads
+- `/app/t/[mint]` token page: phase stepper; presale progress and curve trade panel, whose buy button reads
   `Price $X · Floor at graduation (est.) $Y · Max loss if it graduates: −Z%` (there is no floor before
   graduation, and the page says so); after graduation the floor meter, the market panel with the honest buy
   label (`Price $X · Floor $Y · Max loss if you buy now: −Z%`). With an exact quote, X is the buy's average
   price (pool fee and price impact included), so a thin pool does not understate the max loss; the redeem panel and vault stats (which end with the two sentences about where the floor can and cannot move; there is no empty chart card); the permissionless crank panel; disclosures (tracker certificate, issuer controls,
   program upgradeability with the StockFloor upgrade authority read from chain, floor in USD, unaudited) with the non-US
-  attestation on every token page, and on `/create` when the launch includes a first buy (a curve trade in the xStock).
+  attestation on every token page, and on `/app/create` when the launch includes a first buy (a curve trade in the xStock).
+- `/create` and `/t/:mint` (the URLs before the app moved under `/app`) redirect permanently (308) to
+  `/app/create` and `/app/t/:mint` (`src/lib/routeRedirects.ts`), so shared links keep working.
 - `GET /api/launches`, `GET /api/launches/[mint]`: read-only JSON of the same `LaunchSummary` mapping the
   pages use (raw amounts as strings, floor, max loss, buy label, due crank actions).
 - `GET|POST /api/faucet`: local-fork faucet (below).
@@ -280,8 +283,10 @@ e2e/                        local-fork end-to-end driver and page render check (
 - `components/layout/DemoDataBanner.test.tsx`, `components/layout/SiteFooter.test.tsx`: the demo-data
   banner appears only on mock data and can be dismissed; the footer always links the deployed program and
   links the repository documents only when `NEXT_PUBLIC_REPO_URL` is a valid https URL.
-- `app/page.test.tsx`: the home page leads with the quote-asset path (Jupiter routing is named as a
+- `app/app/page.test.tsx`: the launch list page leads with the quote-asset path (Jupiter routing is named as a
   mainnet convenience, not as the headline) and no longer claims a fixed ~$1,000 raise.
+- `components/layout/nav.test.ts`, `lib/routeRedirects.test.ts`: nav highlighting for the `/app`
+  paths, the old-URL redirects, and no source file linking to a pre-`/app` route.
 - `lib/chain/txFlow.test.ts`: the flow reducer (order, single active step, failure, resume, late events,
   discovered steps) and the step runner (phases, earlier completions, on-chain detection, first failure).
 - `lib/data/chainActions.test.ts`: create launch through the real `ConnectionSender` over a fake
@@ -351,7 +356,7 @@ fixes, live Jupiter SPYx price $758.70 at launch. `pnpm e2e:local`: **11 + 4 tes
 |---|---|
 | Guard | loopback RPC, SDK send guard mode `surfnet` (mainnet genesis + `surfnet-version` 1.5.0 + `surfnet_getLocalSignatures`) before any send; `GET /api/faucet` enabled, `/api/launches` source `chain` |
 | Faucet route | 415 for a non-JSON body, 400 for a bad wallet; three wallets got 10 SOL and exactly 500,000,000 raw SPYx |
-| Create launch | two transactions (config + `create_launch`; pool + `register_pool` + first buy of 0.1 SPYx UI), every step done; the app lists "E2E Floor 3bdpk2" / E2EF (mint `3CyMi2YH…zNQgq`) as presale, gentle preset, 50% vault share, 200 bps, image URL; `/`, `/create`, `/t/<mint>` return 200 |
+| Create launch | two transactions (config + `create_launch`; pool + `register_pool` + first buy of 0.1 SPYx UI), every step done; the app lists "E2E Floor 3bdpk2" / E2EF (mint `3CyMi2YH…zNQgq`) as presale, gentle preset, 50% vault share, 200 bps, image URL; `/`, `/create`, `/t/<mint>` return 200 (paths before the app moved under `/app`) |
 | Refusals | USDC buy on the fork → "Routing USDC through Jupiter works on mainnet only…"; redeem in presale → "Redeem opens after migration…"; empty wallet → "Trading needs at least 0.005 SOL… Use the local faucet"; nothing sent |
 | Curve trades | buys of 40,000,000 and 30,000,000 raw SPYx ("Paid 0.40228582 SPYx, received 217,809,165 $E2EF.") and a sell of 21,780,916,499,955 base for 4,190,557 raw: every spent and received amount equals the SDK quote |
 | Crank (presale) | `harvest_curve_fees`; vault increased, partner fee reset to 0 |
@@ -361,7 +366,7 @@ fixes, live Jupiter SPYx price $758.70 at launch. `pnpm e2e:local`: **11 + 4 tes
 | Crank (LP fees) | `harvest_lp_fees` on the claimer position; the vault grew by exactly the pending quote fee |
 | Redeem | 146,854,801,962,294 base → net 9,610,133 raw SPYx, fee 196,126, both equal `previewRedeem`; vault and supply moved by exactly those amounts; floor Q64 1,231,785,098,657 → 1,236,025,751,674; a 1-raw redemption → "This amount is too small: the redemption would pay nothing." |
 | After each step | `/api/launches/[mint]` equals a direct SDK read: vault, supply, quote reserve, SDK phase, floor Q64, due crank actions |
-| Page render (jsdom) | `TokenView`: heading, Graduated badge, the exact buy-label sentence (max loss equal to the route's), vault balance and supply equal to the JSON, redeem field open, local-fork routing note, crank panel consistent with due actions, disclosures; `LaunchList` links the launch to `/t/<mint>` |
+| Page render (jsdom) | `TokenView`: heading, Graduated badge, the exact buy-label sentence (max loss equal to the route's), vault balance and supply equal to the JSON, redeem field open, local-fork routing note, crank panel consistent with due actions, disclosures; `LaunchList` links the launch to `/t/<mint>` (now `/app/t/<mint>`) |
 | UI-driven, default threshold (jsdom) | a faucet-funded keypair wallet filled `CreateLaunchForm` ("UI Form bf1ab", first buy 0.05 SPYx) and clicked Launch: two steps done, "Open the token page" link, and the parameter fieldsets disabled afterwards; on its `TokenView` it ticked the attestation, bought 0.1 SPYx in the curve panel ("Paid 0.1 SPYx, received … $UIFL.") and ran the crank button (curve fees harvested, vault 83,525 raw, nothing left due) |
 | **UI-driven, $50 threshold (jsdom)** | the whole demo through the real components at the C2 threshold: the **$50** quick pick moved the preview off the $1,000 default (threshold row and floor at graduation) and showed the "Meteora's keeper does not migrate the pool for you" note; Launch created "UI $50 bf3kl" / UI50 (mint `896DLBzX…18BSF`) with a first buy of 0.02 SPYx and an on-chain threshold of **6,586,828 raw SPYx ≈ $50.26** at the read price (the $1,000 launches: 131,054,635 and 131,736,542 raw); one 0.2 SPYx curve buy completed the curve ("… The curve completed with this buy; the unused input stayed in your wallet."); the crank button ran the 5-step graduation crank; the page turned into the graduated view (Graduated badge, `Price $… · Floor $… · Max loss if you buy now: −…%`) and a Max redemption paid out with "Received … SPYx. The exit fee of … SPYx stayed in the vault." Afterwards: `phase` graduated, `redeemable` true, `crankDue` [], vault 1,089,548 raw, supply 313,392,654,522,230, floor Q64 61,440,109,317 → **64,132,368,203** (the exit fee raised it) |
 | Mainnet | the flow's 16 app signatures plus the surfnet's local signature list looked up with read-only `getSignatureStatuses` on mainnet: **0 of 27 found** |

@@ -58,7 +58,7 @@ export function LaunchCard({ launch }: { launch: LaunchSummary }) {
   const thresholdUsd = quoteRawToUsd(launch.thresholdQuoteRaw, launch.quote);
   const maxLoss = maxLossFraction(launch.priceUsd, floorUsd);
   const floorLive = status === "floor-live";
-  const href = `/t/${launch.mint}`;
+  const href = `/app/t/${launch.mint}`;
 
   return (
     <article className="card group relative flex min-w-0 sm:min-h-[260px] flex-col overflow-hidden px-6 pt-6 transition-[box-shadow,transform] hover:-translate-y-0.5 hover:shadow-pop">

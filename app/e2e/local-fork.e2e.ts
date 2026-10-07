@@ -216,7 +216,7 @@ describe.sequential("web app on a local Surfpool fork", () => {
     expect(await baseBalance(creator)).toBeGreaterThan(0n);
     const { json } = await expectAppMatchesChain();
     expect(json.progress).toBeGreaterThan(0);
-    for (const page of ["/", "/create", `/t/${mint}`]) {
+    for (const page of ["/", "/app", "/app/create", `/app/t/${mint}`]) {
       const html = await fetch(`${APP}${page}`);
       expect(html.status).toBe(200);
       expect(await html.text()).toContain("Plinto");

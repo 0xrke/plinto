@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ExternalIcon, HomeIcon, InfoIcon, LayersIcon, PlusCircleIcon } from "@/components/ui/icons";
+import { ExternalIcon, InfoIcon, LayersIcon, PlusCircleIcon } from "@/components/ui/icons";
 import { FaucetButton } from "./FaucetButton";
 import { LogoMark } from "./LogoMark";
 import { NetworkPill } from "./NetworkPill";
@@ -10,7 +10,6 @@ import { WalletButton } from "./WalletButton";
 import { NAV, SECONDARY_NAV, activeNav, type NavId } from "./nav";
 
 function NavIcon({ id, active }: { id: NavId; active: boolean }) {
-  if (id === "home") return <HomeIcon solid={active} />;
   if (id === "launches") return <LayersIcon solid={active} />;
   return <PlusCircleIcon solid={active} />;
 }

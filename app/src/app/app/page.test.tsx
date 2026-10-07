@@ -58,9 +58,9 @@ describe("home page", () => {
     const tokenRows = () =>
       within(rail)
         .getAllByRole("link")
-        .filter((r) => r.getAttribute("href")?.startsWith("/t/"));
+        .filter((r) => r.getAttribute("href")?.startsWith("/app/t/"));
     await waitFor(() => expect(tokenRows().length).toBeGreaterThanOrEqual(live.length));
-    expect(new Set(tokenRows().map((r) => r.getAttribute("href")))).toEqual(new Set(live.map((l) => `/t/${l.mint}`)));
+    expect(new Set(tokenRows().map((r) => r.getAttribute("href")))).toEqual(new Set(live.map((l) => `/app/t/${l.mint}`)));
     // Only live floors: no presale estimates or "waiting for migration" rows.
     expect(rail.textContent).not.toMatch(/est\. at graduation|Waiting for/);
   });
@@ -70,7 +70,7 @@ describe("home page", () => {
     const hero = screen.getByRole("region", { name: /Token launches with a stock-backed floor/ });
     const links = within(hero).getAllByRole("link");
     expect(links.map((l) => l.textContent?.trim())).toEqual(["Launch a token"]);
-    expect(links[0]!.getAttribute("href")).toBe("/create");
+    expect(links[0]!.getAttribute("href")).toBe("/app/create");
     expect(within(hero).getByText("The floor protects from zero, not from loss.")).toBeTruthy();
     // The cut blocks stay cut.
     expect(screen.queryByRole("region", { name: "Launches by phase" })).toBeNull();

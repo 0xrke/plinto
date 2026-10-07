@@ -146,7 +146,7 @@ describe("page components render the on-chain launch from the local fork", () =>
       fireEvent.click(launchButton);
     });
     const open = await screen.findByRole("link", { name: "Open the token page" }, { timeout: 90_000 });
-    const uiMint = open.getAttribute("href")!.replace("/t/", "");
+    const uiMint = open.getAttribute("href")!.replace("/app/t/", "");
     expect(screen.getAllByText("(done)")).toHaveLength(2);
     expect(screen.getByText(`Launch created. Mint ${uiMint}`)).toBeTruthy();
     // The parameters are frozen once the launch is on chain, so the preview cannot drift away from it.
@@ -192,7 +192,7 @@ describe("page components render the on-chain launch from the local fork", () =>
 
   /**
    * The whole demo from the UI at the C2 mainnet threshold ($50, docs/research/surfpool-e2e.md §3):
-   * the advanced threshold control on /create, then presale buys, the graduation crank, and a
+   * the advanced threshold control on /app/create, then presale buys, the graduation crank, and a
    * redemption, all through the real components.
    */
   it("UI-driven at the $50 threshold: create, complete the curve, crank to graduation, redeem", async () => {
@@ -233,7 +233,7 @@ describe("page components render the on-chain launch from the local fork", () =>
       fireEvent.click(launchButton);
     });
     const open = await screen.findByRole("link", { name: "Open the token page" }, { timeout: 90_000 });
-    const uiMint = open.getAttribute("href")!.replace("/t/", "");
+    const uiMint = open.getAttribute("href")!.replace("/app/t/", "");
     form.unmount();
     window.localStorage.clear();
 
@@ -315,6 +315,6 @@ describe("page components render the on-chain launch from the local fork", () =>
       </App>,
     );
     const link = await screen.findByRole("link", { name }, { timeout: 30_000 });
-    expect(link.getAttribute("href")).toBe(`/t/${mint}`);
+    expect(link.getAttribute("href")).toBe(`/app/t/${mint}`);
   });
 });

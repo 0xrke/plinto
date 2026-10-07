@@ -567,3 +567,27 @@ Format: **decision** · alternatives · why. These supersede the matching bullet
   amount typed; before graduation it uses the estimated floor at graduation, as before.
 - Kept rather than removed: the floor and its max loss are the product's point, and a buyer cannot
   work them out from the page alone.
+
+## 2026-10-07 — Landing page at `/`, the app under `/app`
+- Founder request: `/` becomes a landing page; the app moves under `/app`. Routes: `/app` (launch list,
+  title "Launches"), `/app/create`, `/app/t/[mint]`. `/waitlist` and `/api/*` stay where they are.
+- `/` is bare like `/waitlist` (no sidebar, header or EnvStrip), so the landing carries its own short
+  disclaimers, footer and a link to `/app`. The wallet/React Query providers and the app shell moved from
+  the root layout into `app/src/app/app/layout.tsx`, so `/`, `/waitlist` and the 404 page ship no wallet
+  or web3 client code (the old pathname-based `isBareRoute` switch is gone). The 404 page renders under
+  the root layout only, so it has its own window and links to `/` and `/app`.
+- `/` is a server component with `revalidate = 60`: live floors are read on the server (2.5 s timeout,
+  never mock data), cached for a minute.
+- Old links keep working: `/create` and `/t/:mint` redirect permanently (308) to their `/app` paths
+  (`app/src/lib/routeRedirects.ts`, wired in `next.config.ts`). Old `/#launches` bookmarks land on the landing.
+- Nav: the logo goes to `/`; the items are Launches (`/app`) and Create (`/app/create`); "Home" is gone.
+  "How it works" points to `/app#how-it-works`. A unit test fails if a source file links to a pre-`/app` route.
+- Landing content, one idea per section: hero ("Token launches with a floor"), where a $10,000 raise goes
+  (README default split), what the program can't do (scoped to today's code; the upgrade key is named right
+  under it), the worst case in dollars ($100 at the open redeems for $34.88, no max-loss percentage, which
+  would clash with the app's 64.4%), live floors, closing call to action. Motion is CSS scroll-driven only.
+- Live data: only a `chain` source can fill "Floors live now" (top 3 live floors by vault). With mock data,
+  an RPC error or the 2.5 s timeout, the section is titled "Live on Solana mainnet" and links the SFDEMO
+  vault on Solscan instead, so the heading never promises cards it does not show.
+- The root title and description (`lib/siteMeta.ts`) are the landing's, so its meta, Open Graph and Twitter
+  texts agree. The canonical is set only when a site URL is known.

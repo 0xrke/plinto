@@ -27,7 +27,7 @@ export interface QuoteMarket {
 }
 
 export interface LaunchSummary {
-  /** Base token mint; also the route key for /t/[mint]. */
+  /** Base token mint; also the route key for /app/t/[mint]. */
   mint: string;
   /** Launch PDA of the stockfloor program (["launch", config]). */
   launchAddress: string;

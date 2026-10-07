@@ -53,7 +53,7 @@ function DemoNotice() {
           <>
             {" "}
             Live app:{" "}
-            <a href={LIVE_APP_URL} className="link underline">
+            <a href={new URL("/app", LIVE_APP_URL).href} className="link underline">
               {LIVE_APP_URL.replace(/^https?:\/\//, "")}
             </a>
           </>
@@ -122,7 +122,7 @@ export function LaunchList() {
       ) : launches.length === 0 ? (
         <div className="card flex flex-col items-center p-10 text-center text-sm text-ink-2">
           <p className="card-title text-lg text-ink">No launches yet.</p>
-          <Link href="/create" className="btn btn-primary mt-5">
+          <Link href="/app/create" className="btn btn-primary mt-5">
             <PlusCircleIcon size={18} />
             Launch a token
           </Link>

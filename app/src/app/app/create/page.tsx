@@ -16,7 +16,7 @@ export default function CreatePage() {
           <nav aria-label="Breadcrumb">
             <ol className="flex items-center gap-2 text-[15px] text-ink-3">
               <li>
-                <Link href="/#launches" className="hover:text-ink">
+                <Link href="/app#launches" className="hover:text-ink">
                   Launches
                 </Link>
               </li>

@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import { PHASE_PRODUCTION_BUILD } from "next/constants";
 import { assertDeployableProductionBuild } from "./src/lib/deployGuard";
+import { routeRedirects } from "./src/lib/routeRedirects";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -14,6 +15,8 @@ const nextConfig: NextConfig = {
   distDir: process.env.STOCKFLOOR_NEXT_DIST_DIR || ".next",
   // `next dev` would otherwise write AGENTS.md / CLAUDE.md into app/ (also gitignored).
   agentRules: false,
+  // Old URLs from shared links keep working after the app moved under /app.
+  redirects: async () => routeRedirects(),
 };
 
 /**

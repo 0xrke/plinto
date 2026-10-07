@@ -30,7 +30,7 @@ build brief (§12).
       (https://solscan.io/account/98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA) and the demo launch
       **StockFloor Demo (SFDEMO)** completed its whole lifecycle. The upgrade authority is still held; whether to
       revoke it is the user's decision at C3.
-- [ ] **Demo launch: threshold $50 in SPYx, created in the app.** `/create` has a "Graduation threshold
+- [ ] **Demo launch: threshold $50 in SPYx, created in the app.** `/app/create` has a "Graduation threshold
       (advanced)" fieldset with a **$50** quick pick, so scene 2 is recorded entirely in the app — no terminal
       shot. The whole lifecycle at $50 has been driven through the real components on a local fork
       (`app/e2e/render.e2e.tsx`, "UI-driven at the $50 threshold": create → completing buy → graduation crank
@@ -102,8 +102,8 @@ build brief (§12).
 
 | | |
 |---|---|
-| **Screen** | `/`, the home page. Hero headline "Token launches with a floor in tokenized S&P 500" |
-| **Actions** | 1. Hold on the hero for 3 s. 2. Slow scroll to the "How it works" card (Presale on a bonding curve → Graduation → Free market with a floor). |
+| **Screen** | `/`, the landing page. Hero headline "Token launches with a floor", then **Open app** to `/app`, the launch list |
+| **Actions** | 1. Hold on the hero for 3 s. 2. Click **Open app**, then slow scroll on `/app` to the "How it works" card (Presale on a bonding curve → Graduation → Free market with a floor). |
 | **Voiceover** | "Most tokens go to zero. What if the money raised became a floor in the S&P 500? StockFloor is a launchpad on Meteora's Dynamic Bonding Curve where every token gets a hard floor in tokenized stocks from day one — and that floor only ever moves up." |
 | **Overlay** | Lower third, 2 s: "Not for US persons · Unaudited hackathon code" |
 | **Proof** | — |
@@ -112,7 +112,7 @@ build brief (§12).
 
 | | |
 |---|---|
-| **Screen** | Click **"Launch a token"** (or **Create** in the header) to open `/create` |
+| **Screen** | Click **"Launch a token"** (or **Create** in the header) to open `/app/create` |
 | **Actions** | 1. **Name:** `StockFloor Demo`, **Symbol:** `SFDEMO` (a clearly fictional demo token). 2. **Quote asset:** keep **SPYx** and point at its "calm" tag. 3. **Curve preset:** **Gentle**. 4. Drag **"Share of the raise locked in the floor vault"** from 50% to 70%, then back to 50%. Keep the right-hand preview in frame: "Floor at graduation", "Floor vs graduation price", "Max loss at graduation price". 5. Open **"Graduation threshold (advanced)"** and click the **$50** quick pick; the whole preview follows it. 6. Point at **Fixed terms**: Exit fee 2%, Curve trading fee 1%, Team allocation None, **Your share of the raise None**, and the line under them ("This is not a fundraising round…"). 7. Click **"Launch token"** and approve in the wallet, then cut to the new token page. |
 | **Expected preview values** | From the SDK formula `floor / price = f / (√r + 1 − f)`. Gentle at 50%: floor ≈ 31% of the graduation price, max loss ≈ 69%. Gentle at 70%: ≈ 50% and ≈ 50%. If the app shows something else, stop and report it. |
 | **Voiceover** | "A creator launches a token quoted in SPYx, on a gentle IPO-style curve. They choose how much of the raise becomes the floor: at fifty percent, the preview shows the floor at graduation and the maximum loss for a buyer at the opening price. No team allocation, no free tokens — and no share of the raise for the creator either. It all goes to the vault and to locked liquidity." |
@@ -122,7 +122,7 @@ build brief (§12).
 
 | | |
 |---|---|
-| **Screen** | `/t/<mint>`, the token page. Phase stepper on **Presale** |
+| **Screen** | `/app/t/<mint>`, the token page. Phase stepper on **Presale** |
 | **Actions** | 1. Scroll to **Disclosures** and tick "I confirm that I am not a US person…". Scroll back up. 2. In **"Trade on the curve"**, choose **Buy**, keep "Pay with" on **SPYx**, enter an amount and click the buy button (its label reads `Price $X · Floor at graduation (est.) $Y · Max loss if it graduates: −Z%`). Approve. 3. Cut to the second buyer wallet (pre-staged) that buys again. 4. Show **"Progress to graduation"** filling, plus "Floor at graduation (est.)" and "Vault at graduation". |
 | **Voiceover** | "Buyers pay in SPYx, tokenized S&P 500, straight into the bonding curve. The raise stays in SPYx inside the DBC pool — nobody can take it out, and while the curve is still filling a buyer can sell back into it at close to what they paid. The partner share of every trading fee is already flowing into this token's vault." |
 | **Also say it, over the progress bar** | "That changes the moment the curve fills, and anyone can fill it: from then on the cover is the floor, about a third of the opening price at these settings." |

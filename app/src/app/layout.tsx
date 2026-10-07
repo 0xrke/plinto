@@ -3,9 +3,7 @@ import type { ReactNode } from "react";
 import localFont from "next/font/local";
 import "./globals.css";
 import { SITE_URL } from "@/lib/config";
-import { AppProviders } from "@/components/providers/AppProviders";
-import { AppShell } from "@/components/layout/AppShell";
-import { SiteFooter } from "@/components/layout/SiteFooter";
+import { SITE_DESCRIPTION, SITE_TITLE } from "@/lib/siteMeta";
 
 // Self-hosted variable fonts, so a build never waits on a font host.
 const display = localFont({
@@ -21,9 +19,9 @@ const sans = localFont({
   display: "swap",
 });
 
-const TITLE = "Plinto · Launches with a floor in tokenized stocks";
-const DESCRIPTION =
-  "A token launchpad on Meteora DBC where the raise becomes a redeemable floor backed by tokenized S&P 500.";
+// The landing at "/" uses the same strings, so its meta, Open Graph and Twitter texts agree.
+const TITLE = SITE_TITLE;
+const DESCRIPTION = SITE_DESCRIPTION;
 
 export const metadata: Metadata = {
   // Without a base, a shared link previews as a blank card (the OG image cannot be made absolute).
@@ -45,15 +43,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${display.variable} ${sans.variable}`}>
       <body className="min-h-dvh flex flex-col">
-        <AppProviders>
-          <a
-            href="#main"
-            className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-xl focus:bg-surface focus:px-4 focus:py-2.5 focus:font-semibold focus:shadow-pop"
-          >
-            Skip to content
-          </a>
-          <AppShell footer={<SiteFooter />}>{children}</AppShell>
-        </AppProviders>
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-xl focus:bg-surface focus:px-4 focus:py-2.5 focus:font-semibold focus:shadow-pop"
+        >
+          Skip to content
+        </a>
+        {/* The app's providers and window live in app/app/layout.tsx; "/" and /waitlist render bare. */}
+        {children}
       </body>
     </html>
   );

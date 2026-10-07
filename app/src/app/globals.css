@@ -494,7 +494,7 @@
     font-size: 0.8125rem;
     color: var(--color-ink-3);
   }
-  /* Bordered white text input (forms on /create). */
+  /* Bordered white text input (forms on /app/create). */
   .input {
     width: 100%;
     border-radius: 16px;

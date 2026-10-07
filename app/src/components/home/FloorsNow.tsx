@@ -43,7 +43,7 @@ export function FloorsNow() {
           {rows.map((launch) => (
             <li key={launch.mint}>
               <Link
-                href={`/t/${launch.mint}`}
+                href={`/app/t/${launch.mint}`}
                 className="-mx-2 flex min-h-14 items-center gap-3.5 rounded-soft px-2 py-1.5 transition-colors hover:bg-cloud"
               >
                 <TokenAvatar symbol={launch.symbol} imageUrl={launch.imageUrl} size={48} />

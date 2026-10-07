@@ -4,7 +4,7 @@ import { useAttestation } from "@/lib/attestation";
 
 /**
  * The non-US self-attestation (brief: eligibility control). One shared state for the whole app, so
- * ticking it on a token page or on /create applies everywhere.
+ * ticking it on a token page or on /app/create applies everywhere.
  */
 export function AttestationCheckbox({ className = "" }: { className?: string }) {
   const { attested, setAttested } = useAttestation();

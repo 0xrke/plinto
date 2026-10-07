@@ -6,7 +6,7 @@ import { LogoMark } from "@/components/layout/LogoMark";
 
 export const metadata: Metadata = {
   // Absolute: this page stands on its own, without the app's title template behind it.
-  title: { absolute: "Plinto — token launches with a floor" },
+  title: { absolute: "Plinto · Join the waitlist" },
   description:
     "Token launches with a floor: part of every raise is locked in tokenized stocks and any holder can redeem against it.",
 };
@@ -67,7 +67,7 @@ export default function WaitlistPage() {
             <NetworkPill className="flex h-9 px-3.5 text-[12px] lg:hidden" />
           </nav>
 
-          <main className="flex flex-col py-10 sm:py-14 lg:my-auto lg:py-12">
+          <main id="main" className="flex flex-col py-10 sm:py-14 lg:my-auto lg:py-12">
             <h1 className="max-w-[600px] font-display text-[46px] font-extrabold leading-[1.02] tracking-[-0.04em] text-ink sm:text-[64px] sm:leading-none xl:text-[78px]">
               Token launches with a <FloorWord />
             </h1>

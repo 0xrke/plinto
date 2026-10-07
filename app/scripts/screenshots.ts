@@ -35,7 +35,7 @@ const TIMEOUT = 45_000;
 
 /** The exact sentence the graduated buy button must read. Anything else is a bug, not a screenshot. */
 const BUY_LABEL = /^Price \$[\d.,]+ · Floor \$[\d.,]+ · Max loss if you buy now: (−[\d.]+|0)%$/;
-/** What the form fills in for the /create shot; nothing is submitted. */
+/** What the form fills in for the /app/create shot; nothing is submitted. */
 const CREATE_FORM = {
   name: "Meridian Cycles",
   symbol: "MRDC",
@@ -176,7 +176,7 @@ async function shot(page: Page, name: string): Promise<void> {
 }
 
 async function tokenPage(page: Page, launch: LaunchJson, label: string): Promise<void> {
-  await goto(page, `/t/${launch.mint}`);
+  await goto(page, `/app/t/${launch.mint}`);
   await page.getByRole("heading", { level: 1, name: launch.name }).waitFor();
   await settled(page);
   await page.locator('figure[aria-label="Floor meter"]').waitFor();
@@ -214,9 +214,9 @@ async function main(): Promise<void> {
     await shot(page, "token-graduated.png");
     await page.context().close();
 
-    // b. /create with the live preview panel (floor at graduation).
+    // b. /app/create with the live preview panel (floor at graduation).
     page = await open(browser, DESKTOP);
-    await goto(page, "/create");
+    await goto(page, "/app/create");
     await settled(page);
     await page.getByLabel("Name").fill(CREATE_FORM.name);
     await page.getByLabel("Ticker").fill(CREATE_FORM.symbol);
@@ -225,17 +225,17 @@ async function main(): Promise<void> {
     const floorPreview = page.locator("section[aria-labelledby='preview-heading']");
     await floorPreview.getByText(/^\$[\d.,e−+-]+$/).first().waitFor();
     await settled(page);
-    await assertNoPlaceholders(page, "/create");
-    await assertLocalFork(page, "/create");
+    await assertNoPlaceholders(page, "/app/create");
+    await assertLocalFork(page, "/app/create");
     await scrollToTop(page);
     await shot(page, "create-preview.png");
     await page.context().close();
 
     // c. the launches list.
     page = await open(browser, DESKTOP);
-    await goto(page, "/");
+    await goto(page, "/app");
     await settled(page);
-    const cards = page.locator('#launches a[href^="/t/"]');
+    const cards = page.locator('#launches a[href^="/app/t/"]');
     await cards.first().waitFor();
     if ((await cards.count()) < launches.length)
       fail(`the list shows ${await cards.count()} of ${launches.length} launches`);

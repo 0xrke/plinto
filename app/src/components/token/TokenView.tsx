@@ -120,7 +120,7 @@ export function TokenView({ mint }: { mint: string }) {
             <p className="mt-3 break-all text-sm text-ink-2">
               No Plinto launch uses the mint <span className="font-mono">{mint}</span>.
             </p>
-            <Link href="/" className="btn btn-primary mt-6">
+            <Link href="/app" className="btn btn-primary mt-6">
               <ChevronLeftIcon />
               Back to launches
             </Link>

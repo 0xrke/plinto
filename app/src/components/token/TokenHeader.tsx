@@ -39,7 +39,7 @@ export function TokenHeader({ launch }: { launch: LaunchSummary }) {
       <nav aria-label="Breadcrumb">
         <ol className="flex min-h-11 items-center gap-1.5 text-sm font-semibold text-ink-2 sm:font-medium">
           <li>
-            <Link href="/#launches" className="inline-flex min-h-11 items-center gap-1 hover:text-ink">
+            <Link href="/app#launches" className="inline-flex min-h-11 items-center gap-1 hover:text-ink">
               <ChevronLeftIcon size={14} className="sm:hidden" />
               Launches
             </Link>

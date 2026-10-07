@@ -189,7 +189,7 @@ export function PhaseChart() {
         className="block h-[150px] w-full"
         fill="none"
         role="img"
-        aria-label="A price that moves above a floor which appears when the market opens and then only rises"
+        aria-label="A price that moves above a floor which appears when the market opens and then never falls in SPYx"
       >
         <defs>
           <linearGradient id="priceFade" x1="0" y1="0" x2="0" y2="1">
