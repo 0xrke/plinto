@@ -422,7 +422,7 @@ reports the same units ([`research/surfpool.md`](research/surfpool.md)).
 | DBC `create_config` (SPYx + badge) | 31,482 | 50,000 |
 | DBC `initialize_virtual_pool_with_spl_token` | 111,229–117,238 | 150,000 |
 | `create_launch` (v3, also creates up to three quote ATAs) | ≤ 163,053 | 200,000 |
-| `register_pool` | 7,282 | 20,000 |
+| `register_pool` (reads the base mint's metadata, no PDA derivation; not deployed yet) | 10,360–12,065 | 20,000 |
 | DBC `swap2` curve buy / sell / PartialFill completion | 33,626–38,317 | 60,000 |
 | `harvest_curve_fees` (v3, creates the claimer base ATA) | ≤ 91,276 | 120,000 |
 | `harvest_curve_fees` (v3) | ≤ 59,180 | 85,000 |
@@ -499,6 +499,10 @@ itself enforces the token badge, the fee minimum (0.25%), the curve shape and th
 | `base_mint.decimals == config.token_decimal` | `BaseMintDecimalsMismatch` |
 | `mint_authority == None` | `BaseMintAuthorityNotRevoked` |
 | `freeze_authority == None` | `BaseMintHasFreezeAuthority` |
+| `base_mint_metadata` (account 5, appended) = Metaplex metadata of `base_mint` (its PDA; the address is not re-derived), owned by Token Metadata, key `MetadataV1`, mint field = `base_mint`, name ≤ 32 and symbol ≤ 10 bytes within the data | `InvalidTokenMetadata` |
+| Name and symbol do not imitate the brand (`reserved_names`, see `docs/DECISIONS.md` 2026-10-07) | `ReservedTokenName` |
+
+The two metadata rows are in the source but not in the mainnet program yet (the upgrade needs the founder's OK).
 
 ### 4.3 Quote-asset and vault checks, shared by the quote-moving instructions
 

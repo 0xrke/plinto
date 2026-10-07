@@ -413,3 +413,140 @@ Format as above: **decision** · alternatives · why. D1–D13 refer to the impl
 - **Crank labels are version-neutral** ("Harvest the migration fee"); the per-action detail line says who is paid
   (vault / platform / creator amounts for v3, "to the vault" for v2).
 
+
+## 2026-10-07 — Create form: image upload and reserved names (app)
+
+Format: **decision** · alternatives · why.
+
+- **Server builds and stores the metadata JSON.** `/api/upload` takes the image and the text fields in one multipart
+  post, stores the image, then a Metaplex JSON pointing at it, and returns the JSON URI. · Browser builds the JSON ·
+  The server controls the shape and re-checks every field (reserved names included); one round trip.
+- **Pinata through legacy `pinning/pinFileToIPFS`, JSON pinned as `metadata/metadata.json`.** · v3 `uploads/v3/files`
+  · v3 takes no folders, so a JSON URI would be an extension-less CID; `isJsonMetadataUri` and most indexers only read
+  a URI as JSON when the path ends in `.json`. The JWT needs only the `pinFileToIPFS` scope. Not exercised against
+  live Pinata yet (no JWT in this repo); covered by tests with fetch mocked.
+- **Local fallback** in `app/.uploads` for `next dev` or `STOCKFLOOR_LOCAL_BUILD=1`; otherwise 501 and the form opens
+  "Advanced: use my own metadata URL". Its `http://localhost` URIs are accepted by `lib/chain/metadata` only while the
+  app runs against a local RPC, and only for loopback hosts.
+- **Upload once per set of values.** The URI is cached by name, ticker, description, links and file identity, so
+  "Retry from the failed step" re-sends the same URI; nothing is uploaded when there is no image, description or
+  link (the URI stays empty), or when the own URL is filled (it wins).
+- **Route limits:** magic-byte sniffing (PNG, JPEG, WebP, GIF; no SVG), image 1 MiB, body 1 MiB + 32 KiB (streamed
+  cap), JSON 8 KiB, URI 200 bytes, same-origin check on browser posts, 10 uploads / 10 min / IP in memory. Description
+  500 characters; links https, X on x.com / twitter.com, Telegram on t.me / telegram.me. Links go to `external_url`
+  (website) and `extensions`.
+- **Reserved names in the form:** shown while typing (no blur needed), submit disabled; same SDK rule
+  (`isReservedTokenName`) checked per field and again on the server.
+- **Ticker** is the field label (was "Symbol"); the e2e and screenshot scripts follow.
+
+## 2026-10-07 — Reserved token names, enforced on chain in `register_pool` (not deployed)
+
+Format: **decision** · alternatives · why.
+
+- **Rule.** A token whose name or symbol imitates the brand "Plinto" can never be registered. Each Unicode scalar
+  value is folded through a fixed confusables table to a lowercase ASCII skeleton (l-class {i, l, 1, |, !} → l,
+  0 → o, separators, zero-width characters, combining marks and unknown scripts dropped); the token is reserved when
+  the skeleton of the name or of the symbol contains `pllnt`. Rust (`programs/stockfloor/src/reserved_names.rs`) and
+  TypeScript (`packages/sdk/src/reservedNames.ts`) run the same vector files
+  (`packages/sdk/test/fixtures/{reserved-names,name-skeletons}.json`, loaded by `include_str!` and vitest), so they
+  cannot drift. · A plain case-insensitive substring · Homoglyphs, fullwidth forms, zero-width characters and
+  separators would pass.
+- **Table beyond the brief's minimum:** accented Latin (PLÍNTO, PŁINTO), small capitals (ᴘʟɪɴᴛᴏ), circled letters,
+  mathematical bold/italic letters and digits (𝐏𝐋𝐈𝐍𝐓𝐎), extra l look-alikes (ǀ ℓ Ⅰ ⅰ ⅼ Ӏ), accented Greek. Each
+  closes a real way around the rule. Not case-symmetric for Greek (μ→u, Μ→m; ν→v, Ν→n), as the brief set it.
+- **Collateral accepted:** anything containing "plint" after folding is blocked, e.g. "Splinter", "PLINT", "PL1NT".
+- **Where: `register_pool`.** It is the one step every floor-backed launch passes, and DBC creates the base mint's
+  Metaplex metadata in the same transaction (tx2), immutable (the config requires `TokenUpdateAuthorityNotImmutable`),
+  so one check is final. `create_launch` cannot see the name (it only commits the base mint). A reserved name reverts
+  tx2 as a whole (no pool, mint or metadata); the creator can retry tx2 with another name and the same base mint.
+  · Check in `create_launch` (no name there yet) · A separate instruction (one more thing a client can skip).
+- **New account `base_mint_metadata` appended last** (account 5). Checks, fail-closed, after every existing pool and
+  mint check: address = PDA `["metadata", metadata program, base_mint]`, owner = Metaplex Token Metadata, key byte
+  = MetadataV1 (4), mint field = base mint, name length ≤ 32 and symbol length ≤ 10 within the data; else
+  `InvalidTokenMetadata` (6067). A reserved name or symbol is `ReservedTokenName` (6066). Both appended to
+  `StockfloorError`, nothing renumbered. The stored fields are read whole (the `\0` padding is dropped by the
+  skeleton); invalid UTF-8 is decoded lossily (each invalid subpart dropped, like `TextDecoder`), which can only
+  join neighbouring letters, never split an ASCII hit.
+- **Compute:** `register_pool` now derives a PDA, 10.8k-14.1k CU before the bump search depending on the name (was
+  7.4k); max 29,055 measured over 320 random keys. `CU_LIMITS.registerPool` 20,000 → 40,000 (same ~16-iteration
+  bump margin as the other searching instructions); tx2's limit 170,000 → 190,000. tx2 grows by 1 byte (the
+  metadata PDA is already in DBC's account list): typical 886, first buy 1,035, worst case 1,190 ≤ 1,232. The
+  confusables table is sorted and binary-searched, so names in other scripts do not cost a linear scan per character.
+- **Bypass by skipping registration.** Anyone can create a DBC pool with a reserved name on a launch's config and
+  never call `register_pool`; DBC does not check names, so that pool trades on Meteora. It can never be registered,
+  so every harvest, `sync_migration` and `redeem` fail with `PoolNotRegistered`, and the partner fees, migration fee
+  and surplus stay in DBC (only the claimer PDA can claim them). The on-chain guarantee is therefore "no
+  floor-backed Plinto launch", not "no Plinto-named DBC pool". The SDK crank reads the name of an unregistered
+  launch (`LaunchState.reservedName`) and plans only `burn_claimer_base` for it. The app should hide such launches
+  (separate task).
+- **Client side:** `validateTokenMetadata` adds `RESERVED_NAME_MESSAGE`, so `buildLaunchTransactions` throws
+  `LaunchInputError` before tx1 (otherwise tx1 would create a launch whose tx2 always reverts).
+- **Backward compatibility (Anchor 1.0.2):** the new SDK (6 accounts) works against the deployed program, which
+  ignores the extra account. A client built before the change (5 accounts) fails against the new program with
+  `AccountNotEnoughKeys` (3005). Rollout order: SDK, app and crank first, then the program upgrade.
+- **Not deployed.** The mainnet program is unchanged. Upgrading it is a program deploy and needs the founder's OK
+  (hard stop / C2); until then the rule is enforced only by the SDK and the app.
+
+## 2026-10-07 — Token page price chart and simplified layout
+
+- **Source:** the pools' own swap events. DBC and DAMM v2 emit them as self-CPI inner instructions (tag + discriminator +
+  Borsh body); the server reads `EvtSwap2` / `EvtSwap2WithTransferHook` (DBC) and `EvtSwap2` (DAMM v2), choosing the
+  layout by program id (both share one discriminator), ignoring DBC's `EvtSwap` (it would double-count), and keeping
+  only events of the launch's pools. Price = `next_sqrt_price`. No indexer, no third-party price API.
+- **Bounded RPC work** (`app/src/lib/chart/history.ts`, route `/api/chart/[mint]`): at most 1,000 signatures per pool
+  (incremental `until`), 200 `getTransaction` calls per refresh at concurrency 4, no new fetch after 8 s, 1,000
+  events per pool, 30 s response cache plus in-flight dedupe, pool histories LRU-capped at 200; the DBC history is
+  frozen once migrated and fully fetched. Older history beyond the caps is marked `partial`. An RPC failure still
+  returns a flat line at the current price (5 s cache).
+- **Units:** the chart is in USD at today's quote price (quote per token × multiplier × quote USD price), so a move
+  in the stock moves the whole line, consistent with the rest of the page.
+- **Display:** lightweight-charts 5 (Apache-2.0, attribution logo kept as its license asks), client-only. Area line
+  below 30 trades, candles from 30 with a 15m / 1h / 1D toggle; the live floor is a dashed line on graduated
+  launches. Mock data gets a deterministic synthetic series.
+- **Token page:** header carries price and market cap; explanations (phase stepper, graduation steps, curve, vault
+  details) live in one collapsed "How it works"; risk disclosures are collapsed with one visible line; the
+  eligibility checkbox moved under the buy button; the crank panel is collapsed unless a step blocks graduation or
+  the harvest.
+
+## 2026-10-07 — Review fixes: reserved names, upload abuse, chart, page density
+
+Format: **decision** · alternatives · why. These supersede the matching bullets of the three sections above.
+
+- **Bidi controls reserve a name.** A name or symbol holding U+061C, U+200E/200F, U+202A..202E or U+2066..2069 is
+  reserved outright (`ReservedTokenName`), in Rust and TS. "‮OTNILP" registered on the fork and renders as
+  PLINTO. · Also matching the reversed skeleton `tnllp` · It misses mixed orders ("P‮OTNIL"); no token name
+  needs a bidi control.
+- **Confusables table generated, not hand-written.** `scripts/gen-reserved-confusables.py <confusables.txt>` writes
+  the Rust and TS tables between markers from (1) the hand-picked look-alikes the brief names, (2) NFKD
+  compatibility forms (precomposed accents, math Greek, letterlike ℐℒℕℙ, Roman numeral Ⅼ, modifier ᴾᴸᴵᴺᵀᴼ,
+  superscripts, …) and (3) Unicode `confusables.txt` (Lisu ꓑꓡꓲꓠꓔꓳ, Cherokee, Runic ᛁ, ɩ Ɩ ׀ ∣ │, …), plus
+  block rules for parenthesized, squared and negative circled/squared letters. Generated entries are kept only when
+  they fold to a brand letter (p l n t o a): any other look-alike is dropped, which can only join neighbours into a
+  hit, never hide one, and keeps the table at 597 ranges (the `.so` grew by 5.7 KB). An SDK test parses the Rust
+  table and asserts it equals the TS one. · Hand-extending the table · It missed whole scripts and styles.
+- **No metadata PDA derivation in `register_pool`.** Owner = Token Metadata, key byte = MetadataV1 and the stored
+  mint already pin the canonical account (Metaplex creates MetadataV1 only at the PDA). Dropping
+  `find_program_address` removes the bump search: 10,360-12,065 CU measured for the costliest 32-byte names, so
+  `CU_LIMITS.registerPool` goes back to 20,000 and tx2 to 170,000.
+- **Upload route abuse.** The client address is the `x-forwarded-for` hop appended by the trusted proxy (right-most
+  by default, `UPLOAD_TRUSTED_PROXY_HOPS` for more proxies) or a platform header (`UPLOAD_CLIENT_IP_HEADER`;
+  `x-real-ip` on Vercel), never the client's first hop. The limiter adds a global budget (200 uploads / 10 min per
+  instance) as the backstop for hosts where no header is trustworthy, and a 10,000-key cap swept at most once per
+  window. Images are parsed structurally (PNG chunks to IEND, JPEG segments and scans to EOI, GIF blocks to the
+  trailer, WebP RIFF size and chunks) with no trailing bytes and at most 4096×4096 px. · Re-encoding with sharp ·
+  A native dependency for a 1 MiB logo; the parse already stops payloads riding behind a header.
+- **Chart.** A failed history fetch says "History unavailable" (not "No trades yet"); times are shifted to the
+  viewer's wall clock so ticks, crosshair and daily candles follow local midnight; no negative or float-noise axis
+  labels; the floor line carries its value in the title, rounded like the page, with no axis label; the TradingView
+  logo moved out of the plot to a "Charts by TradingView" link under the chart; the canvas has a `role="img"` label.
+  History: the pending backlog is capped at `maxSignatures` and a transaction still missing after 3 fetches is given
+  up (marked capped), so a migrated DBC history can become final; unknown mints are cached for 60 s (1,000 entries)
+  and the 404 carries `s-maxage=60`.
+- **Less repetition on the token and create pages.** Graduated: the floor meter alone shows floor, price and share at
+  risk (the three tiles went), the buy and presale panels drop their max-loss row (the mandated button sentence is
+  that figure), the redeem card drops its ratio ring. Presale: no closed Redeem card, one graduating notice
+  ("Trading and redemption open after migration"), "migration" used throughout. "Floor per $100" is the one label
+  and always says it is after the exit fee. The create preview is no longer one big live region (one sr-only status
+  line instead); the split legend adds "· 10% fees"; one reserved-name message under the name and ticker row;
+  neutral placeholders; "Launch a token" everywhere. Home: "Top floors" lists only live floors, desktop only, and
+  disappears when there are none. Demo data: one notice per page, never labelled "Local fork".
