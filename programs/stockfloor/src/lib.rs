@@ -22,6 +22,7 @@ pub mod events;
 pub mod external;
 pub mod instructions;
 pub mod math;
+pub mod reserved_names;
 pub mod state;
 pub mod token_utils;
 

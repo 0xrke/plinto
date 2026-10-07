@@ -1365,6 +1365,12 @@ export type Stockfloor = {
         {
           "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "baseMintMetadata",
+          "docs": [
+            "in the handler."
+          ]
         }
       ],
       "args": []
@@ -1906,6 +1912,16 @@ export type Stockfloor = {
       "code": 6065,
       "name": "transitNotEmptied",
       "msg": "Claimer quote (transit) account was not emptied by the fee split"
+    },
+    {
+      "code": 6066,
+      "name": "reservedTokenName",
+      "msg": "Token name or symbol imitates the platform brand (reserved)"
+    },
+    {
+      "code": 6067,
+      "name": "invalidTokenMetadata",
+      "msg": "Base mint metadata is not the Metaplex MetadataV1 account of the base mint, or is malformed"
     }
   ],
   "types": [

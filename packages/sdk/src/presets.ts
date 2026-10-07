@@ -61,6 +61,7 @@ import {
   sqrtPriceX64ToUsd,
   usdToQuoteRaw,
 } from "./math";
+import { isReservedTokenName, RESERVED_NAME_MESSAGE } from "./reservedNames";
 import { validateLaunchConfigParams } from "./stockfloor/validateLaunch";
 
 export type CurvePreset = "gentle" | "flat";
@@ -686,7 +687,7 @@ export function buildDbcConfigParams(
   return { ...params, feeClaimer, leftoverReceiver, quoteMint };
 }
 
-/** Metaplex Token Metadata limits (name 32, symbol 10, uri 200 bytes). Returns error messages. */
+/** Metaplex Token Metadata limits (name 32, symbol 10, uri 200 bytes) and reserved names. Returns error messages. */
 export function validateTokenMetadata(
   name: string,
   symbol: string,
@@ -699,5 +700,7 @@ export function validateTokenMetadata(
   if (symbol.trim().length === 0) errors.push("symbol is required");
   if (bytes(symbol) > 10) errors.push("symbol must be at most 10 bytes");
   if (bytes(uri) > 200) errors.push("uri must be at most 200 bytes");
+  // The program rejects these in register_pool (ReservedTokenName), after tx1 already created the launch.
+  if (isReservedTokenName(name, symbol)) errors.push(RESERVED_NAME_MESSAGE);
   return errors;
 }

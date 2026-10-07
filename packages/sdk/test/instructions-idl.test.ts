@@ -38,6 +38,7 @@ import {
   syncMigrationIx,
   redeemIx,
   registerPoolIx,
+  metaplexMetadataPda,
   STOCKFLOOR_IDL,
   STOCKFLOOR_PROGRAM_ID,
   stockfloorProgram,
@@ -149,6 +150,10 @@ describe("stockfloor instruction builders match target/idl/stockfloor.json", () 
     const k = launchKeys();
     const ix = registerPoolIx({ config: k.config, pool: k.pool, baseMint: k.baseMint });
     expectMatchesIdl(STOCKFLOOR_IDL, "register_pool", ix, { "launch.config": k.config });
+    // The reserved-name check reads the base mint's Metaplex metadata, appended last.
+    expect(ix.keys).toHaveLength(6);
+    expect(ix.keys[5]!.pubkey.equals(metaplexMetadataPda(k.baseMint))).toBe(true);
+    expect(ix.keys[5]!.isWritable).toBe(false);
     expect(Buffer.from(ix.data).equals(coder().encode("registerPool", {}))).toBe(true);
   });
 

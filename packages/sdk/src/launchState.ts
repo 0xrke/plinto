@@ -11,6 +11,7 @@ import {
   dammV2PositionNftAccountPda,
   dammV2PositionPda,
   dbcPoolPda,
+  metaplexMetadataPda,
 } from "./addresses";
 import { base64ToBytes } from "./bytes";
 import { TransactionFailedError, anchorErrorFromLogs, returnDataFromLogs, type ChainReader } from "./chain";
@@ -35,6 +36,7 @@ import {
   type FloorInfo,
   type LaunchAccount,
 } from "./stockfloor/accounts";
+import { isReservedTokenName } from "./reservedNames";
 import { floorIx, type LaunchKeys } from "./stockfloor/instructions";
 import { decodeClock, decodeMint, decodeTokenAccount, effectiveMintMultiplier, SYSVAR_CLOCK, type MintInfo } from "./token";
 
@@ -93,6 +95,12 @@ export interface LaunchState {
   floor: FloorInfo;
   /** Current sqrt price (DBC curve before migration, DAMM v2 pool after). */
   sqrtPriceX64: bigint | null;
+  /**
+   * The pool is not registered and the base mint's Metaplex name or symbol is reserved
+   * (`isReservedTokenName`), so `register_pool` can never succeed. Only read for unregistered
+   * launches (false otherwise); optional for hand-built states.
+   */
+  reservedName?: boolean;
 }
 
 export type LaunchRef = { launch: PublicKey } | { config: PublicKey } | { baseMint: PublicKey };
@@ -228,7 +236,7 @@ export async function fetchLaunchState(reader: ChainReader, ref: LaunchRef, opts
   const vaultAuthority = vaultAuthorityPda(config)[0];
   const claimerBase = claimerBaseAccount(config, launch.baseMint);
 
-  const [configAcc, poolAcc, baseMintAcc, quoteMintAcc, vaultAcc, claimerBaseAcc, clockAcc] = await reader.getMultipleAccountsInfo([
+  const [configAcc, poolAcc, baseMintAcc, quoteMintAcc, vaultAcc, claimerBaseAcc, clockAcc, metadataAcc] = await reader.getMultipleAccountsInfo([
     config,
     pool,
     launch.baseMint,
@@ -236,6 +244,8 @@ export async function fetchLaunchState(reader: ChainReader, ref: LaunchRef, opts
     launch.vault,
     claimerBase,
     SYSVAR_CLOCK,
+    // Only an unregistered launch needs its name: register_pool rejects reserved names.
+    ...(launch.poolRegistered ? [] : [metaplexMetadataPda(launch.baseMint)]),
   ]);
   if (!configAcc) throw new Error(`DBC config ${config.toBase58()} of launch ${address.toBase58()} does not exist`);
   if (!quoteMintAcc) throw new Error(`quote mint ${launch.quoteMint.toBase58()} does not exist`);
@@ -293,6 +303,7 @@ export async function fetchLaunchState(reader: ChainReader, ref: LaunchRef, opts
     progress: { quoteReserve, threshold, fraction: curveProgress(quoteReserve, threshold) },
     damm: { pool: dammPoolAddress, config: dammConfig, state: dammState },
     positions,
+    reservedName: !launch.poolRegistered && metadataAcc != null && isReservedMetadata(metadataAcc.data, launch.baseMint),
     partnerSurplus: dbcPool && launch.poolRegistered && dbcPool.isPartnerWithdrawSurplus === 0 ? dbcPartnerSurplus(dbcConfig, dbcPool) : 0n,
     floor: {
       vaultRaw: vaultBalance,
@@ -448,4 +459,26 @@ export function previewRedeem(state: LaunchState, amount: bigint): RedeemPreview
   const q = redeemQuote(state.vaultBalance, state.baseSupply, amount, state.launch.exitFeeBps);
   if (!blockedReason && q.net === 0n) blockedReason = "the redemption would pay nothing (NothingToRedeem)";
   return { ...q, blockedReason };
+}
+
+/**
+ * True when Metaplex `MetadataV1` data of `mint` carries a reserved name or symbol. Parsed like the
+ * program's `reserved_names::metadata_name_and_symbol`: key (1), update authority (32), mint (32),
+ * then the borsh strings name (<= 32 bytes) and symbol (<= 10 bytes), decoded lossily. Malformed data
+ * is not reserved here (the program rejects it with InvalidTokenMetadata instead).
+ */
+function isReservedMetadata(data: Uint8Array, mint: PublicKey): boolean {
+  if (data.length < 65 || data[0] !== 4 || !new PublicKey(data.subarray(33, 65)).equals(mint)) return false;
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const field = (at: number, max: number): [Uint8Array, number] | null => {
+    if (at + 4 > data.length) return null;
+    const len = view.getUint32(at, true);
+    if (len > max || at + 4 + len > data.length) return null;
+    return [data.subarray(at + 4, at + 4 + len), at + 4 + len];
+  };
+  const name = field(65, 32);
+  const symbol = name && field(name[1], 10);
+  if (!name || !symbol) return false;
+  const text = new TextDecoder("utf-8", { fatal: false });
+  return isReservedTokenName(text.decode(name[0]), text.decode(symbol[0]));
 }

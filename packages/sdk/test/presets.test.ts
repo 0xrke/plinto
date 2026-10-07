@@ -36,6 +36,7 @@ import {
   rawToUi,
   validateDbcConfigParams,
   validateTokenMetadata,
+  RESERVED_NAME_MESSAGE,
 } from "../src";
 
 const { MAX_SQRT_PRICE, MIN_SQRT_PRICE, U64_MAX, U128_MAX } = dbcConstants;
@@ -619,6 +620,13 @@ describe("input validation", () => {
     expect(
       validateTokenMetadata("x".repeat(33), "y".repeat(11), "z".repeat(201)),
     ).toHaveLength(3);
+  });
+
+  it("validateTokenMetadata rejects names and symbols reserved for the platform brand", () => {
+    expect(validateTokenMetadata("PLINTO", "X", "")).toEqual([RESERVED_NAME_MESSAGE]);
+    expect(validateTokenMetadata("Moon", "РLІNТ", "")).toEqual([RESERVED_NAME_MESSAGE]);
+    expect(validateTokenMetadata("ＰＬＩＮＴＯ", "ＰＬ", "")).toEqual([RESERVED_NAME_MESSAGE]);
+    expect(validateTokenMetadata("Planet", "PLAN", "")).toEqual([]);
   });
 });
 

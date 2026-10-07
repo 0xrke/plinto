@@ -83,6 +83,17 @@ pub mod external {
     /// DAMM v2 Anchor event authority `["__event_authority"]`.
     pub const DAMM_V2_EVENT_AUTHORITY: Pubkey =
         pubkey!("3rmHSu74h1ZcmAisVcWerTCiRDQbUrBKmcwptYGjHfet");
+
+    /// Metaplex Token Metadata program (DBC creates the base mint's metadata through it).
+    pub const MPL_TOKEN_METADATA_ID: Pubkey =
+        pubkey!("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+    /// Seed of a mint's metadata PDA: `["metadata", MPL_TOKEN_METADATA_ID, mint]`.
+    pub const METADATA_SEED: &[u8] = b"metadata";
+    /// `Key::MetadataV1`, the first byte of a metadata account.
+    pub const METADATA_KEY_V1: u8 = 4;
+    /// Metaplex `MAX_NAME_LENGTH` and `MAX_SYMBOL_LENGTH` (stored fields are `\0`-padded to these).
+    pub const METADATA_MAX_NAME_LEN: usize = 32;
+    pub const METADATA_MAX_SYMBOL_LEN: usize = 10;
 }
 
 #[cfg(test)]
@@ -110,6 +121,16 @@ mod tests {
         let (damm_event_authority, _) =
             Pubkey::find_program_address(&[b"__event_authority"], &DAMM_V2_PROGRAM_ID);
         assert_eq!(damm_event_authority, DAMM_V2_EVENT_AUTHORITY);
+    }
+
+    #[test]
+    fn metaplex_id_matches_fixtures_and_sdk() {
+        let id = MPL_TOKEN_METADATA_ID.to_string();
+        assert!(include_str!("../../../tests/fixtures/manifest.json").contains(&id));
+        let sdk = include_str!("../../../packages/sdk/src/addresses.ts");
+        assert!(sdk.contains(&format!("METAPLEX_PROGRAM_ID = new PublicKey(\"{id}\")")));
+        assert!(sdk.contains("seed(\"metadata\"), METAPLEX_PROGRAM_ID.toBytes(), mint.toBytes()"));
+        assert_eq!(METADATA_SEED, b"metadata");
     }
 
     #[test]

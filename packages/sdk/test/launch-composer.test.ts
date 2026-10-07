@@ -181,6 +181,9 @@ describe("buildLaunchTransactions", () => {
     const creator = Keypair.generate().publicKey;
     expect(() => buildLaunchTransactions({ ...base, name: "N".repeat(33) }, creator)).toThrow(LaunchInputError);
     expect(() => buildLaunchTransactions({ ...base, symbol: "" }, creator)).toThrow(/symbol is required/);
+    // A reserved name would revert tx2 on chain after tx1 already created the launch.
+    expect(() => buildLaunchTransactions({ ...base, name: "Plіnto" }, creator)).toThrow(LaunchInputError);
+    expect(() => buildLaunchTransactions({ ...base, symbol: "PL1NT" }, creator)).toThrow(/reserved/);
     expect(() => buildLaunchTransactions({ ...base, vaultSharePct: 80 }, creator)).toThrow(LaunchInputError);
     expect(() => buildLaunchTransactions(base, creator, { exitFeeBps: 600 })).toThrow(/exitFeeBps/);
   });

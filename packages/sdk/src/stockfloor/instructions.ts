@@ -23,6 +23,7 @@ import {
   platformQuoteAccount,
   dammV2TokenVaultPda,
   dbcTokenVaultPda,
+  metaplexMetadataPda,
 } from "../addresses";
 import { writeU64 } from "../bytes";
 import { idlInstruction, STOCKFLOOR_IDL } from "../idl";
@@ -157,9 +158,13 @@ export function createLaunchIx(a: CreateLaunchIxArgs): TransactionInstruction {
 
 // ------------------------------------------------------------------ register_pool (permissionless)
 
+/**
+ * The base mint's Metaplex metadata goes last: the program rejects a reserved name or symbol
+ * (`ReservedTokenName`, see reservedNames.ts). A program deployed before that check ignores it.
+ */
 export function registerPoolIx(a: { config: PublicKey; pool: PublicKey; baseMint: PublicKey }): TransactionInstruction {
   return ix(
-    [w(launchPda(a.config)[0]), r(a.config), r(a.pool), r(a.baseMint), r(TOKEN_PROGRAM_ID)],
+    [w(launchPda(a.config)[0]), r(a.config), r(a.pool), r(a.baseMint), r(TOKEN_PROGRAM_ID), r(metaplexMetadataPda(a.baseMint))],
     data("register_pool"),
   );
 }

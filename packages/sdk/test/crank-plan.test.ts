@@ -49,6 +49,7 @@ function scenario(over: {
   positions?: Array<{ a: bigint; b: bigint; foreign?: boolean }>;
   launchMigratedLatch?: boolean;
   version?: number;
+  reservedName?: boolean;
 }): CrankInput {
   const config = key();
   const baseMint = key();
@@ -99,6 +100,7 @@ function scenario(over: {
     positions,
     damm: { pool: dammPool, config: DAMM_V2_CONFIG_CUSTOMIZABLE, state: null },
     partnerSurplus: complete ? 1n : 0n,
+    ...(over.reservedName === undefined ? {} : { reservedName: over.reservedName }),
   };
 }
 
@@ -111,6 +113,13 @@ describe("planCrank", () => {
     ["no DBC pool yet, a dust donation to the claimer base ATA", scenario({ poolExists: false, claimerBase: 5n }), []],
     ["pool created, not registered", scenario({ registered: false }), ["register_pool"]],
     ["not registered with fees", scenario({ registered: false, partnerQuoteFee: 10_000n }), ["register_pool", "harvest_curve_fees"]],
+    // register_pool reverts with ReservedTokenName forever, and everything else needs a registered pool.
+    ["reserved name, not registered, with fees", scenario({ registered: false, reservedName: true, partnerQuoteFee: 10_000n }), []],
+    ["reserved name, not registered, complete", scenario({ registered: false, reservedName: true, complete: true, migrated: true }), []],
+    ["reserved name, not registered, a donation", scenario({ registered: false, reservedName: true, claimerBase: 5_000_000n }), ["burn_claimer_base"]],
+    ["not reserved, not registered", scenario({ registered: false, reservedName: false }), ["register_pool"]],
+    // A launch registered before the program checked names keeps being cranked normally.
+    ["reserved name, registered before the check", scenario({ reservedName: true, partnerQuoteFee: 10_000n }), ["harvest_curve_fees"]],
     ["presale, nothing accrued", scenario({}), []],
     ["presale with partner fees at the default minimum", scenario({ partnerQuoteFee: 1_000n }), ["harvest_curve_fees"]],
     ["presale with a dust partner fee below the minimum", scenario({ partnerQuoteFee: 999n }), []],

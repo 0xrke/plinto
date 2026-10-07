@@ -17,6 +17,8 @@ export const PACKET_DATA_SIZE = 1232;
  */
 export const CU_LIMITS = {
   createLaunch: 200_000,
+  // Reads the base mint's metadata for the reserved-name check (no PDA derivation, so no bump
+  // search): 10,360-12,065 CU measured on the fork for 32-byte names of the costliest characters.
   registerPool: 20_000,
   harvestCurveFeesCreatesAta: 120_000,
   harvestCurveFees: 85_000,

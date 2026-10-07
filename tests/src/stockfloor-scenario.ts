@@ -68,6 +68,9 @@ export interface StockfloorLaunchOptions {
   creator?: Keypair;
   /** Skip register_pool (default false). */
   skipRegister?: boolean;
+  /** Token name and symbol of the DBC pool (default "Floor Test" / "FLOOR"). */
+  name?: string;
+  symbol?: string;
   /** Skip the v3 fee-field check on the SDK-built parameters (default false). */
   rawSdkParams?: boolean;
   /** Mutate the SDK-built DBC ConfigParameters before create_config (adversarial configs). */
@@ -100,8 +103,8 @@ export async function createStockfloorLaunch(fork: Fork, o: StockfloorLaunchOpti
   const vaultAuthority = vaultAuthorityPda(config)[0];
   const exitFeeBps = o.exitFeeBps ?? 200;
   const input: LaunchInput = {
-    name: "Floor Test",
-    symbol: "FLOOR",
+    name: o.name ?? "Floor Test",
+    symbol: o.symbol ?? "FLOOR",
     uri: "https://example.com/floor.json",
     quote: DEFAULT_QUOTE_ASSET,
     quotePriceUsd: SPYX_USD_PRICE,

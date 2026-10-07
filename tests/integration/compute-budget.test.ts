@@ -61,7 +61,7 @@ import { createAta, mintSupply, splAta, spyxAta, tokenAmount } from "../src/toke
  * platform and transit ATAs, three of which it may also create). Launch v3 harvests that pay the
  * platform or split through the transit derive those ATAs too (harvest_curve_fees 1,
  * harvest_migration_fee and harvest_lp_fees 3). Transactions that only use stored bumps
- * (register_pool, sync_migration, harvest_surplus, floor, redeem) measure the same units on every
+ * (sync_migration, harvest_surplus, floor, redeem) measure the same units on every
  * run. Every limit, DBC's migration included, is at most 200,000 CU. Measured maxima over six runs
  * (2026-09-25, v3): create_launch 163,053 (the first launch also creates the platform ATA),
  * harvest_curve_fees 91,276 / 59,180, harvest_migration_fee 69,817, harvest_lp_fees 90,551.
@@ -70,6 +70,9 @@ export const LIMITS = {
   "DBC create_config": 50_000,
   "DBC initialize_virtual_pool_with_spl_token": 150_000,
   "stockfloor create_launch": 200_000,
+  // Reads the base mint's Metaplex metadata for the reserved-name check without deriving its PDA, so
+  // no bump search (2026-10-07): 10,360 to 12,065 CU depending on the name (32-byte names of math
+  // Greek, Lisu, Cherokee and precomposed Latin, the costliest table lookups).
   "stockfloor register_pool": 20_000,
   "DBC swap2 (curve buy)": 60_000,
   "DBC swap2 (curve sell)": 60_000,

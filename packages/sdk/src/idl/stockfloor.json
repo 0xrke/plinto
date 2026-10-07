@@ -1359,6 +1359,12 @@
         {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "base_mint_metadata",
+          "docs": [
+            "in the handler."
+          ]
         }
       ],
       "args": []
@@ -1900,6 +1906,16 @@
       "code": 6065,
       "name": "TransitNotEmptied",
       "msg": "Claimer quote (transit) account was not emptied by the fee split"
+    },
+    {
+      "code": 6066,
+      "name": "ReservedTokenName",
+      "msg": "Token name or symbol imitates the platform brand (reserved)"
+    },
+    {
+      "code": 6067,
+      "name": "InvalidTokenMetadata",
+      "msg": "Base mint metadata is not the Metaplex MetadataV1 account of the base mint, or is malformed"
     }
   ],
   "types": [

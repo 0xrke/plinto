@@ -66,7 +66,7 @@ export type CrankInput = Pick<
   LaunchState,
   "launch" | "keys" | "dbcConfig" | "dbcPool" | "curveComplete" | "claimerBaseBalance" | "positions" | "damm" | "partnerSurplus"
 > &
-  Partial<Pick<LaunchState, "quoteMint">>;
+  Partial<Pick<LaunchState, "quoteMint" | "reservedName">>;
 
 export interface PlanCrankOptions {
   /**
@@ -135,8 +135,10 @@ export function planCrank(s: CrankInput, opts: PlanCrankOptions = {}): CrankActi
   const L = s.launch;
   const minBurn = opts.minClaimerBaseBurn ?? defaultMinClaimerBaseBurn(s.dbcConfig.tokenDecimal);
   const burnDue = s.claimerBaseBalance !== null && s.claimerBaseBalance >= minBurn && s.claimerBaseBalance > 0n;
-  if (!pool) {
-    // The DBC pool does not exist yet: only donations to the claimer base ATA can be handled.
+  if (!pool || (!L.poolRegistered && s.reservedName)) {
+    // The DBC pool does not exist yet, or it can never be registered (its name or symbol is
+    // reserved: register_pool reverts with ReservedTokenName, and every harvest needs a registered
+    // pool): only donations to the claimer base ATA can be handled.
     if (burnDue) actions.push({ kind: "burn_claimer_base", amount: s.claimerBaseBalance! });
     return actions;
   }

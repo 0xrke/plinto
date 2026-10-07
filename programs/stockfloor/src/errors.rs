@@ -157,6 +157,12 @@ pub enum StockfloorError {
     ClaimerQuoteAccountEncumbered,
     #[msg("Claimer quote (transit) account was not emptied by the fee split")]
     TransitNotEmptied,
+
+    // ----- reserved token names (register_pool); appended, never reordered -----
+    #[msg("Token name or symbol imitates the platform brand (reserved)")]
+    ReservedTokenName,
+    #[msg("Base mint metadata is not the Metaplex MetadataV1 account of the base mint, or is malformed")]
+    InvalidTokenMetadata,
 }
 
 impl From<MathError> for StockfloorError {

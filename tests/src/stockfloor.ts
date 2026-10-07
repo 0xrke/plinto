@@ -26,7 +26,7 @@ import {
   TOKEN_2022_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
 } from "./constants.js";
-import { DbcPoolKeys } from "./dbc.js";
+import { DbcPoolKeys, deriveMetaplexMetadata } from "./dbc.js";
 import { Fork, TxSuccess } from "./fork.js";
 import { getAta, splAta } from "./token.js";
 
@@ -157,6 +157,7 @@ export async function registerPoolIx(a: {
       pool: a.pool,
       baseMint: a.baseMint,
       tokenProgram: TOKEN_PROGRAM_ID,
+      baseMintMetadata: deriveMetaplexMetadata(a.baseMint),
       ...a.overrides,
     })
     .instruction();

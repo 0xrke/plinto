@@ -1,10 +1,12 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token};
 
+use crate::constants::external::MPL_TOKEN_METADATA_ID;
 use crate::constants::LAUNCH_SEED;
 use crate::errors::StockfloorError;
 use crate::events::PoolRegistered;
 use crate::external::{load_dbc_config, load_dbc_pool, DBC_POOL_TYPE_SPL_TOKEN};
+use crate::reserved_names::{is_reserved_token_name, metadata_name_and_symbol};
 use crate::state::Launch;
 
 /// Permissionless: record the canonical DBC virtual pool of a launch (once).
@@ -17,12 +19,20 @@ use crate::state::Launch;
 /// is deliberately not compared: it only decides who receives the creator's own DBC fee
 /// share). Other pools on the same config use other base mints and are ignored forever.
 ///
+/// Reserved names: the base mint's Metaplex metadata (created by DBC in the same instruction as the
+/// pool, immutable) must not imitate the platform brand (`reserved_names`). A pool whose name or
+/// symbol is reserved can never be registered, so it never earns or pays out anything through this
+/// program. The check runs last, after every pool and mint check.
+///
 /// Account order:
 /// 0. `launch`     writable: PDA `["launch", config]`
 /// 1. `config`     `launch.config`
 /// 2. `pool`       DBC VirtualPool on `config` for `launch.base_mint`
 /// 3. `base_mint`  `launch.base_mint`, SPL Token mint without mint/freeze authority
 /// 4. `token_program`
+/// 5. `base_mint_metadata` Metaplex metadata of `base_mint` (the PDA `["metadata", metadata program,
+///    base_mint]`; checked by owner, key byte and stored mint)
+///    (appended last, so clients built before it fail with `AccountNotEnoughKeys`)
 #[derive(Accounts)]
 pub struct RegisterPool<'info> {
     #[account(
@@ -47,6 +57,10 @@ pub struct RegisterPool<'info> {
     pub base_mint: Box<Account<'info, Mint>>,
 
     pub token_program: Program<'info, Token>,
+
+    /// CHECK: Metaplex metadata of the base mint; owner, key byte, mint and field lengths validated
+    /// in the handler.
+    pub base_mint_metadata: UncheckedAccount<'info>,
 }
 
 pub fn handle_register_pool(ctx: Context<RegisterPool>) -> Result<()> {
@@ -85,6 +99,8 @@ pub fn handle_register_pool(ctx: Context<RegisterPool>) -> Result<()> {
         StockfloorError::BaseMintHasFreezeAuthority
     );
 
+    check_token_name(&ctx.accounts.base_mint_metadata, &base_mint.key())?;
+
     launch.pool = ctx.accounts.pool.key();
 
     emit!(PoolRegistered {
@@ -93,5 +109,29 @@ pub fn handle_register_pool(ctx: Context<RegisterPool>) -> Result<()> {
         base_mint: launch.base_mint,
         creator: launch.creator,
     });
+    Ok(())
+}
+
+/// Reject a base mint whose Metaplex name or symbol is reserved. Fails closed: anything other than
+/// a `MetadataV1` account of the base mint owned by the metadata program is `InvalidTokenMetadata`.
+///
+/// The PDA address is deliberately not re-derived: Token Metadata creates `MetadataV1` accounts only
+/// at `["metadata", program, mint]` (it asserts the derivation on create), so owner + key byte +
+/// stored mint already pin the canonical account, and `find_program_address` would cost ~1.5k CU
+/// per failed bump with an unbounded tail for an unlucky base mint.
+#[inline(never)]
+fn check_token_name(metadata: &AccountInfo, base_mint: &Pubkey) -> Result<()> {
+    require_keys_eq!(
+        *metadata.owner,
+        MPL_TOKEN_METADATA_ID,
+        StockfloorError::InvalidTokenMetadata
+    );
+    let data = metadata.try_borrow_data()?;
+    let (name, symbol) =
+        metadata_name_and_symbol(&data, base_mint).ok_or(StockfloorError::InvalidTokenMetadata)?;
+    require!(
+        !is_reserved_token_name(name, symbol),
+        StockfloorError::ReservedTokenName
+    );
     Ok(())
 }
