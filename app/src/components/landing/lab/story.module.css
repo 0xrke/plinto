@@ -350,12 +350,13 @@
   }
 
   .track {
-    grid-template-columns: minmax(0, 4fr) minmax(0, 6fr);
+    /* Chart on the left, captions on the right. */
+    grid-template-columns: minmax(0, 6fr) minmax(0, 4fr);
     column-gap: 48px;
   }
 
   .stage {
-    grid-area: 1 / 2;
+    grid-area: 1 / 1;
     top: max(16px, calc(50svh - var(--stage-h) / 2));
     gap: 10px;
     padding-block: 0;
@@ -372,7 +373,7 @@
    * the stage pinned through the last frame (which completes at q = 0.75 anyway).
    */
   .steps {
-    grid-area: 1 / 1;
+    grid-area: 1 / 2;
     padding: 0 0 calc(var(--stage-h) / 2);
   }
 
@@ -448,7 +449,7 @@
   }
 
   .track {
-    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
     column-gap: 24px;
   }
 
