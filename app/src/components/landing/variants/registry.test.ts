@@ -1,21 +1,47 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { VARIANT_LOADERS } from "./loaders";
-import { VARIANTS, findVariant, neighbours, variantDir } from "./registry";
+import { VARIANTS, findVariant, neighbours, originalOf, restyleOf, variantDir, variantGroup } from "./registry";
 
 // Vitest runs from app/ (jsdom gives import.meta.url a non-file scheme).
 const dir = `${resolve(process.cwd(), "src/components/landing/variants")}/`;
 
+const ORIGINALS = VARIANTS.filter((v) => variantGroup(v) === "original");
+const SITE = VARIANTS.filter((v) => variantGroup(v) === "site");
+
+/** Every .ts/.tsx source file under a variant folder (recursively). */
+function sources(folder: string): string[] {
+  return readdirSync(folder, { withFileTypes: true, recursive: true })
+    .filter((e) => e.isFile() && /\.tsx?$/.test(e.name))
+    .map((e) => resolve(e.parentPath, e.name));
+}
+
 describe("variant registry", () => {
-  it("has ten variants numbered 1..10 with unique slugs", () => {
-    expect(VARIANTS).toHaveLength(10);
-    expect(VARIANTS.map((v) => v.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    expect(new Set(VARIANTS.map((v) => v.slug)).size).toBe(10);
+  it("has twenty variants numbered 1..20 with unique slugs", () => {
+    expect(VARIANTS).toHaveLength(20);
+    expect(VARIANTS.map((v) => v.n)).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
+    expect(new Set(VARIANTS.map((v) => v.slug)).size).toBe(20);
     for (const v of VARIANTS) {
       expect(v.slug).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
       expect(v.title.length).toBeGreaterThan(0);
       expect(v.description.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("groups 1..10 as originals and 11..20 as site-style restyles of 1..10", () => {
+    expect(ORIGINALS.map((v) => v.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(SITE.map((v) => v.n)).toEqual([11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+    for (const v of ORIGINALS) {
+      expect(v.basedOn).toBeUndefined();
+      expect(restyleOf(v)?.n).toBe(v.n + 10);
+    }
+    for (const v of SITE) {
+      const o = originalOf(v);
+      expect(o?.n).toBe(v.n - 10);
+      expect(variantGroup(o!)).toBe("original");
+      expect(v.slug).toBe(`${o!.slug}-site`);
+      expect(variantDir(v)).toBe(`v${v.n}-${o!.slug}-site`);
     }
   });
 
@@ -24,7 +50,9 @@ describe("variant registry", () => {
     for (const v of VARIANTS) {
       const file = `${dir}${variantDir(v)}/Variant.tsx`;
       expect(existsSync(file), file).toBe(true);
-      expect(readFileSync(file, "utf8")).toMatch(/export default function/);
+      // A site variant may still be the placeholder that re-exports its original.
+      const exportsDefault = variantGroup(v) === "original" ? /export default function/ : /export default function|export \{ default \} from "\.\.\/v\d{2}-[a-z-]+\/Variant"/;
+      expect(readFileSync(file, "utf8"), file).toMatch(exportsDefault);
       expect(VARIANT_LOADERS[v.slug]!.toString()).toContain(`${variantDir(v)}/Variant`);
     }
   });
@@ -32,16 +60,21 @@ describe("variant registry", () => {
   it("resolves route params by number or slug and wraps prev/next", () => {
     expect(findVariant("1")?.slug).toBe("editorial");
     expect(findVariant("Cinematic")?.n).toBe(3);
+    expect(findVariant("11")?.slug).toBe("editorial-site");
+    expect(findVariant("playful-site")?.n).toBe(20);
     expect(findVariant("0")).toBeNull();
+    expect(findVariant("21")).toBeNull();
     expect(findVariant("x")).toBeNull();
-    expect(neighbours(VARIANTS[0]!).prev.n).toBe(10);
-    expect(neighbours(VARIANTS[9]!).next.n).toBe(1);
+    expect(neighbours(VARIANTS[0]!).prev.n).toBe(20);
+    expect(neighbours(VARIANTS[19]!).next.n).toBe(1);
   });
 
   it("variant client code never imports the SDK barrel or lib/format", () => {
-    for (const v of VARIANTS) {
-      const src = readFileSync(`${dir}${variantDir(v)}/Variant.tsx`, "utf8");
-      expect(src).not.toMatch(/from "@stockfloor\/sdk"|from "@\/lib\/format"/);
+    const folders = [...VARIANTS.map((v) => `${dir}${variantDir(v)}`), `${dir}shared`];
+    for (const folder of folders) {
+      for (const file of sources(folder)) {
+        expect(readFileSync(file, "utf8"), file).not.toMatch(/from "@stockfloor\/sdk"|from "@\/lib\/format"/);
+      }
     }
   });
 });

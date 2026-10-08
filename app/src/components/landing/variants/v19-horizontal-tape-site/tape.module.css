@@ -1,0 +1,410 @@
+/*
+ * Variant 19: Horizontal tape, site style. The landing's white page and 1120px column; the sticky
+ * stage holds the rail, the tape (in the midnight chart card) and the active caption under it.
+ * Colours are site tokens only (globals.css @theme). Native scrolling only (no snap, no
+ * scroll-behavior).
+ */
+
+.root {
+  /* The sticky stage fills the viewport: the rail and deck on top, the active caption below. */
+  --stage-h: 100svh;
+  --deck-h: min(calc(100svh - 250px), 600px);
+  --gap: 14px;
+  overflow-x: clip;
+}
+
+.inner {
+  padding-top: 24px;
+  padding-bottom: 48px;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 16px 0 4px;
+}
+
+.track {
+  min-width: 0;
+}
+
+.stage {
+  grid-area: 1 / 1;
+  align-self: start;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-width: 0;
+  height: var(--stage-h);
+  padding-top: 12px;
+  background: var(--color-surface);
+  display: flex;
+  flex-direction: column;
+}
+
+.deck {
+  flex: 0 0 auto;
+  height: calc(var(--deck-h) + 36px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The chart card fills what the rail leaves (BrandChartFrame sets h-full; this wins in the flex). */
+.deck .deckCard {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+}
+
+/* The tape sits under the chip row (Illustration / real scale), edge to edge like a tape. */
+.tapeBox {
+  position: absolute;
+  inset: 44px 0 0;
+}
+
+/* Wide cards (the component sets top: 0): the ruler runs through the chip row instead. */
+
+.svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  font-family: var(--font-sans);
+}
+
+/* ---------- rail (the landing's) ---------- */
+
+.railRow {
+  flex: none;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 1px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--color-ink-2);
+}
+
+.status b {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-floor);
+}
+
+.of {
+  color: var(--color-ink-3);
+}
+
+.statusLabel {
+  margin-left: 6px;
+  color: var(--color-ink);
+}
+
+.rail {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  gap: 4px;
+  padding: 0 2px;
+}
+
+.railBtn {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+/* Hit area: at least 24 × 44 px, centred on the segment. */
+.railBtn::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  height: 44px;
+  min-width: 24px;
+  transform: translateY(-50%);
+}
+
+.railBtn:focus-visible {
+  outline: 2px solid var(--color-violet);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.railTrack {
+  position: absolute;
+  inset-inline: 0;
+  top: 12px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-track);
+  overflow: hidden;
+}
+
+.railFill {
+  position: absolute;
+  inset: 0;
+  background: var(--color-floor);
+  transform-origin: left center;
+  transform: scaleX(var(--f, 0));
+}
+
+/* The current step: a taller segment with a floor ring (visible without colour alone). */
+.railBtn[aria-current="step"] .railTrack {
+  top: 10px;
+  height: 8px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1.5px var(--color-floor);
+}
+
+/* ---------- SVG parts (midnight card) ---------- */
+
+.boundary { stroke: var(--color-midnight-line); stroke-width: 1; }
+.boundaryZoom { stroke: color-mix(in srgb, var(--color-mint) 40%, transparent); stroke-width: 1; stroke-dasharray: 2 4; }
+.hatch { stroke: color-mix(in srgb, var(--color-midnight-line) 55%, transparent); stroke-width: 3; }
+.grid { stroke: var(--color-midnight-line); stroke-width: 1; }
+.hundred { stroke: color-mix(in srgb, var(--color-on-dark-3) 50%, transparent); stroke-width: 1; }
+.tick { font-size: 10.5px; font-weight: 600; fill: var(--color-on-dark-3); font-variant-numeric: tabular-nums; }
+.tickHundred { font-size: 10.5px; font-weight: 700; fill: var(--color-on-dark-2); }
+
+.beatLabel { font-size: 12px; font-weight: 600; }
+.beatNum { font-weight: 700; font-variant-numeric: tabular-nums; }
+.past .beatLabel { fill: color-mix(in srgb, var(--color-on-dark-3) 70%, transparent); }
+.current .beatLabel { fill: var(--color-white); }
+.current .beatNum { fill: var(--color-mint); }
+.future .beatLabel { fill: color-mix(in srgb, var(--color-on-dark-3) 40%, transparent); }
+.diamond { fill: var(--color-mint); }
+.future .diamond { fill: var(--color-midnight-line); }
+.rulerProg { fill: color-mix(in srgb, var(--color-on-dark-2) 55%, transparent); }
+.sprocket { fill: var(--color-midnight-line); }
+
+.price { fill: none; stroke: var(--color-white); stroke-linejoin: round; stroke-linecap: round; }
+.floor { fill: none; stroke: var(--color-mint); stroke-linejoin: miter; }
+.eventDot { fill: var(--color-mint); stroke: var(--color-midnight); stroke-width: 2; }
+.arb { fill: none; stroke: var(--color-risk-on-dark); }
+.colMarket { fill: var(--color-iris); }
+.colFloor { fill: var(--color-mint); }
+
+.note { font-size: 11.5px; font-weight: 600; fill: var(--color-on-dark-3); }
+.noteIris { font-size: 11.5px; font-weight: 700; fill: var(--color-iris); }
+.noteMint { font-size: 11.5px; font-weight: 700; fill: var(--color-mint); }
+.noteMintBold { font-size: 11.5px; font-weight: 700; fill: var(--color-mint); }
+.noteRisk { font-size: 11px; font-weight: 600; fill: var(--color-risk-on-dark); }
+.noteRiskBold { font-size: 11.5px; font-weight: 700; fill: var(--color-risk-on-dark); }
+.chipText { font-size: 11.5px; font-weight: 700; fill: var(--color-white); font-variant-numeric: tabular-nums; }
+
+/* A knock-out in the card colour keeps labels readable where the price line crosses them. */
+.note, .noteIris, .noteMint, .noteMintBold, .noteRisk, .noteRiskBold, .tick, .tickHundred {
+  paint-order: stroke;
+  stroke: var(--color-midnight);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.playhead { stroke: color-mix(in srgb, var(--color-on-dark-3) 70%, transparent); stroke-width: 1.5; }
+.playKnob { fill: var(--color-on-dark-2); }
+.priceDot { fill: var(--color-white); stroke: var(--color-midnight); stroke-width: 2; }
+.floorDot { fill: var(--color-mint); stroke: var(--color-midnight); stroke-width: 2; }
+.connWhite { stroke: color-mix(in srgb, var(--color-white) 50%, transparent); stroke-width: 1; fill: none; }
+.connMint { stroke: color-mix(in srgb, var(--color-mint) 60%, transparent); stroke-width: 1; fill: none; }
+.tagPrice { fill: var(--color-white); }
+.tagFloor { fill: var(--color-mint); }
+.tagLabel { font-size: 10.5px; font-weight: 600; fill: var(--color-ink-2); }
+.tagValue { font-family: var(--font-display); font-size: 16px; font-weight: 700; fill: var(--color-ink); font-variant-numeric: tabular-nums; }
+
+/* Wide tapes (drawn at ≥ 640px): chart type a step up, to read like the landing chart at 1440. */
+.wide .tick, .wide .tickHundred { font-size: 12px; }
+.wide .beatLabel { font-size: 13.5px; }
+.wide .note, .wide .noteRisk { font-size: 12.5px; }
+.wide .noteIris, .wide .noteMint, .wide .noteMintBold, .wide .noteRiskBold { font-size: 13px; }
+.wide .chipText { font-size: 12.5px; }
+.wide .tagLabel { font-size: 12px; }
+.wide .tagValue { font-size: 20px; }
+
+/* ---------- captions ---------- */
+
+/*
+ * The runway is invisible (its captions are sr-only): it only carries scroll. It starts at the
+ * driver's reading line (phones: the stage's bottom edge, which is the viewport's; wide: 50%), so
+ * beat 1 starts as the stage pins, and ends with a short dwell on the finished frame.
+ */
+.steps {
+  grid-area: 1 / 1;
+  min-width: 0;
+  margin: 0;
+  padding: var(--stage-h) 0 12svh;
+  list-style: none;
+}
+
+.step {
+  position: relative;
+}
+
+.capPanel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  padding: 12px 0 16px;
+}
+
+/* Phones: the caption is a cloud card, as on the landing. */
+.card {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: var(--radius-card);
+  background: var(--color-cloud);
+  animation: capIn 240ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes capIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.capLabel {
+  display: block;
+}
+
+.caption {
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--color-ink);
+  text-wrap: balance;
+}
+
+/* ---------- stills (reduced motion) and footer ---------- */
+
+.stills {
+  padding-top: 16px;
+}
+
+/* A still is taller than BrandChartFrame's 180px so the tape's ruler, tags and labels stay legible. */
+.stills .stillCard {
+  height: auto;
+  aspect-ratio: 1 / 1;
+}
+
+@media (min-width: 640px) {
+  .stills .stillCard {
+    aspect-ratio: 3 / 2;
+  }
+}
+
+.foot {
+  margin-top: 24px;
+  display: grid;
+  gap: 6px;
+}
+
+.footnote {
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--color-ink-3);
+}
+
+.honesty {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    animation: none;
+  }
+}
+
+@media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
+  .root {
+    --deck-h: min(calc(100svh - 220px), 640px);
+    --gap: 22px;
+  }
+
+  /* Wide screens read at 50% of the viewport: the runway starts there and dwells past the end. */
+  .steps {
+    padding: 50svh 0 55svh;
+  }
+
+  .inner {
+    padding-top: 40px;
+    padding-bottom: 56px;
+  }
+
+  /* Deck and caption sit together, centred in the pinned viewport (no dead band between them). */
+  .stage {
+    padding-top: 20px;
+    justify-content: center;
+  }
+
+  .deck {
+    gap: 10px;
+  }
+
+  .status {
+    font-size: 13px;
+    min-width: 128px;
+  }
+
+  .status b {
+    font-size: 15px;
+  }
+
+  /* Wide: bare Outfit text right under the card, centred like the original's deck caption. */
+  .capPanel {
+    flex: none;
+    justify-content: center;
+    padding: 24px 0 20px;
+  }
+
+  .card {
+    width: auto;
+    max-width: 820px;
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    text-align: center;
+  }
+
+  .caption {
+    margin-top: 6px;
+    font-size: 28px;
+    line-height: 1.22;
+    letter-spacing: -0.01em;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .root {
+    --deck-h: calc(100svh - 120px);
+  }
+
+  .caption {
+    font-size: 20px;
+  }
+}

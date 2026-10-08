@@ -38,3 +38,5 @@ export {
 } from "./StoryHarness";
 export * from "./copy";
 export type { VariantProps } from "../types";
+export { BRAND_CLASS, CHART, DASH, LIGHT, MOTION, RADIUS, STROKE, alpha } from "./brand";
+export { BrandChartFrame, BrandTiles, scaleLabel, type BrandChartFrameProps, type BrandScale } from "./BrandChartFrame";

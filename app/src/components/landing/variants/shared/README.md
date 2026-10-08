@@ -11,6 +11,10 @@ handlers and no scroll-snap, so the browser scrolls natively. The story is a pur
 scroll position, so scrolling back reverses exactly. The server render and the first paint show the
 finished frame (pos 8).
 
+Variants 11–20 restyle originals 1–10 in the site's own style. They follow `BRAND.md` and use
+`brand.ts` (`CHART`, `LIGHT`, `STROKE`, `DASH`, `RADIUS`, `MOTION`, `BRAND_CLASS`, `alpha`) and
+`BrandChartFrame` / `BrandTiles`. Every export is available from `../shared`.
+
 ## Mechanics
 
 - **Steps.** There is one `<li data-step={i}>` per beat (8 in total), in `BEAT_KEYS` order:

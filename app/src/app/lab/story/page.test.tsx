@@ -43,7 +43,9 @@ describe("story lab gate", () => {
     vi.stubEnv("NODE_ENV", "development");
     expect(await StoryVariantPage(params("3"))).toBeTruthy();
     expect(await StoryVariantPage(params("cinematic"))).toBeTruthy();
-    await expect(StoryVariantPage(params("11"))).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(await StoryVariantPage(params("11"))).toBeTruthy();
+    expect(await StoryVariantPage(params("playful-site"))).toBeTruthy();
+    await expect(StoryVariantPage(params("21"))).rejects.toThrow("NEXT_NOT_FOUND");
     await expect(StoryVariantPage(params("nope"))).rejects.toThrow("NEXT_NOT_FOUND");
   });
 

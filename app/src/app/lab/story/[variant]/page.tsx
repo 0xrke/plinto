@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { launchMath } from "@/lib/landing/sim/launch";
 import { simConstantsFromSdk } from "@/lib/landing/sim/fromSdk";
 import { labEnabled } from "@/components/landing/variants/gate";
-import { findVariant, neighbours, VARIANTS } from "@/components/landing/variants/registry";
+import { findVariant, neighbours, originalOf, VARIANTS } from "@/components/landing/variants/registry";
 import { VariantHost } from "@/components/landing/variants/VariantHost";
 
 type Params = { variant: string };
@@ -23,6 +23,7 @@ export default async function StoryVariantPage({ params }: { params: Promise<Par
   const k = simConstantsFromSdk();
   const m = launchMath(k, k.defaultVaultSharePct);
   const { prev, next } = neighbours(v);
+  const original = originalOf(v);
   return (
     <>
       <header className="flex items-center gap-3 border-b border-line px-4 py-2 text-sm">
@@ -36,6 +37,11 @@ export default async function StoryVariantPage({ params }: { params: Promise<Par
           {v.title}
         </h1>
         <nav aria-label="Variants" className="flex gap-3">
+          {original ? (
+            <Link href={`/lab/story/${original.n}`} className="hidden font-semibold text-violet hover:text-violet-hover sm:inline" aria-label={`Original: ${original.title}`}>
+              Original
+            </Link>
+          ) : null}
           <Link href={`/lab/story/${prev.n}`} className="font-semibold text-ink-2 hover:text-ink" aria-label={`Previous: ${prev.title}`}>
             ‹ Prev
           </Link>
