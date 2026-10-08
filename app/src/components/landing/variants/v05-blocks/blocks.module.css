@@ -1,0 +1,545 @@
+/*
+ * Variant 5: Blocks. Warm paper with an isometric lattice, chunky "extruded" cards (hard offset
+ * shadows), flat block colours. Layout mechanics come from the shared harness; this file only
+ * restyles. Native scrolling only.
+ */
+
+.band {
+  --blocks-bg: #f7f4ec;
+  --blocks-ink: #17162b;
+  --blocks-ink-2: #4a4860;
+  --blocks-ink-3: #6e6b80;
+  --blocks-line: #e4ddcc;
+  --blocks-floor: #1f9e7a;
+  --blocks-floor-ink: #0f5a48;
+  --blocks-gold: #e0c43a;
+  --blocks-gold-ink: #6e5400;
+  background-color: var(--blocks-bg);
+  background-image:
+    repeating-linear-gradient(30deg, transparent 0 27px, color-mix(in srgb, var(--blocks-line) 55%, transparent) 27px 28px),
+    repeating-linear-gradient(150deg, transparent 0 27px, color-mix(in srgb, var(--blocks-line) 55%, transparent) 27px 28px);
+  color: var(--blocks-ink);
+  overflow-x: clip;
+}
+
+.wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.root {
+  --gap: 10px;
+  --card-room: 150px;
+}
+
+/* phones: a taller stage leaves less empty paper between the stuck caption and the next card */
+.root.root {
+  --stage-h: min(62svh, 540px);
+}
+
+/* ---------- header and footer ---------- */
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 24px;
+  margin-bottom: 16px;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--blocks-ink-2);
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.footer {
+  display: grid;
+  gap: 6px;
+  margin-top: 24px;
+  padding: 14px 16px;
+  border: 2px solid var(--blocks-ink);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 5px 5px 0 var(--blocks-ink);
+}
+
+.honesty {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.footnote {
+  font-size: 12px;
+  color: var(--blocks-ink-3);
+}
+
+/* ---------- caption cards ---------- */
+
+.card {
+  position: sticky;
+  top: calc(var(--stage-h) + var(--gap));
+  padding: 12px 14px 14px;
+  border: 2px solid var(--blocks-ink);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 5px 5px 0 var(--blocks-ink);
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease;
+}
+
+.step[data-active="false"] .card {
+  opacity: 0.35;
+  box-shadow: 2px 2px 0 var(--blocks-ink-3);
+}
+
+.cardLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--blocks-ink-3);
+}
+
+.badge {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--blocks-floor);
+  color: #fff;
+  font-size: 12px;
+  letter-spacing: 0;
+  box-shadow:
+    2px 2px 0 #14705a,
+    3px 3px 0 #14705a;
+}
+
+.caption {
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--blocks-ink);
+}
+
+/* ---------- stage ---------- */
+
+.root .stageSlot.stageSlot {
+  background: var(--blocks-bg);
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding-top: 8px;
+}
+
+.stageStill {
+  padding-top: 0;
+}
+
+.scene {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: visible;
+}
+
+.svgText {
+  font-family: var(--font-sans);
+}
+
+.ticks line {
+  stroke: var(--blocks-line);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+
+.ticks text {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--blocks-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.axis {
+  stroke: var(--blocks-ink);
+  stroke-width: 1.5;
+}
+
+.ground {
+  fill: #0b0b24;
+  opacity: 0.12;
+}
+
+.trail {
+  fill: none;
+  stroke: #3f2bbf;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* a paper halo keeps the price readable where it crosses the green blocks */
+.trailHalo {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-opacity: 0.85;
+}
+
+.floorEdge {
+  fill: none;
+  stroke: #0b4a3b;
+  stroke-width: 2.5;
+  stroke-linejoin: miter;
+}
+
+.hundred {
+  stroke: var(--blocks-ink-3);
+  stroke-width: 1.2;
+  stroke-dasharray: 6 5;
+}
+
+.hundredText {
+  font-size: 11.5px;
+  font-weight: 700;
+  fill: var(--blocks-ink-2);
+}
+
+.netLine {
+  stroke: #8a6a00;
+  stroke-width: 2.5;
+  stroke-dasharray: 5 3;
+}
+
+.arbHalo {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-opacity: 0.8;
+}
+
+.arb {
+  fill: none;
+  stroke: #d1406c;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 1 6;
+}
+
+.towerLabel {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 800;
+  fill: #ffffff;
+  paint-order: stroke;
+  stroke: rgb(0 0 0 / 0.18);
+  stroke-width: 3px;
+}
+
+/* ---------- HUD ---------- */
+
+.hud {
+  display: grid;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.tile {
+  display: grid;
+  gap: 1px;
+  padding: 7px 10px;
+  border: 2px solid var(--blocks-ink);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 3px 3px 0 var(--blocks-ink);
+}
+
+.tileFloor {
+  background: #e9f8f1;
+  border-color: var(--blocks-floor-ink);
+  box-shadow: 3px 3px 0 var(--blocks-floor-ink);
+}
+
+.tileLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--blocks-ink-3);
+}
+
+.tileFloor .tileLabel {
+  color: var(--blocks-floor-ink);
+}
+
+.tileValue {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.tileFloor .tileValue {
+  color: var(--blocks-floor-ink);
+}
+
+.ledger {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: 22px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.cubes {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 3px;
+  min-height: 16px;
+}
+
+.ledgerNote {
+  color: var(--blocks-floor-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.ledgerGold {
+  color: var(--blocks-gold-ink);
+}
+
+.chips {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.chip {
+  padding: 2px 7px;
+  border: 1.5px solid var(--blocks-ink-3);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--blocks-ink-2);
+  white-space: nowrap;
+}
+
+.chipScale {
+  border-color: var(--blocks-floor-ink);
+  color: var(--blocks-floor-ink);
+}
+
+/* a tiny isometric cube: front face + top and side via shadows */
+.cube {
+  --c-front: #34b58f;
+  --c-top: #b5f0da;
+  --c-side: #1f8a6b;
+  position: relative;
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin: 4px 0 0 4px;
+  background: var(--c-front);
+}
+
+.cube::before,
+.cube::after {
+  content: "";
+  position: absolute;
+}
+
+.cube::before {
+  /* top face */
+  left: -4px;
+  top: -4px;
+  width: 11px;
+  height: 4px;
+  background: var(--c-top);
+  transform: skewX(45deg);
+  transform-origin: bottom left;
+  left: 0;
+}
+
+.cube::after {
+  /* left side face */
+  left: -4px;
+  top: -4px;
+  width: 4px;
+  height: 11px;
+  background: var(--c-side);
+  transform: skewY(45deg);
+  transform-origin: top right;
+  top: 0;
+}
+
+.cubeBase {
+  --c-front: #1f9e7a;
+  --c-top: #8fe6c6;
+  --c-side: #14705a;
+  width: 16px;
+}
+
+.cubeBase::before {
+  width: 16px;
+}
+
+.cubeHarvest {
+  --c-front: #34b58f;
+  --c-top: #b5f0da;
+  --c-side: #1f8a6b;
+}
+
+.cubeRedeem {
+  --c-front: #e0c43a;
+  --c-top: #f8eea6;
+  --c-side: #ad9318;
+}
+
+/* ---------- stills (reduced motion) ---------- */
+
+.stillBox {
+  height: 340px;
+  padding: 8px;
+  border: 2px solid var(--blocks-ink);
+  border-radius: 10px;
+  background: var(--blocks-bg);
+  box-shadow: 4px 4px 0 var(--blocks-ink);
+}
+
+/* ---------- wide ---------- */
+
+@media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
+  .wrap {
+    padding: 40px 32px 72px;
+  }
+
+  .title {
+    font-size: 40px;
+  }
+
+  .header {
+    margin-bottom: 8px;
+  }
+
+  .card {
+    top: max(16px, calc(50svh - 70px));
+    padding: 18px 20px 20px;
+    box-shadow: 7px 7px 0 var(--blocks-ink);
+  }
+
+  .step[data-active="false"] .card {
+    opacity: 0.22;
+    transform: translateX(-6px);
+  }
+
+  .caption {
+    font-size: 28px;
+    line-height: 1.2;
+  }
+
+  .root.root {
+    --stage-h: min(640px, 82svh);
+  }
+
+  .root .stageSlot.stageSlot {
+    padding: 14px 14px 10px;
+    border: 2px solid var(--blocks-ink);
+    border-radius: 14px;
+    background: var(--blocks-bg);
+    box-shadow: 8px 8px 0 var(--blocks-ink);
+  }
+
+  .tiles {
+    grid-template-columns: repeat(2, minmax(0, 220px));
+  }
+
+  .tileValue {
+    font-size: 26px;
+  }
+
+  .ledger {
+    font-size: 12.5px;
+  }
+
+  .chip {
+    font-size: 12px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .card {
+    top: 16px;
+  }
+
+  .root.root {
+    --stage-h: calc(100svh - 16px);
+  }
+}
+
+.inkLabel {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 800;
+  fill: var(--blocks-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.break {
+  fill: var(--blocks-bg);
+}
+
+.dipTick {
+  stroke: #ffffff;
+  stroke-width: 1.5;
+}

@@ -1,0 +1,422 @@
+/*
+ * Variant 9: Horizontal tape. A dark deck: the sticky tape on top, captions under it.
+ * Native scrolling only (no snap, no scroll-behavior).
+ */
+
+.root {
+  /* The sticky stage fills the viewport: the deck on top, the active caption in the room below. */
+  --stage-h: 100svh;
+  --deck-h: min(calc(100svh - 230px), 620px);
+  --gap: 14px;
+  --tape-bg: #11112e;
+  --tape-line: #2a2a52;
+  background: var(--color-midnight);
+  color: var(--color-on-dark);
+}
+
+.inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 8px 16px 48px;
+}
+
+.head {
+  padding: 20px 0 12px;
+  text-align: center;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+
+.track {
+  min-width: 0;
+}
+
+.stage {
+  grid-area: 1 / 1;
+  align-self: start;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-width: 0;
+  height: var(--stage-h);
+  padding-top: 10px;
+  background: var(--color-midnight);
+  display: flex;
+  flex-direction: column;
+}
+
+.deck {
+  flex: 0 0 var(--deck-h);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--tape-line);
+  border-radius: 22px;
+  background: var(--tape-bg);
+  overflow: hidden;
+  box-shadow: 0 30px 60px -40px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 12px 6px 14px;
+  border-bottom: 1px solid var(--tape-line);
+}
+
+.status {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--color-on-dark);
+  white-space: nowrap;
+}
+
+.status b {
+  color: var(--color-butter);
+  font-weight: 700;
+}
+
+.of {
+  color: #6f6e98;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.chipIll,
+.chipScale {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 6px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.chipIll {
+  color: var(--color-midnight);
+  background: var(--color-butter);
+}
+
+.chipScale {
+  color: var(--color-mint);
+  box-shadow: inset 0 0 0 1px rgba(127, 224, 191, 0.5);
+}
+
+.tapeBox {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  font-family: var(--font-sans);
+}
+
+/* ---------- minimap ---------- */
+
+.mini {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 4px;
+  padding: 0 14px 4px;
+  border-top: 1px solid var(--tape-line);
+}
+
+.miniBtn {
+  display: block;
+  padding: 10px 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.miniBtn:focus-visible {
+  outline: 2px solid var(--color-butter);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+.miniBar {
+  position: relative;
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--tape-line);
+  overflow: hidden;
+}
+
+.miniFill {
+  position: absolute;
+  inset: 0;
+  background: var(--color-butter);
+  transform-origin: left center;
+  transform: scaleX(var(--f, 0));
+}
+
+/* ---------- SVG parts ---------- */
+
+.bandA { fill: rgba(255, 255, 255, 0.022); }
+.bandB { fill: rgba(255, 255, 255, 0); }
+.boundary { stroke: rgba(255, 255, 255, 0.08); stroke-width: 1; }
+.boundaryZoom { stroke: rgba(127, 224, 191, 0.35); stroke-width: 1; stroke-dasharray: 2 4; }
+.hatch { stroke: rgba(255, 255, 255, 0.045); stroke-width: 3; }
+.grid { stroke: rgba(255, 255, 255, 0.06); stroke-width: 1; }
+.hundred { stroke: rgba(255, 255, 255, 0.28); stroke-width: 1; stroke-dasharray: 4 5; }
+.tick { font-size: 10.5px; fill: #8d8cb4; font-variant-numeric: tabular-nums; }
+.tickHundred { font-size: 10.5px; font-weight: 700; fill: #d6d3f5; }
+
+.ruler { fill: rgba(0, 0, 0, 0.22); }
+.beatLabel { font-size: 12px; font-weight: 700; }
+.beatNum { font-family: var(--font-mono); font-weight: 500; }
+.past .beatLabel { fill: #7b7aa3; }
+.current .beatLabel { fill: #fff; }
+.current .beatNum { fill: var(--color-butter); }
+.future .beatLabel { fill: #55547c; }
+.diamond { fill: var(--color-mint); }
+.future .diamond { fill: #55547c; }
+.rulerProg { fill: var(--color-butter); }
+.sprocket { fill: rgba(255, 255, 255, 0.07); }
+
+.price { fill: none; stroke: #fff; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+.floor { fill: none; stroke: var(--color-mint); stroke-width: 2.6; stroke-linejoin: miter; }
+.floorFill { fill: rgba(127, 224, 191, 0.12); }
+.eventDot { fill: var(--color-mint); stroke: var(--tape-bg); stroke-width: 2; }
+.arb { fill: none; stroke: var(--color-risk-on-dark); stroke-width: 1.6; stroke-dasharray: 6 5; }
+.dip { fill: var(--tape-bg); stroke: var(--color-risk-on-dark); stroke-width: 2.2; }
+.colMarket { fill: var(--color-iris); opacity: 0.85; }
+.colFloor { fill: var(--color-mint); }
+
+.note { font-size: 12px; font-weight: 600; fill: #b9b8d6; }
+.noteIris { font-size: 12px; font-weight: 700; fill: #b5abff; }
+.noteMint { font-size: 12px; font-weight: 700; fill: var(--color-mint); }
+.noteMintBold { font-size: 12.5px; font-weight: 800; fill: var(--color-mint); }
+.noteRisk { font-size: 11.5px; font-weight: 600; fill: var(--color-risk-on-dark); }
+.noteRiskBold { font-size: 12px; font-weight: 800; fill: var(--color-risk-on-dark); }
+.notePeak { font-size: 12px; font-weight: 700; fill: #fff; }
+
+/* A halo in the tape colour keeps labels readable where the price line crosses them. */
+.note, .noteIris, .noteMint, .noteMintBold, .noteRisk, .noteRiskBold, .notePeak {
+  paint-order: stroke;
+  stroke: var(--tape-bg);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.playhead { stroke: var(--color-butter); stroke-width: 1.5; }
+.playKnob { fill: var(--color-butter); }
+.priceHalo { fill: rgba(255, 255, 255, 0.14); }
+.priceDot { fill: #fff; stroke: var(--tape-bg); stroke-width: 2; }
+.floorDot { fill: var(--color-mint); stroke: var(--tape-bg); stroke-width: 2; }
+.connWhite { stroke: rgba(255, 255, 255, 0.5); stroke-width: 1; fill: none; }
+.connMint { stroke: rgba(127, 224, 191, 0.6); stroke-width: 1; fill: none; }
+.tagPrice { fill: #fff; }
+.tagFloor { fill: var(--color-mint); }
+.tagLabel { font-size: 10px; font-weight: 700; fill: rgba(11, 11, 36, 0.62); letter-spacing: 0.01em; }
+.tagValue { font-size: 16px; font-weight: 800; fill: var(--color-midnight); font-variant-numeric: tabular-nums; }
+
+/* ---------- captions ---------- */
+
+/*
+ * The runway is invisible (its captions are sr-only): it only carries scroll. It starts at the
+ * driver's reading line (phones: the stage's bottom edge, which is the viewport's; wide: 50%), so
+ * beat 1 starts as the stage pins, and ends with a short dwell on the finished frame.
+ */
+.steps {
+  grid-area: 1 / 1;
+  min-width: 0;
+  margin: 0;
+  padding: var(--stage-h) 0 12svh;
+  list-style: none;
+}
+
+.step {
+  position: relative;
+}
+
+.capPanel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 4px 12px;
+}
+
+.card {
+  max-width: 760px;
+  text-align: center;
+  animation: capIn 0.28s ease-out both;
+}
+
+@keyframes capIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.capLabel {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-butter);
+}
+
+.caption {
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.22;
+  letter-spacing: -0.01em;
+  color: #fff;
+  text-wrap: balance;
+}
+
+/* ---------- stills (reduced motion) and footer ---------- */
+
+.stills {
+  padding-top: 8px;
+}
+
+.stills figcaption p {
+  color: #fff;
+}
+
+.stills figcaption p:first-child {
+  font-family: var(--font-mono);
+  color: var(--color-butter);
+}
+
+.still {
+  border: 1px solid var(--tape-line);
+  border-radius: 18px;
+  background: var(--tape-bg);
+  overflow: hidden;
+}
+
+.stillBar {
+  min-height: 12px;
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 10px 0;
+}
+
+.stillTape {
+  position: relative;
+  aspect-ratio: 5 / 4;
+}
+
+@media (min-width: 640px) {
+  .stillTape {
+    aspect-ratio: 640 / 300;
+  }
+}
+
+.foot {
+  max-width: 640px;
+  margin: 28px auto 0;
+  display: grid;
+  gap: 6px;
+  text-align: center;
+}
+
+.footnote {
+  font-size: 12px;
+  line-height: 18px;
+  color: #8d8cb4;
+}
+
+.honesty {
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    animation: none;
+  }
+}
+
+@media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
+  .root {
+    --deck-h: min(calc(100svh - 200px), 760px);
+    --gap: 22px;
+  }
+
+  /* Wide screens read at 50% of the viewport: the runway starts there and dwells past the end. */
+  .steps {
+    padding: 50svh 0 55svh;
+  }
+
+  .inner {
+    padding: 8px 32px 64px;
+  }
+
+  .head {
+    padding: 36px 0 16px;
+  }
+
+  .title {
+    font-size: 40px;
+  }
+
+  .stage {
+    padding-top: 16px;
+  }
+
+  .bar {
+    padding: 10px 16px 8px 20px;
+  }
+
+  .status {
+    font-size: 13px;
+  }
+
+  .mini {
+    padding: 0 20px 6px;
+    gap: 6px;
+  }
+
+  .caption {
+    font-size: 34px;
+    line-height: 1.15;
+  }
+
+  .capLabel {
+    font-size: 12.5px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .root {
+    --deck-h: calc(100svh - 110px);
+  }
+
+  .caption {
+    font-size: 22px;
+  }
+}

@@ -1,0 +1,217 @@
+/*
+ * Default layouts for the shared story harness. Variants restyle through className props and the
+ * custom properties below; the mechanics (sticky stage, runway, card room) are the landing's.
+ *   --stage-h    sticky stage height (split layout)
+ *   --gap        gap between the phone stage and the caption card
+ *   --card-room  phone: room under the stage for the last card (unpins the stage before the card hides)
+ *   --runway     per step (set inline from `heights`, svh)
+ * Native scrolling only: no scroll-snap, no scroll-behavior.
+ */
+
+.root {
+  --stage-h: min(55svh, 480px);
+  --gap: 12px;
+  --card-room: 120px;
+  position: relative;
+  overflow-x: clip;
+}
+
+.track {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.stage {
+  grid-area: 1 / 1;
+  align-self: start;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.steps {
+  grid-area: 1 / 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  min-height: var(--runway, 70svh);
+}
+
+.card {
+  position: sticky;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--color-cloud);
+  color: var(--color-ink);
+}
+
+.step[data-active="false"] .card {
+  color: var(--color-ink-2);
+}
+
+.caption {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+/* ---------- split ---------- */
+
+.split .stage {
+  height: var(--stage-h);
+  margin-bottom: var(--card-room);
+  background: var(--color-surface);
+}
+
+.split .steps {
+  padding-top: calc(var(--stage-h) + var(--gap));
+}
+
+.split .card {
+  top: calc(var(--stage-h) + var(--gap));
+}
+
+@media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
+  .root {
+    --stage-h: min(640px, 82svh);
+  }
+
+  .split {
+    grid-template-columns: minmax(0, 6fr) minmax(0, 4fr);
+    column-gap: 48px;
+  }
+
+  .split .stage {
+    grid-area: 1 / 1;
+    top: max(16px, calc(50svh - var(--stage-h) / 2));
+    margin-bottom: 0;
+    background: none;
+  }
+
+  .split .steps {
+    grid-area: 1 / 2;
+    padding: 0 0 calc(var(--stage-h) / 2);
+  }
+
+  .split .card {
+    top: max(16px, calc(50svh - 48px));
+    padding: 0;
+    background: none;
+  }
+
+  .split .caption {
+    font-size: 26px;
+    line-height: 1.25;
+  }
+
+  .split.stageRight {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 6fr);
+  }
+
+  .split.stageRight .stage {
+    grid-area: 1 / 2;
+  }
+
+  .split.stageRight .steps {
+    grid-area: 1 / 1;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .root {
+    --stage-h: calc(100svh - 16px);
+  }
+
+  .split .stage {
+    top: 8px;
+  }
+}
+
+/* ---------- overlay ---------- */
+
+/*
+ * Full-viewport stage; the steps scroll over it. 60svh of runway after the last step keeps the
+ * stage pinned until the last beat (q 0.75) has finished.
+ */
+.overlay .stage {
+  height: 100svh;
+  z-index: 0;
+}
+
+.overlay .steps {
+  position: relative;
+  z-index: 1;
+  padding-bottom: 60svh;
+  pointer-events: none;
+}
+
+.overlay .card {
+  top: calc(100svh - 40svh);
+  margin-inline: 16px;
+  pointer-events: auto;
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+}
+
+/* ---------- stills and footer ---------- */
+
+.stills {
+  display: grid;
+  gap: 16px;
+}
+
+.still {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.stillLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink-3);
+}
+
+@media (min-width: 768px) {
+  .stills {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .stills {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .track {
+    display: none;
+  }
+}
+
+.footer {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.footnote {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-ink-3);
+}
+
+.honesty {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-ink);
+}

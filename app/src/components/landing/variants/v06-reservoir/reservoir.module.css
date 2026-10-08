@@ -1,0 +1,731 @@
+/*
+ * Variant 6: Reservoir. Light, like the landing: a glass tank on a white card, green water for the
+ * floor, a violet buoy for the price and a rose dashed arbitrage line. Layout mirrors the harness's
+ * split mechanics (sticky stage, card stuck under it on phones, runway per step) with the tank on the
+ * right on wide screens. Native scroll only: no snap, no smooth scroll.
+ */
+
+.sea {
+  --rv-ink: var(--color-ink, #14142b);
+  --rv-ink-2: var(--color-ink-2, #4a4a66);
+  --rv-ink-3: var(--color-ink-3, #6b6b85);
+  --rv-line: var(--color-line-strong, #e3def5);
+  --rv-glass: #a9a6cc;
+  --rv-glass-fill: #fbfaff;
+  --rv-glass-edge: #e9e5fa;
+  --rv-water-top: #8fe3c6;
+  --rv-water-mid: #34b58f;
+  --rv-water-deep: #16735c;
+  --rv-floor: var(--color-floor, #16735c);
+  --rv-floor-strong: var(--color-floor-strong, #0f5a48);
+  --rv-floor-soft: var(--color-floor-soft, #d8f5ea);
+  --rv-price: var(--color-violet, #5b45d6);
+  --rv-price-soft: var(--color-violet-soft, #ece8fd);
+  --rv-arb: var(--color-risk, #b8325a);
+  --rv-arb-soft: var(--color-risk-wash, #fff1f5);
+  --rv-arb-line: var(--color-risk-line, #e46a8c);
+  --rv-butter: var(--color-graduating-soft, #fbf1b8);
+  --rv-butter-ink: var(--color-graduating, #6e5400);
+  --rv-market: #8b7cf6;
+  background: linear-gradient(180deg, var(--color-cloud, #f7f6fe) 0%, #ffffff 30%, var(--color-cloud, #f7f6fe) 100%);
+  color: var(--rv-ink);
+}
+
+.sea .root {
+  --stage-h: min(calc(100svh - 196px), 640px);
+  --gap: 10px;
+  --card-room: 150px;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 28px 16px 56px;
+}
+
+/* ---------- header ---------- */
+
+.header {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rv-floor);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--rv-ink);
+}
+
+/* ---------- track: phone first ---------- */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.layout > .stage {
+  grid-area: 1 / 1;
+  align-self: start;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-width: 0;
+  height: var(--stage-h);
+  margin: 0 -16px var(--card-room);
+  padding: 8px 16px 0;
+  background: #ffffff;
+  border-bottom: 1px solid var(--rv-line);
+}
+
+.layout > .steps {
+  grid-area: 1 / 1;
+  min-width: 0;
+  margin: 0;
+  padding: calc(var(--stage-h) + var(--gap)) 0 0;
+  list-style: none;
+}
+
+.step {
+  min-height: var(--runway, 70svh);
+}
+
+.card {
+  position: sticky;
+  top: calc(var(--stage-h) + var(--gap));
+  padding: 14px 16px 16px;
+  border-radius: 18px;
+  background: #ffffff;
+  border: 1px solid var(--rv-line);
+  box-shadow: 0 10px 28px rgba(20, 20, 43, 0.08);
+}
+
+.kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--rv-floor);
+}
+
+.kickerRule {
+  width: 18px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.6;
+}
+
+.caption {
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--rv-ink);
+}
+
+.key {
+  display: none;
+}
+
+.step[data-active="false"] .card {
+  opacity: 0.55;
+}
+
+/* ---------- wide ---------- */
+
+@media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
+  .sea .root {
+    --stage-h: min(800px, calc(100svh - 48px));
+    padding: 56px 32px 80px;
+  }
+
+  .header {
+    margin-bottom: 24px;
+  }
+
+  .title {
+    font-size: 56px;
+  }
+
+  .layout {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
+    column-gap: 48px;
+  }
+
+  .layout > .stage {
+    grid-area: 1 / 2;
+    top: max(16px, calc(50svh - var(--stage-h) / 2));
+    margin: 0;
+    padding: 18px 18px 14px 22px;
+    border: 1px solid var(--rv-line);
+    border-radius: 28px;
+    box-shadow: 0 24px 60px rgba(20, 20, 43, 0.08);
+  }
+
+  .layout > .steps {
+    grid-area: 1 / 1;
+    padding: 0 0 calc(var(--stage-h) / 2);
+  }
+
+  .card {
+    top: max(16px, calc(50svh - 150px));
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    transition: opacity 0.25s ease;
+  }
+
+  .step[data-active="false"] .card {
+    opacity: 0;
+  }
+
+  .kicker {
+    font-size: 13px;
+  }
+
+  .caption {
+    margin-top: 12px;
+    font-size: 40px;
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+  }
+
+  .key {
+    display: grid;
+    gap: 10px;
+    margin: 32px 0 0;
+    padding: 18px 0 0;
+    border-top: 1px solid var(--rv-line);
+    list-style: none;
+    font-size: 14px;
+    color: var(--rv-ink-2);
+  }
+
+  .key li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .sea .root {
+    --stage-h: calc(100svh - 16px);
+  }
+
+  .layout > .stage {
+    top: 8px;
+    padding: 8px;
+  }
+
+  .caption {
+    font-size: 24px;
+  }
+
+  .key {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+}
+
+/* key swatches (legend and readouts) */
+.keyBuoy,
+.keyWater,
+.keyArb {
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+.keyBuoy {
+  background: linear-gradient(180deg, #ffffff 0 50%, var(--rv-price) 50% 100%);
+  box-shadow: inset 0 0 0 2px var(--rv-price);
+}
+.keyWater {
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--rv-water-top), var(--rv-water-deep));
+}
+.keyArb {
+  width: 18px;
+  height: 0;
+  border-radius: 0;
+  border-top: 2.5px dashed var(--rv-arb);
+}
+
+/* ---------- stage ---------- */
+
+.reservoir {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.readouts {
+  display: flex;
+  gap: 22px;
+  padding: 0 2px 4px;
+}
+
+.stat {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.statLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rv-ink-3);
+  white-space: nowrap;
+}
+
+.statLabel .keyBuoy,
+.statLabel .keyWater {
+  width: 10px;
+  height: 10px;
+}
+
+.statValue {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.statNow {
+  color: var(--rv-price);
+}
+
+.statNow[data-redeemed] {
+  color: var(--rv-floor);
+}
+
+.statFloor {
+  color: var(--rv-floor);
+}
+
+@media (min-width: 1024px) {
+  .readouts {
+    gap: 44px;
+    padding-bottom: 6px;
+  }
+
+  .statLabel {
+    font-size: 12px;
+  }
+
+  .statValue {
+    font-size: 34px;
+  }
+}
+
+.tankWrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: visible;
+  font-family: var(--font-sans);
+}
+
+.strip {
+  position: relative;
+  flex: 0 0 auto;
+  overflow: hidden;
+}
+
+/* Absolute so the SVG's pixel width never feeds back into the measured container. */
+.strip svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  font-family: var(--font-sans);
+}
+
+/* raise bar */
+.barTrack {
+  fill: var(--color-track, #f0eef9);
+}
+.barRaised {
+  fill: var(--rv-ink-2);
+}
+.barFloor {
+  fill: var(--rv-water-mid);
+}
+.barMarket {
+  fill: var(--rv-market);
+}
+.barFees {
+  fill: #cfcbe6;
+}
+.barLabel {
+  fill: var(--rv-ink-2);
+  font-weight: 600;
+}
+.barLabelFloor {
+  fill: var(--rv-floor);
+  font-weight: 700;
+}
+.pour {
+  fill: var(--rv-water-mid);
+}
+
+/* fee spout */
+.spout path {
+  fill: none;
+  stroke: var(--rv-glass);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+.spoutLabel {
+  fill: var(--rv-ink-3);
+  font-weight: 600;
+}
+.drip {
+  fill: var(--rv-water-mid);
+}
+.ripple {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 1.4;
+}
+
+/* tank */
+.glass {
+  fill: none;
+  stroke: var(--rv-glass);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+.rim {
+  stroke: var(--rv-glass);
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+.grid {
+  stroke: #e8e5f6;
+  stroke-width: 1;
+}
+.surfaceLine {
+  stroke: #ffffff;
+  stroke-width: 1.2;
+  opacity: 0.7;
+}
+.bubble {
+  fill: #ffffff;
+}
+.vaultLabel {
+  fill: rgba(255, 255, 255, 0.92);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* the staircase on the glass */
+.stepsUnder {
+  fill: none;
+  stroke: var(--rv-floor-strong);
+  stroke-opacity: 0.55;
+  stroke-width: 5.5;
+  stroke-linejoin: miter;
+}
+.steps {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 2.6;
+  stroke-linejoin: miter;
+}
+.stepDot {
+  fill: #ffffff;
+  stroke: var(--rv-floor-strong);
+  stroke-width: 1.5;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .wave path {
+    animation: rv-wave 6s linear infinite;
+  }
+}
+
+@keyframes rv-wave {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(var(--rv-period, -60px));
+  }
+}
+
+/* arbitrage line */
+.arbUnder {
+  fill: none;
+  stroke: #ffffff;
+  stroke-opacity: 0.85;
+  stroke-width: 5;
+}
+.arb,
+.arbHot {
+  fill: none;
+  stroke: var(--rv-arb);
+  stroke-width: 2.2;
+  stroke-dasharray: 7 5;
+}
+.arbHot {
+  stroke-width: 3.4;
+}
+
+/* price trail */
+.trailUnder {
+  fill: none;
+  stroke: #ffffff;
+  stroke-opacity: 0.85;
+  stroke-width: 5;
+  stroke-linejoin: round;
+}
+.trail {
+  fill: none;
+  stroke: var(--rv-price);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-opacity: 0.8;
+}
+
+/* dip marker */
+.dipRing {
+  fill: #ffffff;
+  stroke: var(--rv-arb);
+  stroke-width: 2.4;
+}
+.dipArrow {
+  fill: none;
+  stroke: var(--rv-arb);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* buoy */
+.buoyHalo {
+  fill: var(--rv-price);
+  opacity: 0.16;
+}
+.buoyTop {
+  fill: #ffffff;
+}
+.buoyBottom {
+  fill: var(--rv-price);
+}
+.buoyRim {
+  fill: none;
+  stroke: var(--rv-price);
+  stroke-width: 2;
+}
+.buoyStick {
+  stroke: var(--rv-ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.buoyHot .buoyHalo {
+  fill: var(--rv-arb);
+  opacity: 0.3;
+}
+
+/* label pills */
+.pillPrice rect,
+.pillFloor rect,
+.pillArb rect,
+.pillPlain rect {
+  stroke-width: 1;
+}
+.pillPrice text,
+.pillFloor text,
+.pillArb text,
+.pillPlain text {
+  font-weight: 700;
+}
+.pillPrice rect {
+  fill: #ffffff;
+  stroke: #cfc7f7;
+}
+.pillPrice text {
+  fill: var(--rv-price);
+}
+.pillFloor rect {
+  fill: var(--rv-floor-soft);
+  stroke: #9fdcc4;
+}
+.pillFloor text {
+  fill: var(--rv-floor-strong);
+}
+.pillArb rect {
+  fill: var(--rv-arb-soft);
+  stroke: #f2b6c8;
+}
+.pillArb text {
+  fill: var(--rv-arb);
+}
+.pillPlain rect {
+  fill: rgba(255, 255, 255, 0.94);
+  stroke: #9fdcc4;
+}
+.pillPlain text {
+  fill: var(--rv-floor-strong);
+}
+
+/* tap */
+.tap {
+  stroke: var(--rv-glass);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+.valve {
+  fill: var(--rv-ink-2);
+}
+.outflow {
+  stroke: var(--rv-water-mid);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 4 6;
+}
+
+/* gauge, chips */
+.tick line {
+  stroke: var(--rv-ink-3);
+  stroke-width: 1;
+}
+.tick text {
+  fill: var(--rv-ink-3);
+  font-weight: 600;
+}
+.chip rect {
+  fill: var(--rv-floor-soft);
+  stroke: #9fdcc4;
+}
+.chip text {
+  fill: var(--rv-floor-strong);
+  font-weight: 700;
+}
+.chipIllu rect {
+  fill: var(--rv-butter);
+  stroke: #efe08a;
+}
+.chipIllu text {
+  fill: var(--rv-butter-ink);
+  font-weight: 700;
+}
+
+/* strip */
+.stripTitle {
+  fill: var(--rv-ink);
+  font-weight: 700;
+}
+.stripSub {
+  fill: var(--rv-ink-3);
+  font-weight: 500;
+}
+.stripBg {
+  fill: var(--color-cloud, #f7f6fe);
+  stroke: var(--rv-line);
+}
+.tick .stripGrid {
+  stroke: #e8e5f6;
+}
+.stripArea {
+  fill: var(--rv-water-mid);
+  fill-opacity: 0.18;
+}
+.stripPrice {
+  fill: none;
+  stroke: var(--rv-price);
+  stroke-width: 1.4;
+  stroke-opacity: 0.7;
+}
+.stripFloor {
+  fill: none;
+  stroke: var(--rv-floor);
+  stroke-width: 3;
+  stroke-linejoin: miter;
+}
+.stripArb {
+  fill: none;
+  stroke: var(--rv-arb);
+  stroke-width: 1.6;
+  stroke-dasharray: 5 4;
+}
+.stripCursor {
+  stroke: var(--rv-ink-2);
+  stroke-width: 1;
+  opacity: 0.45;
+}
+
+/* ---------- stills and footer ---------- */
+
+.stills {
+  gap: 20px;
+}
+
+.stills figcaption p {
+  color: var(--rv-ink);
+}
+
+.stillStage {
+  height: 460px;
+  padding: 12px;
+  border-radius: 18px;
+  background: #ffffff;
+  border: 1px solid var(--rv-line);
+}
+
+.footer {
+  display: grid;
+  gap: 8px;
+  margin-top: 24px;
+  max-width: 640px;
+}
+
+.footnote {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--rv-ink-3);
+}
+
+.honesty {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--rv-ink);
+}

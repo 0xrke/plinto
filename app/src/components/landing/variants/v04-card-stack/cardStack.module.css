@@ -1,0 +1,623 @@
+/*
+ * Variant 4: Card stack. A sticky 100svh stage holding the deck (pastel cards, one per beat) and the
+ * progress dots. The runway (StorySteps) sits in the same grid cell under the stage and is invisible:
+ * it carries the sr-only captions. Native scrolling only: no scroll-snap, no scroll-behavior.
+ *
+ * Reading line (driver): 40% of the viewport on phones (non-stacked stage), 50% on wide screens. The
+ * runway's top padding equals it, so step 0 starts as the deck pins; its bottom padding keeps the
+ * deck pinned until the last step has passed the line.
+ */
+
+.root {
+  --line: 40svh;
+  /* Room above the top card for the fanned edges: DEPTH_SHOWN cards × --fan, plus a little air. */
+  --fan: 7px;
+  --peek: 24px;
+  background:
+    radial-gradient(1200px 600px at 80% 0%, color-mix(in srgb, var(--color-wash-sky) 60%, transparent), transparent 70%),
+    var(--color-wash);
+}
+
+.track {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* ---------- stage ---------- */
+
+.stage {
+  grid-area: 1 / 1;
+  align-self: start;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 100svh;
+  overflow: clip;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "title dots"
+    "deck deck";
+  column-gap: 10px;
+  align-items: center;
+  padding: 8px 16px 12px;
+}
+
+.title {
+  grid-area: title;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-ink-2);
+  letter-spacing: 0.01em;
+  padding: 2px 2px 0;
+}
+
+.steps {
+  grid-area: 1 / 1;
+  position: relative;
+  z-index: 0;
+  padding-top: var(--line);
+  padding-bottom: calc(100svh - var(--line));
+  pointer-events: none;
+}
+
+/* ---------- deck ---------- */
+
+.deck {
+  grid-area: deck;
+  align-self: stretch;
+  position: relative;
+  min-height: 0;
+}
+
+.slot {
+  position: absolute;
+  inset: var(--peek) 0 0 0;
+  transform-origin: 50% 0;
+  will-change: transform;
+}
+
+.slot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-card);
+  background: var(--color-ink);
+  opacity: var(--shade, 0);
+  pointer-events: none;
+}
+
+.card {
+  --card-bg: var(--color-surface);
+  --c-panel: rgba(255, 255, 255, 0.72);
+  --c-ink: var(--color-ink);
+  --c-ink-2: var(--color-ink-2);
+  --c-muted: var(--color-ink-3);
+  --c-price: var(--color-ink);
+  --c-floor: var(--color-floor);
+  --c-floor-fill: var(--color-floor-bar);
+  --c-arb: var(--color-risk);
+  --c-grid: var(--color-line-strong);
+  --c-presale: var(--color-presale);
+  --c-accent: var(--color-violet);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius-card);
+  background: var(--card-bg);
+  color: var(--c-ink);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.6) inset,
+    0 -10px 30px -14px rgba(20, 20, 43, 0.28),
+    0 18px 40px -24px rgba(20, 20, 43, 0.35);
+}
+
+.card[data-beat="presale"] { --card-bg: #dcebff; --c-accent: var(--color-presale); }
+.card[data-beat="split"] { --card-bg: #d8f5ea; --c-accent: var(--color-floor); }
+.card[data-beat="pump"] { --card-bg: #fbf1b8; --c-accent: var(--color-graduating); }
+.card[data-beat="selloff"] { --card-bg: #ffe4ec; --c-accent: var(--color-risk-strong); }
+.card[data-beat="steps"] { --card-bg: #e3dafb; --c-accent: var(--color-violet-strong); }
+.card[data-beat="bounce"] { --card-bg: #fbdde8; --c-accent: var(--color-risk-strong); }
+.card[data-beat="exits"] { --card-bg: #d9ebfb; --c-accent: var(--color-presale); }
+.card[data-beat="redeem"] {
+  --card-bg: var(--color-midnight);
+  --c-panel: var(--color-tile);
+  --c-ink: #ffffff;
+  --c-ink-2: var(--color-on-dark-2);
+  --c-muted: var(--color-on-dark-3);
+  --c-price: #ffffff;
+  --c-floor: var(--color-mint);
+  --c-floor-fill: var(--color-mint);
+  --c-arb: var(--color-risk-on-dark);
+  --c-grid: var(--color-midnight-line);
+  --c-accent: var(--color-mint);
+  --floor-fill-o: 0.1;
+}
+
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.num {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--c-accent);
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-ink-2);
+}
+
+.of {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c-muted);
+}
+
+.caption {
+  font-family: var(--font-display);
+  font-size: 23px;
+  font-weight: 700;
+  line-height: 1.18;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+  color: var(--c-ink);
+}
+
+/* ---------- split bar ---------- */
+
+.split {
+  display: flex;
+  gap: 3px;
+  height: 34px;
+}
+
+.splitSeg {
+  position: relative;
+  flex-basis: 0;
+  min-width: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.55);
+  overflow: hidden;
+}
+
+.splitFill {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 50%;
+}
+
+.splitSeg[data-seg="floor"] .splitFill { background: var(--color-floor-bar); }
+.splitSeg[data-seg="market"] .splitFill { background: var(--color-iris); }
+.splitSeg[data-seg="fees"] .splitFill { background: var(--color-butter); }
+
+.splitLabel {
+  position: relative;
+  display: block;
+  padding: 0 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 34px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+  color: #fff;
+}
+
+.splitSeg[data-seg="fees"] .splitLabel { color: var(--color-ink); padding: 0 4px; font-size: 10.5px; }
+
+/* ---------- mini chart ---------- */
+
+.chart {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-soft);
+  background: var(--c-panel);
+  padding: 10px 12px 12px;
+}
+
+.chips {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--c-ink-2);
+  background: color-mix(in srgb, var(--c-ink) 7%, transparent);
+}
+
+.chipIllu {
+  background: var(--color-butter);
+  color: var(--color-ink);
+}
+
+.plot {
+  --gutter: 46px;
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 6px;
+  display: grid;
+  grid-template-columns: var(--gutter) minmax(0, 1fr);
+}
+
+/* Y-axis gutter: tick labels sit here, vertically centred on their grid line. */
+.yaxis {
+  position: relative;
+}
+
+.tickLbl {
+  left: auto;
+  right: 6px;
+  transform: translateY(-50%);
+  font-size: 10.5px;
+}
+
+.area {
+  position: relative;
+  min-width: 0;
+}
+
+/* The raise: a slim outlined column ending at the presale's right edge, filled from the bottom. */
+.raiseCol {
+  position: absolute;
+  left: 0;
+  top: 8%;
+  bottom: 0;
+  width: 10px;
+  transform: translateX(-100%);
+  border: 1.5px solid var(--c-presale);
+  border-bottom-width: 0;
+  border-radius: 6px 6px 0 0;
+  overflow: hidden;
+}
+
+.raiseColFill {
+  position: absolute;
+  inset: 0;
+  background: var(--c-presale);
+  opacity: 0.4;
+  transform-origin: 50% 100%;
+}
+
+.svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.presaleZone { fill: var(--c-presale); fill-opacity: 0.04; }
+.refLine { stroke: var(--c-muted); stroke-width: 1; stroke-dasharray: 3 5; stroke-opacity: 0.7; }
+.tick { stroke: var(--c-grid); stroke-width: 1; }
+.floorFill { fill: var(--c-floor-fill); fill-opacity: var(--floor-fill-o, 0.16); }
+.floorLine { stroke: var(--c-floor); stroke-width: 2.5; stroke-linejoin: miter; }
+.arbLine { stroke: var(--c-arb); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.priceLine { stroke: var(--c-price); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+
+.at {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.lbl {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-ink);
+}
+
+.lblMuted { color: var(--c-muted); font-weight: 600; }
+.lblFloor { color: var(--c-floor); }
+.lblArb { color: var(--c-arb); }
+.above { transform: translateY(-100%); padding-bottom: 3px; }
+.below { padding-top: 3px; }
+.center.above { transform: translate(-50%, -100%); }
+.center.below { transform: translateX(-50%); padding-top: 8px; }
+.alignR { left: auto; right: 0; }
+.belowLeft { transform: translate(-100%, -50%); }
+.raised { left: 2px; top: auto; bottom: 2px; font-size: 11.5px; color: var(--c-presale); }
+
+.pt {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+}
+
+.dotHead { width: 10px; height: 10px; background: var(--c-price); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-price) 16%, transparent); }
+.dotFloor { width: 6px; height: 6px; background: var(--c-floor); }
+.dotArb { width: 10px; height: 10px; background: var(--c-arb); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-arb) 20%, transparent); }
+.dotRedeem { width: 10px; height: 10px; background: var(--color-mint); box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-mint) 25%, transparent); }
+
+.redeemChip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-100%, -50%);
+  white-space: nowrap;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  background: var(--color-mint);
+  color: var(--color-ink);
+}
+
+/* ---------- tiles ---------- */
+
+.tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0;
+}
+
+.tile {
+  padding: 6px 12px;
+  border-radius: 14px;
+  background: var(--c-panel);
+}
+
+.tile dt {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--c-muted);
+}
+
+.tile dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--c-ink);
+}
+
+.tileFloor dd { color: var(--c-floor); }
+
+/* ---------- dots ---------- */
+
+.dots {
+  grid-area: dots;
+  justify-self: end;
+}
+
+/* Phones: a horizontal row in the title line, so the deck gets the full width. */
+.dots ol {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dot {
+  --fill: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: 22px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-ink-3);
+  font: inherit;
+  cursor: pointer;
+}
+
+.dotMark {
+  position: relative;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-ink) 18%, transparent);
+  overflow: hidden;
+  transition: width 220ms ease, height 220ms ease, background-color 220ms ease;
+}
+
+.dot[data-state="done"] .dotMark { background: var(--color-ink); }
+
+.dot[data-state="active"] .dotMark {
+  width: 26px;
+  background: color-mix(in srgb, var(--color-ink) 16%, transparent);
+}
+
+.dot[data-state="active"] .dotMark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--color-violet);
+  transform-origin: 0 50%;
+  transform: scaleX(var(--fill));
+}
+
+.dotLabel {
+  display: none;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dot[data-state="active"] .dotLabel,
+.dot[data-state="done"] .dotLabel { color: var(--color-ink); }
+
+.dot[data-state="active"] .dotLabel { font-weight: 800; }
+
+/* ---------- wide ---------- */
+
+@media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
+  .root {
+    --line: 50svh;
+    --fan: 14px;
+    --peek: 48px;
+  }
+
+  .stage {
+    grid-template-columns: minmax(180px, 220px) minmax(0, 940px);
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "title deck"
+      "dots deck";
+    justify-content: center;
+    align-content: center;
+    align-items: stretch;
+    column-gap: 56px;
+    padding: 24px 40px;
+  }
+
+  .title {
+    align-self: end;
+    padding: 0 0 28px;
+    font-size: 40px;
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--color-ink);
+  }
+
+  .deck {
+    height: min(720px, calc(100svh - 64px));
+  }
+
+  .dots {
+    align-self: start;
+  }
+
+  .dots {
+    justify-self: start;
+  }
+
+  .dots ol {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .dot {
+    justify-content: flex-start;
+    min-height: 30px;
+  }
+
+  .dot[data-state="active"] .dotMark {
+    width: 8px;
+    height: 30px;
+  }
+
+  .dot[data-state="active"] .dotMark::after {
+    transform-origin: 50% 0;
+    transform: scaleY(var(--fill));
+  }
+
+  .dotLabel {
+    display: inline;
+  }
+
+  .card {
+    gap: 16px;
+    padding: 24px 28px 26px;
+  }
+
+  .num { font-size: 18px; }
+  .label { font-size: 13px; }
+  .of { font-size: 13px; }
+
+  .caption {
+    font-size: 34px;
+    line-height: 1.12;
+    max-width: 22ch;
+  }
+
+  .split { height: 40px; }
+  .splitLabel { line-height: 40px; font-size: 13px; padding: 0 12px; }
+  .splitSeg[data-seg="fees"] .splitLabel { font-size: 12px; padding: 0 8px; }
+
+  .chart { padding: 14px 18px 18px; }
+  .plot { --gutter: 56px; }
+  .lbl { font-size: 12px; }
+  .tickLbl { font-size: 11.5px; }
+
+  .tiles { gap: 12px; }
+  .tile { padding: 10px 16px; }
+  .tile dt { font-size: 12.5px; }
+  .tile dd { font-size: 26px; }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .caption { font-size: 20px; }
+  .tile dd { font-size: 16px; }
+}
+
+/* ---------- stills and footer ---------- */
+
+.stills {
+  padding: 16px;
+}
+
+.stillCard {
+  height: 340px;
+}
+
+.stillCard .card {
+  box-shadow: none;
+}
+
+.footer {
+  display: grid;
+  gap: 6px;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 8px 16px 48px;
+}
+
+.footnote {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-ink-3);
+}
+
+.honesty {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dotMark { transition: none; }
+}
