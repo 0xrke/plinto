@@ -1,6 +1,15 @@
 # Status — 2026-09-25 (ET)
 
 
+## Scroll story review fixes — 2026-10-08 (local, not committed by this step)
+- "Follow your $100" scroll onboarding: holds and stills show their own beat, redemptions happen
+  where they pay (sell stop), shorter honest captions, phone end no longer hides the last caption,
+  transform-only chart overlays, fewer renders and writes per scroll frame. Details in
+  `docs/DECISIONS.md` (2026-10-08, scroll story review fixes).
+- **Tests (2026-10-08):** app tests 486 passed (46 files), three runs, no flakes; app `tsc --noEmit`
+  clean; mock build passes; first-load JS of `/` 148.7 KB gzip (8 chunks); new browser check
+  `app/e2e/landing-story.e2e.ts` (9 tests at 390×844, 844×390, 1280×800) passes against a dev server.
+
 ## Interactive landing — 2026-10-07 (local, not committed by this step)
 - `/` now has two interactive widgets in one client island: "Set the split" (floor-share and trading sliders,
   depth chart in "your $100") and "Follow your $100" (presale → graduation → trading → selloff → redeem).

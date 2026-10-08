@@ -14,17 +14,18 @@ import { loadLiveFloors, pickLiveFloors } from "./liveFloorsData";
 import { simConstantsFromSdk } from "@/lib/landing/sim/fromSdk";
 import { launchMath } from "@/lib/landing/sim/launch";
 import { FLOW_STOP_COUNT, flowUsdAt } from "@/lib/landing/sim/market";
-import { STAGES, STORY_END, storyFrame } from "@/lib/landing/sim/story";
+import { BEAT_KEYS } from "@/lib/landing/sim/story";
 import { FloorLab } from "./lab/FloorLab";
 import { LabSection } from "./lab/LabSection";
 import { flowLabel, sandboxReadout } from "./lab/SplitSandbox";
-import { ILLUSTRATION, STORY_FOOTNOTE, scrubberValueText, stageCaption, storyChartLabel } from "./lab/storyCopy";
+import { ILLUSTRATION, storyChartStrings } from "./lab/storyChartCopy";
+import { STORY_FOOTNOTE, STORY_HONESTY, beatCaption, beatSrText, railLabel } from "./lab/storyCopy";
 import { Rules } from "./Rules";
 import { TopBar } from "./TopBar";
 
 const OVERCLAIM = /guarantee|risk-free|can.?t lose|cannot lose|profit|\bsafe\b|protected/i;
 
-/** The story's hooks read IntersectionObserver and matchMedia; jsdom has neither. Never in view here. */
+/** The story's scroll driver reads IntersectionObserver and matchMedia; jsdom has neither. Never in view here. */
 class NeverInView {
   observe() {}
   unobserve() {}
@@ -177,9 +178,10 @@ describe("landing sections", () => {
 
   it("floor lab: the server renders the story's finished frame", () => {
     const html = renderToString(<LabSection />);
-    expect(html).toContain("$34.88 back");
-    expect(html).toContain("$65.12 lost");
-    expect(html).not.toMatch(/64\.4|65%/);
+    expect(html).toContain("Redeem now: $36.87 back, not zero.");
+    expect(html).toContain(STORY_HONESTY);
+    // Text only: SVG path data is full of numbers.
+    expect(html.replace(/<[^>]*>/g, " ")).not.toMatch(/64\.4|65%/);
     // The story's chip links to the sandbox's floor-share slider.
     const { container } = render(<LabSection />);
     const chip = container.querySelector("#follow-your-100 a[href^='#']");
@@ -202,15 +204,14 @@ describe("landing sections", () => {
     const k = simConstantsFromSdk();
     for (let v = k.vaultShareMinPct; v <= k.vaultShareMaxPct; v++) {
       const m = launchMath(k, v);
-      for (const s of STAGES) texts.push(stageCaption(m, s.key));
-      texts.push(storyChartLabel(m));
-      for (let t = 0; t <= STORY_END; t += 0.5) texts.push(scrubberValueText(m, storyFrame(m, t)));
+      for (const key of BEAT_KEYS) texts.push(beatCaption(m, key), beatSrText(m, key));
+      texts.push(...storyChartStrings(m));
       for (let i = 0; i < FLOW_STOP_COUNT; i++) {
         const x = flowUsdAt(m, i);
         texts.push(flowLabel(x), ...Object.values(sandboxReadout(m, x)).filter((o): o is string => typeof o === "string"));
       }
     }
-    texts.push(ILLUSTRATION, STORY_FOOTNOTE);
+    texts.push(ILLUSTRATION, STORY_FOOTNOTE, ...BEAT_KEYS.map((_, i) => railLabel(i)));
     for (const t of texts) expect(t.replace("The floor protects from zero, not from loss.", "")).not.toMatch(OVERCLAIM);
   });
 

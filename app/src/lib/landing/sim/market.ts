@@ -19,6 +19,15 @@ export function paperValueOf100(m: LaunchMath, x: number): number {
   return 100 * g * g;
 }
 
+/**
+ * Net flow that puts "your $100" at `value100`, the inverse of `paperValueOf100`:
+ * `Q(√(value100/100) − 1)`. `−sellToFloorUsd` is `flowToValue(m, floorPer100GrossUsd)`.
+ */
+export function flowToValue(m: LaunchMath, value100: number): number {
+  if (!(Number.isFinite(value100) && value100 > 0)) throw new RangeError("value100 must be finite and positive");
+  return m.poolUsd * (Math.sqrt(value100 / 100) - 1);
+}
+
 /** Relative price move after `x` USD of net flow: `(1 + x/Q)² − 1` (= priceImpactPct(x, Q) / 100 for x ≥ 0). */
 export function priceMove(m: LaunchMath, x: number): number {
   return paperValueOf100(m, x) / 100 - 1;

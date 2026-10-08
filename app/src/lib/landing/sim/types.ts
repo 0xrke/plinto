@@ -19,4 +19,15 @@ export interface SimConstants {
   raiseUsd: number;
   /** Exit fee in bps, `DEFAULT_EXIT_FEE_BPS`. */
   exitFeeBps: number;
+  /** DAMM v2 pool fee after migration in bps, `STOCKFLOOR_DBC_DEFAULTS.migratedPoolFeeBps` (100, quote only). */
+  poolFeeBps: number;
+  /** Harvested LP fee cuts in bps: `LP_FEE_CREATOR_BPS` (5000), `LP_FEE_PLATFORM_BPS` (2000); the vault gets the rest. */
+  lpCreatorBps: number;
+  lpPlatformBps: number;
+  /**
+   * DAMM v2 protocol share of every pool fee, in percent (20). A cp-amm program constant, not a pool
+   * setting: `PROTOCOL_FEE_PERCENT` (vendor/damm-v2/programs/cp-amm/src/constants.rs:146), written into
+   * every pool's fee config by params/fee_parameters.rs:70. The SDK has no constant for it.
+   */
+  dammProtocolFeePct: number;
 }

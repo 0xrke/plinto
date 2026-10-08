@@ -1,53 +1,131 @@
 import type { LaunchMath } from "@/lib/landing/sim/launch";
-import { STAGES, storyFrame, type StageKey, type StoryFrame } from "@/lib/landing/sim/story";
+import { floorEvents } from "@/lib/landing/sim/floorPath";
+import { BEAT_KEYS, STORY_POS_END, storyFrame, storyNetFinal, type BeatKey } from "@/lib/landing/sim/story";
 import { formatUsdCents, formatUsdWhole } from "@/lib/landing/sim/format";
+import { formatUsdCompact, storyTradedUsd } from "./storyChartCopy";
 
-/** Every visible sentence of the story lives here, so tests can scan it for overclaims. */
+/**
+ * Every visible sentence of the scroll story (outside the chart) lives here, so tests can scan it
+ * for length and overclaims. Captions: at most 7 words and one number each.
+ */
 
 export const STORY_TITLE = "Follow your $100";
-export const STORY_FOOTNOTE = "Made-up trades. Every other number is SDK math.";
-export const ILLUSTRATION = "Illustration";
+export const STORY_FOOTNOTE = "Made-up trades. Real fee math. SPYx flat.";
+export const STORY_HONESTY = "The floor protects from zero, not from loss.";
+
+export const BEAT_LABELS: Readonly<Record<BeatKey, string>> = {
+  presale: "Presale",
+  split: "Split",
+  pump: "Pump",
+  selloff: "Selloff",
+  steps: "Steps",
+  bounce: "Bounce",
+  exits: "Exits",
+  redeem: "Redeem",
+};
+
+/** Scroll runway per beat, in svh: how long the step stays in the reading flow. */
+export const BEAT_RUNWAY_SVH: Readonly<Record<BeatKey, number>> = {
+  presale: 60,
+  split: 70,
+  pump: 80,
+  selloff: 70,
+  steps: 90,
+  bounce: 90,
+  exits: 70,
+  redeem: 70,
+};
+
+export const TILE_NOW = "Your $100 now";
+export const TILE_FLOOR = "Floor pays back";
+export const TILE_REDEEMED = "Redeemed";
 
 export const floorSharePct = (m: LaunchMath): number => Math.round(m.v * 100);
 
-export function stageCaption(m: LaunchMath, key: StageKey): string {
+/** "Step 3 of 8: Pump". */
+export const railLabel = (i: number): string => `Step ${i + 1} of ${BEAT_KEYS.length}: ${BEAT_LABELS[BEAT_KEYS[i]!]}`;
+
+/** "3/8 · Pump" (the phone rail's status). */
+export const railStatus = (i: number): string => `${i + 1}/${BEAT_KEYS.length} · ${BEAT_LABELS[BEAT_KEYS[i]!]}`;
+
+export function beatCaption(m: LaunchMath, key: BeatKey): string {
   switch (key) {
     case "presale":
-      return "Buyers fill the curve. You buy $100 at the top.";
-    case "graduation":
-      return `Raise complete: ${floorSharePct(m)}% locks in SPYx as the floor.`;
-    case "trading":
-      return "Trading opens. A thin market swings hard.";
+      return "You buy $100 in the presale.";
+    case "split":
+      return `${floorSharePct(m)}% of the raise becomes the floor.`;
+    case "pump":
+      return "Trading opens. Your $100 runs up.";
     case "selloff":
-      return "Everyone sells. The price falls to the floor.";
+      return "Hype fades. Price falls to the floor.";
+    case "steps":
+      return "Zoom in: the floor climbs in steps.";
+    case "bounce":
+      return "Below the arbitrage line, buy-and-redeem pays.";
+    case "exits":
+      return `Every redemption leaves ${m.exitFeePct}% in the vault.`;
     case "redeem":
-      return `Burn your tokens for your share of the floor, less a ${m.exitFeePct}% fee.`;
+      return `Redeem now: ${formatUsdCents(storyNetFinal(m))} back, not zero.`;
   }
 }
 
-/** The redeem bar's split of $100 in whole cents: what the floor pays back and the rest. */
-export function redeemCents(m: LaunchMath): { backCents: number; lostCents: number } {
-  const backCents = Math.round(m.floorPer100Usd * 100);
-  return { backCents, lostCents: 10_000 - backCents };
+
+const numbersCache = new WeakMap<LaunchMath, StoryNumbers>();
+
+type StoryNumbers = ReturnType<typeof computeStoryNumbers>;
+
+/** Numbers behind the screen-reader lines, all from the launch math and the floor schedule (cached per launch). */
+export function storyNumbers(m: LaunchMath): StoryNumbers {
+  let n = numbersCache.get(m);
+  if (!n) {
+    n = computeStoryNumbers(m);
+    numbersCache.set(m, n);
+  }
+  return n;
 }
 
-export const centsToUsd = (cents: number): string => formatUsdCents(cents / 100);
-
-/** Peak of the illustrated path: the value at the end of trading. */
-export function storyPeakValue(m: LaunchMath): number {
-  return storyFrame(m, STAGES.find((s) => s.key === "trading")!.end).valueOf100;
+function computeStoryNumbers(m: LaunchMath) {
+  const events = floorEvents(m);
+  const end = storyFrame(m, STORY_POS_END);
+  const redeems = events.filter((e) => e.kind === "redeem");
+  const holders = redeems[redeems.length - 1];
+  return {
+    vaultPerTradePct: (m.lpVaultPerVolume * 100).toFixed(2),
+    feesPct: (end.feesPct ?? 0).toFixed(1),
+    tradedUsd: storyTradedUsd(m),
+    arbLinePct: Math.round(m.arbLineRatio * 100),
+    sellStopPct: Math.round(m.sellStopRatio * 100),
+    holdersSharePct: holders && holders.kind === "redeem" ? Math.round(holders.share * 100) : 0,
+    exitsPct: (end.exitsPct ?? 0).toFixed(1),
+    peakUsd: end.peak.value,
+    net: storyNetFinal(m),
+  };
 }
 
-export function storyChartLabel(m: LaunchMath): string {
-  return `Illustration: your $100 rises to ${formatUsdWhole(storyPeakValue(m))} on paper, then falls to the floor, which pays back ${formatUsdCents(m.floorPer100Usd)}.`;
+/** One screen-reader line per beat, with the numbers the chart shows. */
+export function beatSrText(m: LaunchMath, key: BeatKey): string {
+  const n = storyNumbers(m);
+  switch (key) {
+    case "presale":
+      return `The presale raises ${formatUsdWhole(m.raiseUsd)} in total.`;
+    case "split":
+      return `${floorSharePct(m)}% of the raise buys SPYx for the floor vault, which pays back ${formatUsdCents(m.floorPer100Usd)} per $100 at listing.`;
+    case "pump":
+      return `Illustration: your $100 rises to ${formatUsdWhole(n.peakUsd)} on paper.`;
+    case "selloff":
+      return "Illustration: the price falls back to the floor.";
+    case "steps":
+      return `${n.vaultPerTradePct}% of every trade reaches the vault at each fee harvest: +${n.feesPct}% after ${formatUsdCompact(n.tradedUsd)} traded.`;
+    case "bounce":
+      return `Below about ${n.arbLinePct}% of the floor, buying in the pool and redeeming pays, before price impact and costs.`;
+    case "exits":
+      return `Under about ${n.sellStopPct}% of the floor, redeeming pays more than selling: ${n.holdersSharePct}% of supply redeems, and the ${m.exitFeePct}% exit fee kept in the vault lifts the floor ${n.exitsPct}%.`;
+    case "redeem":
+      return `Redeem pays ${formatUsdCents(n.net)} per $100; the price can stay below what you paid.`;
+  }
 }
 
-/** Scrubber value text: "Stage 3 of 5, Trading: your $100 is $312.40 on paper (illustration)." */
-export function scrubberValueText(m: LaunchMath, f: StoryFrame): string {
-  const s = STAGES[f.stageIndex]!;
-  const head = `Stage ${f.stageIndex + 1} of ${STAGES.length}, ${s.label}`;
-  if (f.stage === "redeem") return `${head}: the floor pays back ${formatUsdCents(m.floorPer100Usd)}.`;
-  const tail = f.illustrative ? " (illustration)" : "";
-  return `${head}: your $100 is ${formatUsdCents(f.valueOf100)} on paper${tail}.`;
+/** Every visible prose string of the story outside the chart (rail labels and tiles aside). */
+export function storyProse(m: LaunchMath): string[] {
+  return [STORY_TITLE, ...BEAT_KEYS.map((k) => beatCaption(m, k)), STORY_FOOTNOTE, STORY_HONESTY];
 }
-

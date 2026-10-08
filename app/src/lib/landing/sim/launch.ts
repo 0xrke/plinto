@@ -38,6 +38,19 @@ export interface LaunchMath {
    * ignored (the real pool is ~0.2% thinner, so the real figure is ~0.2% lower).
    */
   sellToFloorUsd: number;
+  /**
+   * Vault gain per USD of pool volume at each LP fee harvest: pool fee × (1 − DAMM protocol share) ×
+   * (1 − creator − platform cuts) = 0.01 × 0.8 × 0.3 = 0.0024 (harvest_lp_fees.rs, math.rs lp_fee_split).
+   * Fees are quote only, so a harvest adds to the vault and burns no meaningful base.
+   */
+  lpVaultPerVolume: number;
+  /**
+   * Arbitrage line as a share of the gross floor: `(1 − f)(1 − φ)` = 0.9702. Below it, buying in the
+   * pool (1% fee) and redeeming (2% exit fee) pays, before price impact and transaction costs.
+   */
+  arbLineRatio: number;
+  /** Sell stop as a share of the gross floor: `(1 − f)/(1 − φ)` ≈ 0.989899. Below it, redeeming beats selling. */
+  sellStopRatio: number;
 }
 
 export function launchMath(k: SimConstants, vaultSharePct: number): LaunchMath {
@@ -57,6 +70,8 @@ export function launchMath(k: SimConstants, vaultSharePct: number): LaunchMath {
   const poolUsd = poolShare * T;
   const floorToListing = v / (sqrtR + poolShare);
   const floorPer100GrossUsd = 100 * floorToListing;
+  const f = k.exitFeeBps / 10_000;
+  const phi = k.poolFeeBps / 10_000;
   return {
     v,
     r,
@@ -74,9 +89,12 @@ export function launchMath(k: SimConstants, vaultSharePct: number): LaunchMath {
     floorToListing,
     listingOverFloor: 1 / floorToListing,
     floorPer100GrossUsd,
-    floorPer100Usd: floorPer100GrossUsd * (1 - k.exitFeeBps / 10_000),
+    floorPer100Usd: floorPer100GrossUsd * (1 - f),
     exitFeePct: k.exitFeeBps / 100,
     // Constant product x·y = k: price ∝ y², so the price hits F when y = Q·√(F/p1) (DAMM v2 full range, fee ignored).
     sellToFloorUsd: poolUsd * (1 - Math.sqrt(floorToListing)),
+    lpVaultPerVolume: phi * (1 - k.dammProtocolFeePct / 100) * (1 - (k.lpCreatorBps + k.lpPlatformBps) / 10_000),
+    arbLineRatio: (1 - f) * (1 - phi),
+    sellStopRatio: (1 - f) / (1 - phi),
   };
 }

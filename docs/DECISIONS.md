@@ -617,3 +617,31 @@ Format: **decision** · alternatives · why. These supersede the matching bullet
 - A scroll-driven version (sticky chapters: how it works, pick the floor asset, floor share, stages
   scrubbed by scroll) was built in `f566b96`. The founder preferred the previous landing, so it was
   reverted in full; the split sandbox and the button-driven "Follow your $100" story are back.
+
+## 2026-10-08 — Scroll story review fixes ("Follow your $100")
+- A step's hold and its reduced-motion still show that step's own beat: `storyFrame` reads a whole
+  pos i > 0 as beat i − 1 finished (same story time as beat i at 0), so the pill and chrome never jump
+  to the next beat under the current caption.
+- Where redemptions happen follows the mechanism: holders redeem 30% at an exits knot where the
+  price is under `sellStopRatio × floor` (redeeming pays more than selling) and above the arbitrage
+  line; the exits path is now [1.08, 1.03, 0.98, 1.02, 0.99] × F̂_b and the redeem beat holds at
+  0.99 × F̂_b, under the sell stop of the final floor. The arbitrage redemption is 0.4% of supply
+  (about what buying from the drawn dip to the arbitrage line moves), not 2%. Redeem pays $36.87
+  per $100 at the defaults (was $36.88).
+- "Your $100" reads $100 through the presale and the split (you paid $100); the presale curve value
+  is no longer drawn.
+- Copy: bounce "Below the arbitrage line, buy-and-redeem pays." (the line is ≈97% of the floor, not
+  the floor); exits "Every redemption leaves 2% in the vault."; redeem "Redeem now: $36.87 back, not
+  zero." (the amount depends on the illustrated volume, so not "anytime"); selloff "Hype fades. Price
+  falls to the floor."; footnote "Made-up trades. Real fee math. SPYx flat." Visible prose 70 words.
+  The "$100k traded" pill stays through the steps beat. The unlabelled mint/grey redeem bar is gone;
+  the redeem chip sits under the arbitrage line at the right edge and reads just the amount on phones.
+- Phone layout: the narrow stage has `margin-bottom: 120px` (no column padding), so it unpins before
+  the last card could slide under it. Chart overlays move with transforms only (plot-sized wrappers
+  translated by percent); `.chart` has `contain: layout paint`. The driver writes `--qN` on the rail
+  (only changed values) and step `data-active` only when the active step changes; a chapter the
+  IntersectionObserver has not reported yet is measured by its rect after a big jump.
+- The "Floor share" link scrolls the slider to 72px below the top (label in view) and focuses it,
+  instead of changing SplitSandbox.
+- Not changed: the server still renders the 8 reduced-motion stills next to the stage (12.9 KB of the
+  29.7 KB gzip HTML of `/`); dropping them would leave no-JS reduced-motion visitors a pinned track.

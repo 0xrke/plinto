@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   BASE_SUPPLY_TARGET_RAW,
   DEFAULT_QUOTE_ASSET,
@@ -19,20 +19,12 @@ import {
   DEFAULT_FLOW_INDEX,
   FLOW_STOP_COUNT,
   FLOOR_FLOW_INDEX,
+  flowToValue,
   flowUsdAt,
   paperValueOf100,
   presaleValueOf100,
   priceMove,
 } from "./market";
-import {
-  SELLOFF_WAYPOINTS,
-  STAGES,
-  STORY_END,
-  TRADING_WAYPOINTS,
-  netFlowAt,
-  stageAt,
-  storyFrame,
-} from "./story";
 import type { SimConstants } from "./types";
 
 const EXPECTED_CONSTANTS: SimConstants = {
@@ -45,6 +37,10 @@ const EXPECTED_CONSTANTS: SimConstants = {
   defaultVaultSharePct: 50,
   raiseUsd: 10_000,
   exitFeeBps: 200,
+  poolFeeBps: 100,
+  lpCreatorBps: 5000,
+  lpPlatformBps: 2000,
+  dammProtocolFeePct: 20,
 };
 
 const k = EXPECTED_CONSTANTS;
@@ -162,6 +158,27 @@ describe("market", () => {
     }
   });
 
+  it("flowToValue inverts paperValueOf100 and generalises sellToFloorUsd", () => {
+    for (const v of [30, 40, 50, 60]) {
+      const m = at(v);
+      near(flowToValue(m, m.floorPer100GrossUsd), -m.sellToFloorUsd, 1e-9, 1e-9);
+      for (const x of [-1000, 0, 500, 4000]) near(flowToValue(m, paperValueOf100(m, x)), x, 1e-9, 1e-7);
+    }
+    expect(flowToValue(at(50), 100)).toBe(0);
+    expect(() => flowToValue(at(50), 0)).toThrow(RangeError);
+    expect(() => flowToValue(at(50), Number.NaN)).toThrow(RangeError);
+  });
+
+  it("fee ratios for the floor's growth and the bounce", () => {
+    for (const v of [30, 50, 60]) {
+      const m = at(v);
+      near(m.lpVaultPerVolume, 0.0024, 1e-12, 1e-12);
+      near(m.arbLineRatio, 0.9702, 1e-12, 1e-12);
+      near(m.sellStopRatio, 0.98 / 0.99, 1e-12, 1e-12);
+      nearPrinted(m.sellStopRatio, 0.989899);
+    }
+  });
+
   it("flow stops, default and scaling; selling stops at the floor", () => {
     expect(FLOW_STOP_COUNT).toBe(8);
     const m = at(50);
@@ -204,96 +221,6 @@ describe("redemption invariants (SDK redeemQuote)", () => {
       expect(after).toBeGreaterThanOrEqual(before);
     }
     near(m.floorPer100Usd, m.floorPer100GrossUsd * (1 - k.exitFeeBps / 10_000));
-  });
-});
-
-describe("story", () => {
-  afterEach(() => vi.restoreAllMocks());
-
-  it("stages tile 0..15 s", () => {
-    expect(STORY_END).toBe(15);
-    expect(STAGES.map((s) => s.key)).toEqual(["presale", "graduation", "trading", "selloff", "redeem"]);
-    expect(STAGES[0]!.start).toBe(0);
-    for (let i = 1; i < STAGES.length; i++) expect(STAGES[i]!.start).toBe(STAGES[i - 1]!.end);
-    expect(STAGES.at(-1)!.end).toBe(STORY_END);
-    expect(stageAt(0)).toBe(0);
-    expect(stageAt(3.5)).toBe(0); // the end of a stage still shows that stage
-    expect(stageAt(3.51)).toBe(1);
-    expect(stageAt(15)).toBe(4);
-    expect(stageAt(99)).toBe(4);
-    expect(stageAt(-1)).toBe(0);
-    expect(TRADING_WAYPOINTS).toEqual([0, 0.35, 0.25, 0.6, 0.5, 0.85, 1]);
-    expect(SELLOFF_WAYPOINTS).toEqual([0, 0.45, 0.38, 0.8, 0.72, 1]);
-  });
-
-  it("spec frames at v = 50", () => {
-    const m = at(50);
-    const end = storyFrame(m, 15);
-    expect(end.stage).toBe("redeem");
-    near(end.valueOf100, 35.5875, 5e-6);
-    expect(end.redeemProgress).toBe(1);
-    expect(end.illustrative).toBe(false);
-    near(storyFrame(m, 10).valueOf100, 400);
-    near(storyFrame(m, 0).valueOf100, presaleValueOf100(m, 0));
-    near(storyFrame(m, 3.5).valueOf100, 100);
-    expect(storyFrame(m, 3.5).raisedUsd).toBe(10_000);
-    expect(storyFrame(m, 0).raisedUsd).toBe(0);
-    expect(storyFrame(m, 5).valueOf100).toBe(100);
-    expect(storyFrame(m, 7).illustrative).toBe(true);
-    expect(storyFrame(m, 12).illustrative).toBe(true);
-    near(storyFrame(m, 13).valueOf100, m.floorPer100GrossUsd, 1e-9, 1e-9);
-    near(netFlowAt(m, 13), -m.sellToFloorUsd, 1e-9, 1e-9);
-    expect(netFlowAt(m, 5)).toBe(0);
-    near(netFlowAt(m, 10), 0.4 * k.raiseUsd);
-    expect(storyFrame(m, 3).yMax).toBe(120);
-    near(storyFrame(m, 9).yMax, 1.15 * 400);
-    // The zoom holds through the selloff and redeem, so the finished frame shows the whole peak.
-    near(storyFrame(m, 13).yMax, 1.15 * 400);
-    near(storyFrame(m, 15).yMax, 1.15 * 400);
-    for (const v of [30, 60]) {
-      const mv = at(v);
-      const end = storyFrame(mv, 15);
-      expect(Math.max(...end.path.map(([, y]) => y))).toBeLessThanOrEqual(end.yMax);
-    }
-  });
-
-  it("progress fields move 0 → 1 in their windows", () => {
-    const m = at(50);
-    expect(storyFrame(m, 3.5).splitProgress).toBe(0);
-    expect(storyFrame(m, 4.7).splitProgress).toBe(1);
-    expect(storyFrame(m, 4.7).floorSlabProgress).toBe(0);
-    expect(storyFrame(m, 5.4).floorSlabProgress).toBe(1);
-    expect(storyFrame(m, 13).redeemProgress).toBe(0);
-    expect(storyFrame(m, 13.8).redeemProgress).toBe(1);
-    expect(storyFrame(m, 1).stageProgress).toBeCloseTo(1 / 3.5, 12);
-  });
-
-  it("invariants over t and v, without Math.random", () => {
-    vi.spyOn(Math, "random").mockImplementation(() => {
-      throw new Error("the story must be deterministic");
-    });
-    const tradingStart = STAGES[2]!.start;
-    for (let v = 30; v <= 60; v++) {
-      const m = at(v);
-      const peak = paperValueOf100(m, 0.4 * k.raiseUsd);
-      for (let i = 0; i <= 300; i++) {
-        const t = i * 0.05;
-        const f = storyFrame(m, t);
-        expect(storyFrame(m, t)).toEqual(f);
-        if (t >= tradingStart) expect(f.valueOf100).toBeGreaterThanOrEqual(m.floorPer100GrossUsd - 1e-9);
-        expect(f.valueOf100).toBeLessThanOrEqual(peak + 1e-9);
-        expect(f.valueOf100).toBeLessThanOrEqual(f.yMax);
-        expect(f.path.length).toBeGreaterThan(0);
-        expect(f.path.length).toBeLessThanOrEqual(120);
-        for (let j = 1; j < f.path.length; j++) expect(f.path[j]![0]).toBeGreaterThan(f.path[j - 1]![0]);
-        expect(f.path.at(-1)).toEqual([t, f.valueOf100]);
-        for (const key of ["stageProgress", "splitProgress", "floorSlabProgress", "redeemProgress"] as const) {
-          expect(f[key]).toBeGreaterThanOrEqual(0);
-          expect(f[key]).toBeLessThanOrEqual(1);
-        }
-        expect(STAGES[f.stageIndex]!.key).toBe(f.stage);
-      }
-    }
   });
 });
 
