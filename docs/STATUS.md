@@ -1,6 +1,13 @@
 # Status — 2026-09-25 (ET)
 
 
+## Colosseum submission — 2026-10-12 PDT (founder-approved)
+- Plinto submitted to Colosseum's **Crypto World's Fair** hackathon (project 17790), status "Submitted",
+  6:14 PM PDT on 2026-10-12. Category Token Launch / Tokenomics; website and live link `https://plinto.xyz`,
+  repo `github.com/0xrke/plinto`, one YouTube video (`i2CFM9Ohz4k`) used as both demo and pitch.
+- Still editable after submission: live product link, access instructions, notes for judges.
+
+
 ## Scroll story review fixes — 2026-10-08 (local, not committed by this step)
 - "Follow your $100" scroll onboarding: holds and stills show their own beat, redemptions happen
   where they pay (sell stop), shorter honest captions, phone end no longer hides the last caption,
