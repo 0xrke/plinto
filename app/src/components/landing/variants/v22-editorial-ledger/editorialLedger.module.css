@@ -1,0 +1,1146 @@
+/*
+ * Variant 22, "Editorial ledger": variant 11's editorial chart beside variant 18's vault ledger, in
+ * one full-height sticky stage under a caption heading that changes in place. Colours are site tokens
+ * only (var(--color-…)); radii and type follow shared/BRAND.md. Native scrolling only: no
+ * scroll-snap, no scroll-behavior. Scrubbed values change inline from the frame, never with CSS
+ * transitions; only the caption fades in (120ms) when the beat changes.
+ */
+
+.page {
+  overflow-x: clip;
+}
+
+.root {
+  /* Event colours on light grounds (--k) and soft tints (--ks), and on the midnight chart (--kd):
+     the split is presale sky, a fee harvest the floor, a redemption violet (as in variant 18). */
+  --k-split: var(--color-presale);
+  --k-harvest: var(--color-floor-bar);
+  --k-redeem: var(--color-violet);
+  --ks-split: var(--color-presale-soft);
+  --ks-harvest: var(--color-floor-soft);
+  --ks-redeem: var(--color-violet-soft);
+  position: relative;
+  overflow-x: clip;
+}
+
+.root [data-kind="split"] {
+  --k: var(--k-split);
+  --ks: var(--ks-split);
+}
+.root [data-kind="harvest"] {
+  --k: var(--k-harvest);
+  --ks: var(--ks-harvest);
+}
+.root [data-kind="redeem"] {
+  --k: var(--k-redeem);
+  --ks: var(--ks-redeem);
+}
+
+/* ---------- section header (scrolls away) ---------- */
+
+.intro {
+  padding-top: 32px;
+  padding-bottom: 8px;
+}
+
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+@media (min-width: 1024px) {
+  .intro {
+    padding-top: 56px;
+    padding-bottom: 16px;
+  }
+}
+
+/* ---------- track, stage, runway ---------- */
+
+.track {
+  position: relative;
+}
+
+.stage {
+  grid-area: 1 / 1;
+  align-self: start;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 100svh;
+  min-width: 0;
+  background: var(--color-surface);
+}
+
+/* The runway is invisible: the captions are sr-only here; the stage's heading shows the active one. */
+.root .steps {
+  position: relative;
+  z-index: 0;
+  padding: 50svh 0 60svh;
+  pointer-events: none;
+}
+
+.stepSr {
+  height: 1px;
+}
+
+.frame {
+  height: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px 16px 12px;
+}
+
+/* ---------- heading: the active beat's caption, changed in place ---------- */
+
+.heading {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-floor);
+}
+
+.badge {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 22px;
+  border-radius: 8px;
+  background: var(--color-floor-soft);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-floor);
+}
+
+
+/* Two lines are always reserved on phones, so the chart under it never moves when the caption changes. */
+.caption {
+  margin: 0;
+  min-height: 2.7em;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+  color: var(--color-ink);
+  text-wrap: balance;
+  animation: captionIn 120ms ease both;
+}
+
+.deck {
+  display: none;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--color-ink-2);
+  animation: captionIn 120ms ease both;
+}
+
+@keyframes captionIn {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ---------- panels: chart and ledger ---------- */
+
+/*
+ * Stacked (phones, and the reduced-motion stills): the chart card on top, then the ledger's
+ * essentials under it. Side by side (wide, live): see the wide block.
+ */
+.panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, min(52svh, 460px)) auto;
+  gap: 10px;
+  align-content: start;
+  min-height: 0;
+  min-width: 0;
+}
+
+.panelsStill {
+  grid-template-rows: auto auto;
+}
+
+.chartCol {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chartCard {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ---------- chart (SVG, real pixels) ---------- */
+
+.svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  font-family: var(--font-sans);
+}
+
+.maskStop {
+  stop-color: var(--color-white);
+}
+
+.activeCol {
+  fill: color-mix(in srgb, var(--color-white) 5%, transparent);
+}
+
+.grid {
+  stroke: var(--color-midnight-line);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.tick {
+  font-size: 10.5px;
+  font-weight: 600;
+  fill: var(--color-on-dark-3);
+}
+
+.paid {
+  stroke: var(--color-on-dark-3);
+  stroke-width: 1;
+  stroke-dasharray: 4 5;
+  opacity: 0.5;
+}
+
+.floorSlab {
+  fill: color-mix(in srgb, var(--color-mint) 14%, transparent);
+}
+
+.arb {
+  fill: none;
+  stroke: var(--color-risk-on-dark);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
+.ref {
+  stroke: var(--color-mint);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+  opacity: 0.7;
+}
+
+.bracket {
+  fill: none;
+  stroke: var(--color-mint);
+  stroke-width: 1.25;
+}
+
+.floor {
+  fill: none;
+  stroke: var(--color-mint);
+  stroke-width: 2.5;
+  stroke-linejoin: miter;
+}
+
+.price {
+  fill: none;
+  stroke: var(--color-white);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.head {
+  fill: var(--color-white);
+  stroke: var(--color-midnight);
+  stroke-width: 2;
+}
+
+.bounce {
+  fill: var(--color-risk-on-dark);
+}
+
+.bounceHalo {
+  fill: color-mix(in srgb, var(--color-white) 10%, transparent);
+}
+
+.redeemDot {
+  fill: var(--color-mint);
+  stroke: var(--color-midnight);
+  stroke-width: 2;
+}
+
+.chipBack {
+  fill: var(--color-mint);
+}
+
+.chipText {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  fill: var(--color-midnight);
+}
+
+.redeemLeader {
+  fill: none;
+  stroke: var(--color-mint);
+  stroke-width: 1.25;
+}
+
+.arbStrip {
+  fill: color-mix(in srgb, var(--color-risk-on-dark) 12%, transparent);
+}
+
+.leader {
+  fill: none;
+  stroke: var(--color-on-dark-3);
+  stroke-width: 0.75;
+  opacity: 0.7;
+}
+
+.note {
+  font-size: 11.5px;
+  font-weight: 600;
+  fill: var(--color-on-dark);
+  paint-order: stroke;
+  stroke: var(--color-midnight);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  font-variant-numeric: tabular-nums;
+}
+
+.noteStrong {
+  font-weight: 700;
+}
+
+.tone_ink {
+  fill: var(--color-white);
+}
+
+.tone_floor {
+  fill: var(--color-mint);
+}
+
+.tone_arb {
+  fill: var(--color-risk-on-dark);
+}
+
+.tone_muted {
+  fill: var(--color-on-dark-3);
+}
+
+.xTick {
+  stroke: var(--color-midnight-line);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.xLabel {
+  font-size: 10.5px;
+  font-weight: 600;
+  fill: var(--color-on-dark-3);
+  opacity: 0.7;
+}
+
+.xActive {
+  fill: var(--color-white);
+  font-weight: 700;
+  opacity: 1;
+}
+
+/* The raise column: presale sky filling up to your $100, then the split's saturated segments. */
+.colTrack {
+  fill: var(--color-midnight-line);
+}
+
+.colFill {
+  fill: var(--color-presale-ring);
+}
+
+.col_floor {
+  fill: var(--color-mint);
+}
+
+.col_market {
+  fill: var(--color-iris);
+}
+
+.col_creator {
+  fill: var(--color-butter);
+}
+
+.col_platform {
+  fill: var(--color-graduating-ring);
+}
+
+.colLabel {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.005em;
+  paint-order: stroke;
+  stroke: var(--color-midnight);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.colLabelMuted {
+  font-weight: 600;
+  fill: var(--color-on-dark-3);
+}
+
+.colLabel_raise {
+  fill: var(--color-white);
+}
+
+.colLabel_floor {
+  fill: var(--color-mint);
+}
+
+.colLabel_market {
+  fill: var(--color-iris);
+}
+
+.colLabel_fees {
+  fill: var(--color-butter);
+}
+
+.colTick {
+  fill: none;
+  stroke-width: 1.5;
+}
+
+.colTick_floor {
+  stroke: var(--color-mint);
+}
+
+.colTick_market {
+  stroke: var(--color-iris);
+}
+
+.colTick_fees {
+  stroke: var(--color-butter);
+}
+
+/* Ledger chips on the staircase, in the entry's colour on midnight. */
+.kind_split {
+  fill: var(--color-presale-ring);
+}
+
+.kind_harvest {
+  fill: var(--color-mint);
+}
+
+.kind_redeem {
+  fill: var(--color-iris);
+}
+
+.chipDot {
+  stroke: var(--color-midnight);
+  stroke-width: 2;
+}
+
+.chipHalo {
+  opacity: 0.28;
+}
+
+.chipNo {
+  font-size: 10px;
+  font-weight: 800;
+  fill: var(--color-midnight);
+  pointer-events: none;
+}
+
+@media (min-width: 1024px) {
+  .note {
+    font-size: 12.5px;
+  }
+
+  .tick,
+  .xLabel {
+    font-size: 11px;
+  }
+
+  .colLabel {
+    font-size: 16px;
+  }
+
+  .chipNo {
+    font-size: 10.5px;
+  }
+}
+
+/* ---------- ledger ---------- */
+
+/*
+ * Stacked (phones, stills): no panel, no title; vault | supply, then "Your $100 now" | "Floor pays
+ * back", then one slot: the raise and its split until the split is done, the two newest entries after.
+ */
+.ledger {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "bal bal"
+    "fig fig"
+    "slot slot";
+  gap: 8px;
+  min-width: 0;
+}
+
+.ledgerHead {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ledgerTitle {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+}
+
+.ledgerEq {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--color-surface);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-ink-2);
+  white-space: nowrap;
+}
+
+.rowLine {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rowLabel {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rowValue {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-ink);
+  white-space: nowrap;
+}
+
+.rowOf {
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-ink-3);
+}
+
+/* The raise and its split: the same three rows as the chart's column, in the same colours. */
+.raise {
+  grid-area: slot;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 0 2px;
+}
+
+.ledger:not([data-early]) .raise {
+  display: none;
+}
+
+.splitRows {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.splitRow {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 8px;
+  height: 22px;
+  font-size: 12px;
+  color: var(--color-ink-3);
+}
+
+.splitRow[data-on] {
+  color: var(--color-ink);
+}
+
+.swatch {
+  width: 10px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--color-track);
+}
+
+.splitRow[data-on] .swatch {
+  background: var(--sw);
+}
+
+.splitRow[data-seg="floor"] {
+  --sw: var(--color-floor-bar);
+}
+
+.splitRow[data-seg="market"] {
+  --sw: var(--color-iris);
+}
+
+.splitRow[data-seg="fees"] {
+  --sw: var(--color-butter);
+}
+
+.splitName {
+  min-width: 0;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.splitRow[data-seg="floor"][data-on] .splitName b {
+  color: var(--color-floor);
+}
+
+.splitTo {
+  font-size: 11px;
+  color: var(--color-ink-3);
+  white-space: nowrap;
+}
+
+.splitUsd {
+  min-width: 52px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-align: right;
+  color: var(--color-ink);
+}
+
+/* Balances: vault and supply. */
+.balances {
+  grid-area: bal;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.row {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 10px 10px;
+  border-radius: 14px;
+  background: var(--color-cloud);
+}
+
+.row .rowLine {
+  flex-wrap: wrap;
+  column-gap: 6px;
+  row-gap: 0;
+}
+
+.row .rowLabel {
+  flex: 1 0 100%;
+}
+
+/* The row the newest entry moved: tinted in its colour, fading as the story moves on. */
+.row::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--ks, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.row[data-hot]::before {
+  opacity: calc(0.3 + var(--fresh, 0) * 0.7);
+}
+
+.row > * {
+  position: relative;
+}
+
+.delta {
+  order: 2;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--k);
+  white-space: nowrap;
+}
+
+.row .rowValue {
+  order: 1;
+}
+
+/* FloorMeter look: soft track, floor-green fill, rounded. */
+.bar {
+  position: relative;
+  display: flex;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-track);
+  overflow: hidden;
+}
+
+.bar > span {
+  flex: none;
+  height: 100%;
+}
+
+.segRaise {
+  background: var(--color-floor-bar);
+}
+
+.segFees {
+  background: var(--color-mint);
+  box-shadow: inset 2px 0 0 var(--color-surface);
+}
+
+.segPaid,
+.segBurned {
+  background-color: var(--color-violet-soft);
+  background-image: repeating-linear-gradient(135deg, var(--color-iris) 0 1.5px, transparent 1.5px 5px);
+}
+
+.segSupply {
+  background: var(--color-iris);
+}
+
+/* The two headline figures. */
+.figures {
+  grid-area: fig;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  margin: 0;
+}
+
+.figNow,
+.figFloor {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  height: 42px;
+  padding: 0 10px;
+  border-radius: 10px;
+}
+
+.figNow {
+  background: var(--color-cloud);
+  color: var(--color-ink-2);
+}
+
+.figFloor {
+  background: var(--color-floor-wash);
+  color: var(--color-floor);
+}
+
+.figNow dt,
+.figFloor dt {
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.figNow dd,
+.figFloor dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.figNow dd {
+  color: var(--color-ink);
+}
+
+.figFloor::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1.5px var(--k, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.figFloor[data-hot]::after {
+  opacity: var(--fresh, 0);
+}
+
+/* The journal: numbered like the chips on the chart, newest first. */
+.journal {
+  grid-area: slot;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  margin: 0;
+  padding: 0 2px;
+  list-style: none;
+  font-size: 12px;
+}
+
+.ledger[data-early] .journal {
+  display: none;
+}
+
+.entry {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  height: 22px;
+  color: var(--color-ink-3);
+}
+
+.entry[data-hot] {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+/* Stacked: the newest two lines. */
+.entry:nth-child(n + 3) {
+  display: none;
+}
+
+.entryNo {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--ks);
+  color: var(--k);
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+.entry[data-hot] .entryNo {
+  background: var(--k);
+  color: var(--color-white);
+}
+
+.entryLabel {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.entryFx {
+  color: var(--k);
+  font-weight: 700;
+}
+
+.entryEmpty {
+  height: 22px;
+  color: var(--color-ink-3);
+}
+
+/* ---------- wide ---------- */
+
+@media (min-width: 1024px) {
+  .frame {
+    grid-template-rows: auto minmax(0, 660px);
+    align-content: center;
+    gap: 20px;
+    padding: 24px 48px;
+  }
+
+  .heading {
+    gap: 8px;
+  }
+
+  .caption {
+    min-height: 0;
+    font-size: 30px;
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+  }
+
+  /* Two lines reserved, so the panels under it never move when the standfirst changes. */
+  .deck {
+    display: block;
+    min-height: 3em;
+    max-width: 90ch;
+    text-wrap: pretty;
+  }
+
+  /* ----- live, side by side: the chart | the ledger panel, the same height ----- */
+
+  .panelsLive {
+    grid-template-columns: minmax(0, 1fr) minmax(330px, 360px);
+    grid-template-rows: minmax(0, 1fr);
+    column-gap: 40px;
+    align-content: stretch;
+  }
+
+  .panelsLive .ledger {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 0;
+    overflow: hidden;
+    padding: 22px 24px;
+    border-radius: var(--radius-card);
+    background: var(--color-cloud);
+  }
+
+  .panelsLive .ledgerHead {
+    display: flex;
+  }
+
+  .panelsLive .raise,
+  .panelsLive .ledger:not([data-early]) .raise {
+    display: grid;
+    gap: 4px;
+    padding: 0;
+  }
+
+  .panelsLive .ledger[data-early] .journal {
+    display: grid;
+  }
+
+  .panelsLive .rowLabel {
+    font-size: 13px;
+  }
+
+  .panelsLive .rowValue {
+    font-size: 17px;
+  }
+
+  .panelsLive .rowOf {
+    font-size: 12.5px;
+  }
+
+  .panelsLive .splitRow {
+    height: 26px;
+    font-size: 13px;
+  }
+
+  .panelsLive .splitTo {
+    font-size: 12px;
+  }
+
+  .panelsLive .balances {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .panelsLive .row {
+    gap: 7px;
+    padding: 8px 12px 10px;
+    margin-inline: -12px;
+    background: none;
+  }
+
+  .panelsLive .row .rowLine {
+    flex-wrap: nowrap;
+  }
+
+  .panelsLive .row .rowLabel {
+    flex: 1 1 auto;
+  }
+
+  .panelsLive .row .rowValue {
+    order: 2;
+  }
+
+  .panelsLive .delta {
+    order: 1;
+    font-size: 12px;
+  }
+
+  .panelsLive .figures {
+    gap: 8px;
+  }
+
+  .panelsLive .figNow,
+  .panelsLive .figFloor {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 2px;
+    height: 70px;
+    padding: 0 14px;
+    border-radius: 16px;
+  }
+
+  .panelsLive .figNow {
+    background: var(--color-surface);
+  }
+
+  .panelsLive .figNow dt,
+  .panelsLive .figFloor dt {
+    font-size: 12.5px;
+  }
+
+  .panelsLive .figNow dd,
+  .panelsLive .figFloor dd {
+    font-size: 24px;
+    letter-spacing: -0.01em;
+  }
+
+  /* The journal takes the rest of the panel: one line per entry, newest first. */
+  .panelsLive .journal {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    gap: 0;
+    padding: 0;
+    font-size: 13px;
+  }
+
+  .panelsLive .entry {
+    display: grid;
+    height: 28px;
+  }
+
+  .panelsLive .entryEmpty {
+    height: 28px;
+    line-height: 28px;
+  }
+
+  /* Stills at desktop width: the stacked layout in a readable column. */
+  .panelsStill {
+    max-width: 640px;
+  }
+}
+
+/* Short wide screens: tighter heading and ledger. */
+@media (min-width: 1024px) and (max-height: 800px) {
+  .frame {
+    gap: 14px;
+    padding: 16px 48px;
+  }
+
+  .caption {
+    font-size: 26px;
+  }
+
+  .deck {
+    font-size: 14px;
+  }
+
+  .panelsLive .ledger {
+    gap: 10px;
+    padding: 16px 20px;
+  }
+
+  .panelsLive .splitRow {
+    height: 22px;
+  }
+
+  .panelsLive .figNow,
+  .panelsLive .figFloor {
+    height: 58px;
+  }
+
+  .panelsLive .figNow dd,
+  .panelsLive .figFloor dd {
+    font-size: 20px;
+  }
+
+  .panelsLive .entry {
+    height: 24px;
+  }
+}
+
+/* ---------- reduced motion: stills ---------- */
+
+.root .stills {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+  padding: 24px 20px 0;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+.stills figcaption p:nth-child(2) {
+  margin-top: 2px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+@media (min-width: 1024px) {
+  .root .stills {
+    padding: 40px 48px 0;
+  }
+}
+
+/* ---------- footer ---------- */
+
+.footer {
+  display: grid;
+  gap: 6px;
+  padding-top: 20px;
+  padding-bottom: 48px;
+}
+
+@media (min-width: 1024px) {
+  .footer {
+    padding-top: 24px;
+    padding-bottom: 64px;
+  }
+}
+
+.footnote {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--color-ink-3);
+}
+
+.honesty {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caption,
+  .deck {
+    animation: none;
+  }
+}

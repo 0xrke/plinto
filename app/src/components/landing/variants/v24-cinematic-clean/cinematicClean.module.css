@@ -1,0 +1,573 @@
+/*
+ * Variant 24: Cinematic, clean (from v13-cinematic-site and v03-cinematic). A 100svh sticky stage on the white page: the screen (the
+ * midnight chart card) fills the 1120px column, the subtitles sit on white under it, the reel at the
+ * bottom. Caption fades read the driver's --qN variables (set on the [data-rail] caption layer).
+ * Only transform and opacity move; nothing animates on a timer. Colours are var(--color-…) tokens.
+ */
+
+.root {
+  --pad-y: 16px;
+  --row-gap: 10px;
+  overflow-x: clip;
+}
+
+.steps {
+  /* The opening title holds the frame before the first scene. */
+  padding-top: 55svh;
+}
+
+.stage {
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+/* The stage grid: screen, tiles, subtitles, reel (phone); screen over subtitles | tiles (wide). */
+.frame {
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  /* Phones: the screen is capped (BRAND: at most min(55svh, 480px)-ish) and the reel runs under it like a
+     scrubber, so the caption never sits on the bottom edge; the block is centred in the viewport. */
+  grid-template-rows: minmax(0, min(63svh, 560px)) auto auto auto;
+  grid-template-areas:
+    "screen"
+    "reel"
+    "tiles"
+    "subs";
+  align-content: center;
+  row-gap: var(--row-gap);
+  padding-top: var(--pad-y);
+  padding-bottom: calc(var(--pad-y) + 24px + env(safe-area-inset-bottom, 0px));
+}
+
+.screen {
+  grid-area: screen;
+  min-height: 0;
+  position: relative;
+}
+
+.tiles {
+  grid-area: tiles;
+}
+
+/* ---------- scene (inside BrandChartFrame) ---------- */
+
+.scene {
+  height: 100%;
+}
+
+.plot {
+  top: 16%;
+  bottom: 9%;
+  left: 5%;
+  right: 15%;
+}
+
+.sceneStill .plot {
+  top: 24%;
+  bottom: 9%;
+  left: 5%;
+  right: 16%;
+}
+
+.svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Overlay labels: a plot-sized click-through layer moved with a transform. */
+.at {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+}
+
+.head {
+  width: 10px;
+  height: 10px;
+  background: var(--color-white);
+}
+
+.harvestDot {
+  width: 6px;
+  height: 6px;
+  background: var(--color-mint);
+}
+
+.bounceDot {
+  width: 10px;
+  height: 10px;
+  background: var(--color-risk-on-dark);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-white) 10%, transparent);
+}
+
+.redeemDot {
+  width: 10px;
+  height: 10px;
+  background: var(--color-mint);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-mint) 22%, transparent);
+}
+
+.label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.raised {
+  transform: translate(-50%, calc(-100% - 12px));
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--color-presale-ring);
+}
+
+.floorLabel {
+  color: var(--color-mint);
+  transform: translate(0, calc(-100% - 6px));
+}
+
+.arbLabelLeft {
+  transform: translate(0, 6px);
+  color: var(--color-risk-on-dark);
+}
+
+/* Split column labels: big, direct, in the segment's colour. */
+.splitLabel {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(10px, -50%);
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.005em;
+}
+
+.splitFloor {
+  color: var(--color-mint);
+}
+
+.splitMarket {
+  color: color-mix(in srgb, var(--color-iris) 55%, var(--color-on-dark-2));
+}
+
+.splitSub {
+  display: block;
+  margin-top: 6px;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--color-on-dark-2);
+}
+
+.splitFees {
+  color: var(--color-butter);
+}
+
+.peak {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  transform: translate(-50%, calc(-100% - 12px));
+}
+
+.fees {
+  transform: translate(calc(-100% - 8px), 8px);
+  color: var(--color-mint);
+}
+
+.bounce {
+  transform: translate(-50%, 12px);
+  color: var(--color-risk-on-dark);
+}
+
+.exits {
+  /* Up and to the left of the dot, clear of the axis labels at the right edge. */
+  transform: translate(calc(-100% + 12px), calc(-100% - 12px));
+  padding: 2px 8px;
+  border-radius: 999px;
+  /* A visible chip, so the price line passing behind it reads as layering, not as a gap. */
+  background: var(--color-midnight-chip);
+  color: var(--color-mint);
+}
+
+.redeemLeader {
+  position: absolute;
+  left: -1px;
+  top: 7px;
+  width: 2px;
+  height: 37px;
+  background: var(--color-mint);
+  border-radius: 1px;
+}
+
+.redeemChip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(calc(-100% + 16px), 44px);
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 11px;
+  white-space: nowrap;
+  border-radius: 999px;
+  background: var(--color-mint);
+  color: var(--color-midnight);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.sceneStill .redeemLeader {
+  height: 23px;
+}
+
+.sceneStill .redeemChip {
+  transform: translate(calc(-100% + 16px), 30px);
+}
+
+.tickLabel {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(10px, -50%);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--color-on-dark-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- subtitles ---------- */
+
+.captionLayer {
+  display: contents;
+}
+
+.subs {
+  grid-area: subs;
+  display: grid;
+  /* Room for a kicker and three caption lines, so the screen never jumps. */
+  min-height: 104px;
+  pointer-events: none;
+}
+
+.titleCard,
+.sub {
+  grid-area: 1 / 1;
+  /* Phones: right under the tiles; wide screens: on the tiles' baseline. */
+  align-self: start;
+}
+
+.titleCard {
+  opacity: calc(1 - clamp(0, var(--q0, 1) * 12, 1));
+  transform: translate3d(0, calc(clamp(0, var(--q0, 1) * 12, 1) * -16px), 0);
+}
+
+.title {
+  font-size: 36px;
+}
+
+.titleHint {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.sub {
+  --in: clamp(0, var(--q) * 14, 1);
+  --out: clamp(0, (var(--q) - 0.9) * 10, 1);
+  opacity: calc(var(--in) * (1 - var(--out)));
+  transform: translate3d(0, calc((1 - var(--in)) * 16px - var(--out) * 16px), 0);
+  will-change: opacity, transform;
+}
+
+.subLast {
+  --out: 0;
+}
+
+.kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.kickerRule {
+  width: 24px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-line-strong);
+}
+
+.caption {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+  text-wrap: balance;
+}
+
+/* ---------- reel: the landing's progress rail ---------- */
+
+.reel {
+  grid-area: reel;
+  display: flex;
+  gap: 4px;
+}
+
+.reelItem {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  /* 1 while this beat is playing (0 < q < 1). */
+  --cur: calc(clamp(0, var(--q) * 1000, 1) * clamp(0, (1 - var(--q)) * 1000, 1));
+}
+
+.reelSeg {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-track);
+  overflow: hidden;
+  transform: scaleY(calc(1 + var(--cur)));
+}
+
+.reelFill {
+  display: block;
+  height: 100%;
+  background: var(--color-floor);
+  transform-origin: left;
+  transform: scaleX(var(--q));
+}
+
+.reelLabel {
+  display: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: calc(0.75 + 0.25 * var(--cur));
+}
+
+/* ---------- wide ---------- */
+
+@media (min-width: 768px) {
+  .root {
+    --pad-y: 20px;
+    --row-gap: 16px;
+  }
+
+  .plot {
+    top: 13%;
+    bottom: 8%;
+    left: 4%;
+    right: 9%;
+  }
+
+  .frame {
+    grid-template-rows: minmax(0, 1fr) auto auto auto;
+    grid-template-areas:
+      "screen"
+      "tiles"
+      "subs"
+      "reel";
+    align-content: stretch;
+    padding-bottom: calc(var(--pad-y) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .reel {
+    padding-top: 4px;
+  }
+
+  .caption {
+    font-size: 22px;
+    line-height: 1.3;
+  }
+
+  .title {
+    font-size: 46px;
+  }
+
+  .subs {
+    min-height: 100px;
+  }
+
+  .reelLabel {
+    display: block;
+  }
+}
+
+@media (min-width: 1024px) {
+  .root {
+    --pad-y: 24px;
+    --row-gap: 20px;
+  }
+
+  .frame {
+    grid-template-columns: minmax(0, 1fr) 360px;
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "screen screen"
+      "subs tiles"
+      "reel reel";
+    column-gap: 48px;
+  }
+
+  .tiles {
+    align-self: end;
+  }
+
+  .titleCard,
+  .sub {
+    align-self: end;
+  }
+
+  .caption {
+    font-size: 26px;
+    line-height: 1.25;
+    max-width: 34ch;
+  }
+
+  .title {
+    font-size: clamp(46px, 4vw, 56px);
+  }
+
+  .subs {
+    min-height: 112px;
+  }
+
+  /* The card is ~1000px wide here: chart type and chips scale up with it so they don't read as specks. */
+  .scene > span {
+    top: 16px;
+  }
+
+  .scene > span[data-part="illustration"] {
+    left: 16px;
+  }
+
+  .scene > span:not([data-part]) {
+    right: 16px;
+  }
+
+  .scene :global(.pill-sm) {
+    height: 28px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+
+  .scene .label {
+    font-size: 13.5px;
+  }
+
+  .scene .raised {
+    font-size: 18px;
+  }
+
+  .scene .splitLabel {
+    font-size: 19px;
+    transform: translate(14px, -50%);
+  }
+
+  .scene .splitSub {
+    margin-top: 8px;
+    font-size: 13.5px;
+  }
+
+  .scene .tickLabel {
+    font-size: 12.5px;
+    transform: translate(12px, -50%);
+  }
+
+  .scene .redeemChip {
+    height: 30px;
+    padding: 0 13px;
+    font-size: 14px;
+  }
+
+  .scene .head,
+  .scene .bounceDot,
+  .scene .redeemDot {
+    width: 12px;
+    height: 12px;
+  }
+
+  .scene .harvestDot {
+    width: 7px;
+    height: 7px;
+  }
+}
+
+/* Landscape phones: short viewport. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .root {
+    --pad-y: 8px;
+    --row-gap: 8px;
+  }
+
+  .caption {
+    font-size: 18px;
+  }
+
+  .title {
+    font-size: 32px;
+  }
+
+  .subs {
+    min-height: 64px;
+  }
+
+  .reelLabel {
+    display: none;
+  }
+}
+
+/* ---------- stills (reduced motion) ---------- */
+
+.root :global([data-testid="story-stills"]) {
+  max-width: 1120px;
+  margin-inline: auto;
+  padding: 24px 20px 0;
+}
+
+/* ---------- credits ---------- */
+
+.credits {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  padding-top: 48px;
+  padding-bottom: 56px;
+  text-align: center;
+}
+
+.creditsHonesty {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
