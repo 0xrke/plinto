@@ -16,6 +16,7 @@ const num = (n: number) => String(n).padStart(2, "0");
  * link sits above it (z-10), so the two links never nest.
  */
 function VariantCard({ v }: { v: VariantMeta }) {
+  const mixes = v.mixes ?? [];
   const original = originalOf(v);
   const restyle = restyleOf(v);
   const related = original
@@ -35,6 +36,16 @@ function VariantCard({ v }: { v: VariantMeta }) {
         {v.title}
       </Link>
       <span className="text-sm leading-snug text-ink-2">{v.description}</span>
+      {mixes.length ? (
+        <span className="relative z-10 mt-1 flex flex-wrap gap-x-3 text-sm">
+          <span className="text-ink-3">Mixes</span>
+          {mixes.map((n) => (
+            <Link key={n} href={`/lab/story/${n}`} className="link tnum">
+              {num(n)}
+            </Link>
+          ))}
+        </span>
+      ) : null}
       {related ? (
         <Link href={related.href} className="link relative z-10 mt-1 self-start text-sm">
           {related.text}
@@ -65,6 +76,7 @@ export default function StoryLabIndex() {
   if (!labEnabled()) notFound();
   const originals = VARIANTS.filter((v) => variantGroup(v) === "original");
   const site = VARIANTS.filter((v) => variantGroup(v) === "site");
+  const combos = VARIANTS.filter((v) => variantGroup(v) === "combo");
   return (
     <main id="main" className="mx-auto w-full max-w-5xl px-4 py-10 sm:py-14">
       <p className="eyebrow">Lab</p>
@@ -72,6 +84,7 @@ export default function StoryLabIndex() {
       <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-2">
         Same eight beats, captions and fee math; different visual treatments. Scroll each one top to bottom and back.
       </p>
+      <Section id="lab-combos" title="Combined from the review" intro="New treatments that mix the favourites: the editorial chart, the vault ledger, the clean steps, and the vertical split column of 1 and 3." items={combos} />
       <Section id="lab-originals" title="Originals" intro="The first ten treatments, each in its own visual language." items={originals} />
       <Section id="lab-site" title="In site style" intro="Each original's idea, composition and motion, rebuilt to look like the rest of Plinto." items={site} />
     </main>
