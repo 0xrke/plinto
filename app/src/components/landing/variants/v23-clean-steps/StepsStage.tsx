@@ -8,6 +8,7 @@ import {
   CHART,
   CHART_COPY,
   DASH,
+  formatUsdWhole,
   STROKE,
   railLabel,
   railStatus,
@@ -33,6 +34,7 @@ import {
   ramp,
   scalesFor,
   splitPathAt,
+  splitPhases,
   squash,
   treads,
   xMaxFor,
@@ -141,9 +143,9 @@ function Scene({ m, f, p }: { m: LaunchMath; f: StoryFrame; p: Plot }) {
   const zoomed = f.zoom;
   const wide = 1 - zoomed;
 
-  // Floor: the column's floor segment lands on it during the split (floorReveal), then the real staircase holds.
+  // Floor: the column's floor segment lands on it late in the split (splitPhases), then the real staircase holds.
   const steps = f.floorSteps;
-  const floorOn = f.beatIndex <= 1 ? ramp(f.floorReveal, 0.6, 0.95) : 1;
+  const floorOn = f.beatIndex <= 1 ? ramp(splitPhases(f).reveal, 0.6, 0.95) : 1;
   const runs = treads(steps);
   const stairD = steps.length ? polyline(steps, s) : "";
   const slabBottom = p.h + 4;
@@ -446,7 +448,7 @@ function Chip({ x, y, anchor, tone, opacity = 1, children }: { x: number; y: num
 function floorSegment(m: LaunchMath, f: StoryFrame, p: Plot, s: Scales) {
   const box = columnBox(p, s);
   const seg = columnSegments(m.split)[0]!;
-  const r = f.beatIndex >= 2 ? 1 : f.floorReveal;
+  const r = splitPhases(f).reveal;
   const drop = easeInOut(ramp(r, 0, 0.55));
   const stretch = easeInOut(ramp(r, 0.3, 1));
   const floorV = f.floorSteps.length ? f.floorSteps[0]![1] : m.floorPer100GrossUsd;
@@ -470,7 +472,7 @@ function RaiseColumn({ m, f, p, s, opacity }: { m: LaunchMath; f: StoryFrame; p:
   const yTop = s.y(COLUMN_TOP);
   const y0 = s.y(0);
   const fill = (f.raisedUsd / m.raiseUsd) * COLUMN_TOP;
-  const sp = f.beatIndex === 0 ? 0 : f.beatIndex === 1 ? f.splitProgress : 1;
+  const { sp } = splitPhases(f);
   const tint = ramp(sp, 0, 0.35);
   const gap = 3 * easeInOut(ramp(sp, 0.1, 0.5));
   const segs = columnSegments(m.split);
@@ -542,11 +544,11 @@ function ColumnLabels({ m, f, p, s, opacity }: { m: LaunchMath; f: StoryFrame; p
     if (f.raisedUsd < 1) return null;
     return (
       <ColumnLabel x={x} y={Math.max(minY, s.y(fill))} color={CHART.presaleFill} opacity={opacity} part="raised">
-        {CHART_COPY.raised(f.raisedUsd)}
+        <RaisedText m={m} usd={f.raisedUsd} />
       </ColumnLabel>
     );
   }
-  const sp = f.beatIndex === 1 ? f.splitProgress : 1;
+  const { sp } = splitPhases(f);
   const fl = floorSegment(m, f, p, s);
   const feesY = Math.max(minY, s.y(((segs[2]!.from + segs[3]!.to) / 2) * COLUMN_TOP));
   const marketY = Math.max(feesY + 2 * half + 6, s.y(((segs[1]!.from + segs[1]!.to) / 2) * COLUMN_TOP));
@@ -556,7 +558,7 @@ function ColumnLabels({ m, f, p, s, opacity }: { m: LaunchMath; f: StoryFrame; p
     <>
       {raisedOff > 0.01 ? (
         <ColumnLabel x={x} y={minY} color={CHART.presaleFill} opacity={opacity * raisedOff} part="raised">
-          {CHART_COPY.raised(f.raisedUsd)}
+          <RaisedText m={m} usd={f.raisedUsd} />
         </ColumnLabel>
       ) : null}
       <ColumnLabel x={x} y={feesY} color={CHART.fees} opacity={opacity * ramp(sp, 0.55, 0.85)} part="fees">
@@ -575,6 +577,16 @@ function ColumnLabels({ m, f, p, s, opacity }: { m: LaunchMath; f: StoryFrame; p
       >
         {CHART_COPY.floorShare(Math.round(m.v * 100))}
       </ColumnLabel>
+    </>
+  );
+}
+
+/** "Raised $9,481 of $10,000": the amount in the raise's colour, the target quieter. */
+function RaisedText({ m, usd }: { m: LaunchMath; usd: number }) {
+  return (
+    <>
+      {CHART_COPY.raised(usd)}
+      <span className={styles.colLabelMuted} style={{ color: CHART.axis }}>{` of ${formatUsdWhole(m.raiseUsd)}`}</span>
     </>
   );
 }

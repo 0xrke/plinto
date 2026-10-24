@@ -131,8 +131,8 @@ function Step({ label, caption, srText, i }: StepSlot) {
 }
 
 const HEIGHTS = {
-  presale: 70,
-  split: 80,
+  presale: 120,
+  split: 150,
   pump: 95,
   selloff: 80,
   steps: 100,

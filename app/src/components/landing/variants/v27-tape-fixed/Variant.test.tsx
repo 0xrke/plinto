@@ -92,6 +92,57 @@ describe("v27 tape, fixed", () => {
     expect(Math.abs(floor.x + floor.w - first[0])).toBeLessThan(1);
   });
 
+  it("presale and split get longer runways (120 / 150 svh)", () => {
+    const { container } = render(<Variant m={m} />);
+    const runway = (i: number) => (container.querySelectorAll("[data-step]")[i] as HTMLElement).style.getPropertyValue("--runway");
+    expect(runway(BEAT_KEYS.indexOf("presale"))).toBe("120svh");
+    expect(runway(BEAT_KEYS.indexOf("split"))).toBe("150svh");
+  });
+
+  it("the playhead sits in the middle of the card", () => {
+    for (const [w, pos] of [[960, 0.5], [960, 5.5], [358, 0.5], [358, 6.5]] as const) {
+      const { container } = render(<FixedTape m={m} frame={storyFrame(m, pos)} w={w} h={600} />);
+      const head = container.querySelector('[data-part="playhead"]')!;
+      expect(Math.abs(Number(head.getAttribute("x1")) - w / 2)).toBeLessThanOrEqual(1);
+      cleanup();
+    }
+  });
+
+  it("presale: the raise is its own bar filling from $0, labelled 'Raised $X of $10,000'", () => {
+    const rect = (c: HTMLElement, part: string) => {
+      const r = c.querySelector(`[data-part="${part}"]`)!;
+      const y = Number(r.getAttribute("y"));
+      return { x: Number(r.getAttribute("x")), w: Number(r.getAttribute("width")), top: y, bottom: y + Number(r.getAttribute("height")) };
+    };
+    const early = render(<FixedTape m={m} frame={storyFrame(m, 0.3)} w={960} h={600} />).container;
+    const a = rect(early, "raise-fill");
+    const track = rect(early, "raise-track");
+    expect(early.querySelector('[data-part="raise-label"]')!.textContent).toMatch(/^Raised \$[\d,]+of \$10,000$/);
+    cleanup();
+    const late = render(<FixedTape m={m} frame={storyFrame(m, 0.9)} w={960} h={600} />).container;
+    const b = rect(late, "raise-fill");
+    cleanup();
+    // Same bar, same place; it grows upwards from $0, and is clear of the playhead at x = 480.
+    expect(b.x).toBe(a.x);
+    expect(b.w).toBe(a.w);
+    expect(b.bottom).toBeCloseTo(a.bottom, 5);
+    expect(b.top).toBeLessThan(a.top);
+    expect(a.w).toBeGreaterThanOrEqual(72);
+    expect(a.x + a.w).toBeLessThanOrEqual(480 - 20);
+    expect(track.bottom).toBeCloseTo(a.bottom, 5);
+    // Across the presale/split boundary the same column divides: no jump in either direction.
+    const at = (pos: number, part: string) => {
+      const c = render(<FixedTape m={m} frame={storyFrame(m, pos)} w={960} h={600} />).container;
+      const r = rect(c, part);
+      cleanup();
+      return r;
+    };
+    const end = at(0.999, "raise-fill");
+    const start = at(1.001, "split-market");
+    expect(Math.abs(start.x - end.x)).toBeLessThan(1);
+    expect(start.w).toBe(end.w);
+  });
+
   it("the floor is a staircase: horizontal treads and exact vertical risers, never flat", () => {
     const { container } = render(<FixedTape m={m} frame={storyFrame(m, 6)} w={960} h={600} />);
     const pts = vertices(container.querySelector('[data-part="floor-steps"]')!.getAttribute("d")!);

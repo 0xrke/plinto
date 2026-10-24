@@ -6,9 +6,10 @@ import styles from "./blocksClean.module.css";
 
 /*
  * Variant 26: Blocks · clean (from v15-blocks-site and v05-blocks, with the split of v01 / v03). The
- * floor is literally built of blocks. The presale fills one tall column of $5 slabs; at the split it
- * divides vertically into the floor (mint, bottom), the market (iris) and the fees (butter, top), each
- * labelled inside its segment. The market and the fees lift away, and the floor's slabs slide one by
+ * floor is literally built of blocks. The presale fills one tall column of $5 slabs, its own bar on
+ * the chart labelled "Raised $X of $10,000"; at the split that same column divides vertically into
+ * the floor (mint, bottom), the market (iris) and the fees (butter, top), each labelled inside its
+ * segment. The market and the fees lift away, and the floor's slabs slide one by
  * one into the floor slab; every later fee harvest or kept exit fee settles one more block on top, so
  * the staircase is a stack of blocks at true scale. Clean layout: one large midnight chart card on the
  * left with its tiles under it, and plain captions on the right that scroll past (no cards replacing
@@ -77,7 +78,7 @@ export default function Variant({ m }: VariantProps) {
           className={styles.root}
           stage={(frame) => <CleanBlocksStage m={m} frame={frame} />}
           still={(frame) => <CleanBlocksStage m={m} frame={frame} still />}
-          heights={{ presale: 70, split: 130, pump: 90, steps: 100, bounce: 110, exits: 80 }}
+          heights={{ presale: 120, split: 150, pump: 90, steps: 100, bounce: 110, exits: 80 }}
           renderStep={(slot) => <Caption {...slot} />}
           stepClassName={styles.step}
           header={<Header share={floorSharePct(m)} />}

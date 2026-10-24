@@ -489,11 +489,12 @@
   fill: color-mix(in srgb, var(--color-white) 5%, transparent);
 }
 
-.raiseTrack {
+/* The raise column: an empty $100 track, presale sky filling it from $0. */
+.colTrack {
   fill: var(--color-midnight-line);
 }
 
-.raiseFill {
+.colRaise {
   fill: var(--color-presale-ring);
 }
 
@@ -694,6 +695,15 @@
   stroke: var(--color-midnight);
   stroke-width: 4px;
   stroke-linejoin: round;
+}
+
+.labelRaise {
+  fill: var(--color-white);
+}
+
+.labelMuted {
+  font-weight: 600;
+  fill: var(--color-on-dark-3);
 }
 
 .labelFloor {

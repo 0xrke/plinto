@@ -63,8 +63,8 @@ describe("v24 cinematic, clean", () => {
   });
 
   it("shows the split as a labelled vertical column whose floor part lands on the slab", () => {
-    // Mid-divide: the column stands with all three direct labels.
-    const mid = storyFrame(m, 1.25);
+    // The divided column holds: it stands with all three direct labels.
+    const mid = storyFrame(m, 1.4);
     const { container, unmount } = render(<Scene m={m} frame={mid} cam={cameraAt(m, mid)} />);
     const text = (part: string) => container.querySelector(`[data-part="${part}"]`)?.textContent;
     expect(text("split-label-floor")).toBe("Floor 50%");
@@ -78,7 +78,7 @@ describe("v24 cinematic, clean", () => {
     unmount();
 
     // Landed: the floor block's top is the floor the staircase starts from, and the column's rest stays.
-    const landed = storyFrame(m, 1.8);
+    const landed = storyFrame(m, 1.92);
     const r = render(<Scene m={m} frame={landed} cam={cameraAt(m, landed)} />);
     const block = r.container.querySelector('[data-part="split-floor"]')!;
     expect(Number(block.getAttribute("y"))).toBeCloseTo(-m.floorPer100GrossUsd * 100, 6);
@@ -90,6 +90,32 @@ describe("v24 cinematic, clean", () => {
     const pump = storyFrame(m, 2.6);
     const p = render(<Scene m={m} frame={pump} cam={cameraAt(m, pump)} />);
     expect(p.container.querySelector('[data-part="split-column"]')).toBeNull();
+  });
+
+  it("fills the presale column from $0 with a Raised $X of $10,000 label, and divides that same column", () => {
+    const at = (pos: number) => {
+      const f = storyFrame(m, pos);
+      return render(<Scene m={m} frame={f} cam={cameraAt(m, f)} />);
+    };
+    const start = at(0.02);
+    const fill0 = Number(start.container.querySelector('[data-part="raise-fill"]')!.getAttribute("height"));
+    start.unmount();
+    const half = at(0.5);
+    const fill = half.container.querySelector('[data-part="raise-fill"]')!;
+    expect(Number(fill.getAttribute("height"))).toBeGreaterThan(fill0);
+    expect(half.container.querySelector('[data-part="raise-label"]')?.textContent).toBe("Raised $5,000 of $10,000");
+    const box = (el: Element) => [el.getAttribute("x"), el.getAttribute("width")];
+    const presaleBox = box(fill);
+    half.unmount();
+    // Just into the split: the floor part and the market part sit in the same x and width as the presale fill.
+    const early = at(1.01);
+    expect(box(early.container.querySelector('[data-part="split-floor"]')!)).toEqual(presaleBox);
+    expect(box(early.container.querySelector('[data-part="split-market"]')!)).toEqual(presaleBox);
+    early.unmount();
+    // The camera does not jump at the presale/split boundary.
+    const a = cameraAt(m, storyFrame(m, 0.999));
+    const b = cameraAt(m, storyFrame(m, 1.001));
+    expect(Math.abs(a.x0 - b.x0) + Math.abs(a.x1 - b.x1)).toBeLessThan(0.01);
   });
 
   it("keeps the price head in frame, wide on the pump and close on the bounce", () => {

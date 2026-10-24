@@ -346,7 +346,28 @@
 .center.below { transform: translateX(-50%); padding-top: 9px; }
 .alignR { left: auto; right: 0; }
 .belowLeft { transform: translate(-100%, -50%); padding-right: 6px; }
-.raised { color: var(--color-white); padding-bottom: 8px; font-size: 12.5px; }
+/* The presale's raise label: two lines beside the sky bar, top-aligned with the fill's top. */
+.raised {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(12px, 10px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  white-space: nowrap;
+  line-height: 1.2;
+  color: var(--color-presale-ring);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.raised b {
+  color: var(--color-white);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.005em;
+}
+.raisedOf { color: var(--color-presale-ring); }
 
 /* The split column's labels: centred inside their segments, midnight on mint / iris / butter. */
 .segLbl {
@@ -544,6 +565,8 @@
   .segLbl,
   .segLblSide,
   .slabLbl { font-size: 14px; }
+  .raised { font-size: 13px; }
+  .raised b { font-size: 18px; }
 }
 
 /* Landscape phones: the same composition, packed into ~390px of height. */
@@ -565,6 +588,8 @@
   .segLbl,
   .segLblSide,
   .slabLbl { font-size: 11px; }
+  .raised { font-size: 10.5px; }
+  .raised b { font-size: 13px; }
 }
 
 /* ---------- stills and footer ---------- */

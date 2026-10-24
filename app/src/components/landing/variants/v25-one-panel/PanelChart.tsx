@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { LaunchMath } from "@/lib/landing/sim/launch";
 import { BEATS, BEAT_KEYS, STORY_T_END, easeInOut, type BeatKey, type StoryFrame } from "@/lib/landing/sim/story";
-import { T_GRAD } from "@/lib/landing/sim/timeline";
+import { T_GRAD, range } from "@/lib/landing/sim/timeline";
 import {
   VB,
   areaUnderD,
@@ -18,8 +18,8 @@ import styles from "./onePanel.module.css";
 /*
  * The panel's one chart, in the site's midnight chart card (BrandChartFrame): white price, mint floor
  * staircase over a mint-at-14% slab, rose dashed arbitrage line, rose bounce dot with a white halo.
- * The raise is one tall column in dollars on the chart's own y axis (variants 1/3): it fills during
- * the presale, then splits into floor (mint, bottom), market (iris) and fees (butter, top), each
+ * The raise is its own tall presale-sky bar in dollars on the chart's own y axis (variants 1/3/22):
+ * it fills from $0 during the presale ("Raised $X of $10,000"), then the same bar splits into floor (mint, bottom), market (iris) and fees (butter, top), each
  * labelled inside its segment; the floor segment settles down onto the floor slab the staircase
  * starts from, and the column fades out as the pump begins. A pure function of the frame (no timers,
  * no transitions on values), drawn at the engine's own camera (frame.y), so the close-up is real
@@ -66,6 +66,28 @@ export function splitLabels(m: LaunchMath): { floor: string; market: string; fee
 /** The settled floor slab's label at the split, matching the "Floor pays back" tile: "Floor pays $34.88". */
 export const floorPaysLabel = (net100: number) => `${CHART_COPY.floor} pays ${formatUsdCents(net100)}`;
 
+/**
+ * The split's own sub-phases on this panel's longer runway (150svh): the column divides and each
+ * share takes its colour and label over the first 30% of the beat, the labelled column then holds
+ * still until 60%, and only then does the floor segment settle onto the slab (60%..100%). The
+ * engine's splitProgress/floorReveal overlap (0..0.55 and 0.45..1), which left the labelled column
+ * on screen for a moment only. Before the split both are 0, after it both are 1.
+ */
+export const SPLIT_DIVIDE: readonly [number, number] = [0, 0.3];
+export const SPLIT_SETTLE: readonly [number, number] = [0.6, 1];
+export function splitPhase(f: StoryFrame): { grow: number; reveal: number } {
+  if (f.beatIndex < 1) return { grow: 0, reveal: 0 };
+  if (f.beatIndex > 1) return { grow: 1, reveal: 1 };
+  const bp = f.beatProgress;
+  return { grow: range(bp, SPLIT_DIVIDE[0], SPLIT_DIVIDE[1]), reveal: easeInOut(range(bp, SPLIT_SETTLE[0], SPLIT_SETTLE[1])) };
+}
+
+/** The raise label's lowest anchor (USD per $100), so its two lines stay above the plot's floor. */
+const RAISED_MIN_Y = 16;
+
+/** The presale label: "Raised $4,200" over "of $10,000". */
+export const raisedOf = (m: LaunchMath) => `of ${formatUsdWhole(m.raiseUsd)}`;
+
 /** How far the column has gone (0 = fully drawn, 1 = gone): it fades over the first 15% of the pump. */
 export function columnGone(f: StoryFrame): number {
   if (f.beatIndex <= 1) return 0;
@@ -99,7 +121,8 @@ const ns = { vectorEffect: "non-scaling-stroke" as const, fill: "none" };
 
 export function PanelChart({ m, frame: f, still = false }: { m: LaunchMath; frame: StoryFrame; still?: boolean }) {
   const s = panelScales(f);
-  const floorOpacity = f.floorSteps.length ? f.floorReveal : 0;
+  const phase = splitPhase(f);
+  const floorOpacity = f.floorSteps.length ? phase.reveal : 0;
   const stepD = f.floorSteps.length ? stepPathD(f.floorSteps, s) : "";
   const arbOpacity = f.arbLine100 === null ? 0 : f.beat === "bounce" ? ramp(f.beatProgress, 0, 0.2) : 1;
   const ticks = niceTicks(f.y.min, f.y.max, 3);
@@ -140,15 +163,6 @@ export function PanelChart({ m, frame: f, still = false }: { m: LaunchMath; fram
         <div className={styles.area}>
           <svg viewBox={`0 0 ${VB} ${VB}`} preserveAspectRatio="none" className={styles.svg}>
             <g opacity={1 - f.zoom}>
-              {/* The presale band: a faint sky wash over the presale's time. */}
-              <rect
-                x={s.xOf(0)}
-                y={0}
-                width={s.xOf(PRESALE_END) - s.xOf(0)}
-                height={VB}
-                style={{ fill: alpha(CHART.presale, 0.07) }}
-                opacity={1 - ramp(f.splitProgress, 0, 0.4)}
-              />
               <line
                 x1={0}
                 x2={VB}
@@ -198,17 +212,23 @@ export function PanelChart({ m, frame: f, still = false }: { m: LaunchMath; fram
               {CHART_COPY.hundred}
             </span>
           </At>
-          {own("presale") && f.raisedUsd >= 1 ? (
-            <At x={s.pctX((COL.x0 + COL.x1) / 2)} y={s.pctY(COL.top)}>
-              <span className={`${styles.lbl} ${styles.lblStrong} ${styles.center} ${styles.above} ${styles.raised} tnum`} data-part="raised">
-                {CHART_COPY.raised(f.raisedUsd)}
+          {/* The raise: beside the bar (right of the price head's last presale spot), top level with the fill's top, from $0; it fades as the bar divides. */}
+          {f.beatIndex <= 1 && phase.grow < 0.25 ? (
+            <At
+              x={s.pctX(PRESALE_END)}
+              y={s.pctY(Math.max(RAISED_MIN_Y, f.beatIndex === 0 ? (f.raisedUsd / m.raiseUsd) * COL.top : COL.top))}
+              opacity={1 - ramp(phase.grow, 0, 0.25)}
+            >
+              <span className={`${styles.raised} tnum`} data-part="raised">
+                <b>{CHART_COPY.raised(f.raisedUsd)}</b>
+                <span className={styles.raisedOf}>{raisedOf(m)}</span>
               </span>
             </At>
           ) : null}
           {colGone < 1 ? <SplitLabels m={m} f={f} s={s} opacity={1 - colGone} /> : null}
           {/* At the split the settled slab is named with what it pays back, so the dark block beside the column reads as the floor. */}
           {f.floorNet100 !== null && floorOpacity > 0 && colGone < 1 ? (
-            <At x={s.pctX(f.floorSteps[0]![0])} y={clampPct(s.pctY(f.floorSteps[0]![1]), 10, 100)} opacity={ramp(f.floorReveal, 0.6, 1) * (1 - colGone)}>
+            <At x={s.pctX(f.floorSteps[0]![0])} y={clampPct(s.pctY(f.floorSteps[0]![1]), 10, 100)} opacity={ramp(phase.reveal, 0.6, 1) * (1 - colGone)}>
               <span className={`${styles.lbl} ${styles.slabLbl} ${styles.above} tnum`} data-part="label-slab">
                 {floorPaysLabel(f.floorNet100)}
               </span>
@@ -296,51 +316,59 @@ export function PanelChart({ m, frame: f, still = false }: { m: LaunchMath; fram
 /** The column's geometry for a frame: segment boxes in USD, the gap between them and the floor's top. */
 function columnGeometry(m: LaunchMath, f: StoryFrame) {
   const segs = columnSegments(m);
-  const grow = f.splitProgress;
+  const { grow, reveal } = splitPhase(f);
   // Thin gaps open between the segments as the column divides (USD).
   const gap = 1.2 * easeInOut(ramp(grow, 0, 0.5));
   // The floor segment settles: its top drops from its share of the raise onto the floor per $100.
-  const drop = easeInOut(ramp(f.floorReveal, 0, 0.7));
+  const drop = easeInOut(ramp(reveal, 0, 0.7));
   const floorShareTop = segs[0]!.to * COL.top;
   // Once settled, its top sits exactly on the floor per $100 (the gap only parts it from the market).
   const floorTop = floorShareTop + (m.floorPer100GrossUsd - floorShareTop) * drop - gap * (1 - drop);
   return { segs, grow, gap, drop, floorTop };
 }
 
+/** Each share takes its colour as its label appears: floor, then market, then the fees. */
+const TINT: Record<SegKey, readonly [number, number]> = { floor: [0, 0.3], market: [0.25, 0.55], creator: [0.45, 0.75], platform: [0.45, 0.75] };
+
+/**
+ * The raise as its own presale-sky bar: it fills from $0 during the presale, then the SAME bar (same
+ * x, same width) divides at the split. Each segment is laid over an opaque sky underlay while its
+ * colour comes in (never a crossfade of two translucent fills, which reads as grey).
+ */
 function RaiseColumn({ m, f, s, opacity }: { m: LaunchMath; f: StoryFrame; s: Scales; opacity: number }) {
   const x = s.xOf(COL.x0);
   const w = s.xOf(COL.x1) - x;
+  const sky = CHART.presaleFill;
   if (f.beatIndex === 0) {
     const fill = (f.raisedUsd / m.raiseUsd) * COL.top;
     return (
       <g opacity={opacity} data-part="raise-column">
-        <rect x={x} y={s.yOf(COL.top)} width={w} height={s.yOf(0) - s.yOf(COL.top)} style={{ fill: alpha(CHART.presaleFill, 0.14) }} />
-        <rect x={x} y={s.yOf(fill)} width={w} height={s.yOf(0) - s.yOf(fill)} style={{ fill: alpha(CHART.presaleFill, 0.6) }} data-part="raise" />
+        <rect x={x} y={s.yOf(fill)} width={w} height={Math.max(0, s.yOf(0) - s.yOf(fill))} style={{ fill: sky }} data-part="raise" />
       </g>
     );
   }
   const { segs, grow, gap, floorTop } = columnGeometry(m, f);
-  // The presale fill hands over to the split colours at the start of the split.
-  const tint = easeInOut(ramp(grow, 0, 0.25));
-  const fills: Record<SegKey, string> = {
-    floor: CHART.floor,
-    market: CHART.market,
-    creator: CHART.fees,
-    platform: CHART.fees,
+  const fills: Record<SegKey, string> = { floor: CHART.floor, market: CHART.market, creator: CHART.fees, platform: CHART.fees };
+  const box: Record<SegKey, [number, number]> = {
+    floor: [0, floorTop],
+    market: [segs[1]!.from * COL.top + gap, segs[1]!.to * COL.top - gap],
+    // Fees: creator and platform as one butter block, a hairline apart.
+    creator: [segs[2]!.from * COL.top + gap, segs[2]!.to * COL.top - 0.3],
+    platform: [segs[3]!.from * COL.top + 0.3, segs[3]!.to * COL.top],
   };
-  const rect = (key: string, lo: number, hi: number, fill: string, part?: string) => (
-    <rect key={key} x={x} y={s.yOf(hi)} width={w} height={Math.max(0, s.yOf(lo) - s.yOf(hi))} style={{ fill }} data-part={part} />
-  );
   return (
     <g opacity={opacity} data-part="raise-column">
-      {tint < 1 ? <g opacity={1 - tint}>{rect("presale", 0, COL.top, alpha(CHART.presaleFill, 0.6))}</g> : null}
-      <g opacity={tint}>
-        {rect("floor", 0, floorTop, fills.floor, "split-floor")}
-        {rect("market", segs[1]!.from * COL.top + gap, segs[1]!.to * COL.top - gap, fills.market, "split-market")}
-        {/* Fees: creator and platform as one butter block, a hairline apart. */}
-        {rect("creator", segs[2]!.from * COL.top + gap, segs[2]!.to * COL.top - 0.3, fills.creator, "split-creator")}
-        {rect("platform", segs[3]!.from * COL.top + 0.3, segs[3]!.to * COL.top, fills.platform, "split-platform")}
-      </g>
+      {(Object.keys(box) as SegKey[]).map((key) => {
+        const [lo, hi] = box[key];
+        const tint = easeInOut(ramp(grow, TINT[key][0], TINT[key][1]));
+        const r = { x, y: s.yOf(hi), width: w, height: Math.max(0, s.yOf(lo) - s.yOf(hi)) };
+        return (
+          <g key={key}>
+            {tint < 1 ? <rect {...r} style={{ fill: sky }} /> : null}
+            <rect {...r} style={{ fill: fills[key] }} opacity={tint} data-part={`split-${key}`} />
+          </g>
+        );
+      })}
     </g>
   );
 }
@@ -352,9 +380,9 @@ function SplitLabels({ m, f, s, opacity }: { m: LaunchMath; f: StoryFrame; s: Sc
   const x = s.pctX((COL.x0 + COL.x1) / 2);
   const right = s.pctX(COL.x1);
   const items = [
-    { key: "floor", text: text.floor, mid: floorTop / 2, o: ramp(grow, 0.05, 0.25) },
-    { key: "market", text: text.market, mid: ((segs[1]!.from + segs[1]!.to) / 2) * COL.top, o: ramp(grow, 0.2, 0.4) },
-    { key: "fees", text: text.fees, mid: ((segs[2]!.from + segs[3]!.to) / 2) * COL.top, o: ramp(grow, 0.35, 0.55) },
+    { key: "floor", text: text.floor, mid: floorTop / 2, o: ramp(grow, 0.1, 0.3) },
+    { key: "market", text: text.market, mid: ((segs[1]!.from + segs[1]!.to) / 2) * COL.top, o: ramp(grow, 0.35, 0.55) },
+    { key: "fees", text: text.fees, mid: ((segs[2]!.from + segs[3]!.to) / 2) * COL.top, o: ramp(grow, 0.55, 0.75) },
   ];
   return (
     <>

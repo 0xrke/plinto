@@ -34,8 +34,9 @@ import styles from "./editorialPlus.module.css";
  * listener, exact reversal.
  */
 
-// The split gets a longer runway so the full labelled column holds before the floor settles.
-const HEIGHTS = { split: 110, pump: 85, steps: 100, bounce: 100 } as const;
+// The presale and split get a longer runway: the raise column fills, then the full labelled column
+// holds a good while before the floor settles.
+const HEIGHTS = { presale: 120, split: 150, pump: 85, steps: 100, bounce: 100 } as const;
 
 const num = (i: number) => String(i + 1).padStart(2, "0");
 

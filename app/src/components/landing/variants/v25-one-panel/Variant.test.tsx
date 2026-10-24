@@ -3,7 +3,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { launchMath } from "@/lib/landing/sim/launch";
 import { simConstantsFromSdk } from "@/lib/landing/sim/fromSdk";
 import { BEAT_KEYS, ILLUSTRATION, beatCaption, storyFrame } from "../shared";
-import { PanelChart, columnGone, floorPaysLabel, panelScales, splitLabels } from "./PanelChart";
+import { PanelChart, SPLIT_DIVIDE, SPLIT_SETTLE, columnGone, floorPaysLabel, panelScales, raisedOf, splitLabels, splitPhase } from "./PanelChart";
 import Variant from "./Variant";
 
 const m = launchMath(simConstantsFromSdk(), simConstantsFromSdk().defaultVaultSharePct);
@@ -71,12 +71,47 @@ describe("v25 one panel", () => {
     expect(card.querySelector('[data-part="tile-floor"]')!.textContent).toMatch(/\$/);
   });
 
-  it("fills the raise column up to your $100 during the presale", () => {
-    const { container } = render(<PanelChart m={m} frame={storyFrame(m, 0.5)} />);
+  it("fills the raise as its own solid sky bar from $0, labelled Raised $X of $10,000", () => {
+    const at = (pos: number) => render(<PanelChart m={m} frame={storyFrame(m, pos)} />);
+    {
+      const { container, unmount } = at(0);
+      expect(container.querySelector('[data-part="raised"]')!.textContent).toBe(`Raised $0${raisedOf(m)}`);
+      unmount();
+    }
+    const { container } = at(0.5);
     const raise = container.querySelector('[data-part="raise"]')!;
     expect(raise.tagName.toLowerCase()).toBe("rect");
     expect(hOf(raise)).toBeGreaterThan(0);
-    expect(container.textContent).toMatch(/Raised \$/);
+    // One bar, no backdrop: the fill is the column's only rect, in the solid presale sky.
+    expect(container.querySelectorAll('[data-part="raise-column"] rect')).toHaveLength(1);
+    expect(raise.getAttribute("style") ?? "").toContain("--color-presale-ring");
+    expect(raisedOf(m)).toBe("of $10,000");
+    expect(container.querySelector('[data-part="raised"]')!.textContent).toMatch(/^Raised \$[\d,]+of \$10,000$/);
+  });
+
+  it("divides the same bar at the split: same x and width on both sides of the boundary", () => {
+    const box = (pos: number, part: string) => {
+      const { container, unmount } = render(<PanelChart m={m} frame={storyFrame(m, pos)} />);
+      const el = container.querySelector(`[data-part="${part}"]`)!;
+      const out = { x: Number(el.getAttribute("x")), w: Number(el.getAttribute("width")) };
+      unmount();
+      return out;
+    };
+    const a = box(1 - 1e-6, "raise");
+    for (const part of ["split-floor", "split-market", "split-creator"]) {
+      const b = box(1 + 1e-6, part);
+      expect(b.x).toBeCloseTo(a.x, 4);
+      expect(b.w).toBeCloseTo(a.w, 4);
+    }
+  });
+
+  it("holds the labelled, divided column before the floor settles", () => {
+    expect(SPLIT_DIVIDE[1]).toBeLessThan(SPLIT_SETTLE[0]);
+    const mid = splitPhase(storyFrame(m, 1 + (SPLIT_DIVIDE[1] + SPLIT_SETTLE[0]) / 2));
+    expect(mid).toEqual({ grow: 1, reveal: 0 });
+    expect(splitPhase(storyFrame(m, 0.5))).toEqual({ grow: 0, reveal: 0 });
+    expect(splitPhase(storyFrame(m, 2.5))).toEqual({ grow: 1, reveal: 1 });
+    expect(splitPhase(storyFrame(m, 2)).reveal).toBeCloseTo(1, 6);
   });
 
   it("splits the raise into a vertical column: floor at the bottom, market above, fees on top, labelled", () => {

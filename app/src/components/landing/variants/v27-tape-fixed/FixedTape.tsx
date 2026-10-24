@@ -14,6 +14,7 @@ import {
   STORY_POS_END,
   storyFrame,
   alpha,
+  formatUsdWhole,
   tileValues,
   type StoryFrame,
   type VariantProps,
@@ -59,18 +60,19 @@ const FLOOR_WIDE_NOTE_LINES = ["Floor steps: real scale,", "zoom next"] as const
  * engine's zoom (0 → 1 during steps, then 1).
  */
 export function tapeSpan(compact: boolean, zoom: number): number {
-  const wide = compact ? 3.2 : 5;
-  const full = compact ? 5.6 : 6.6;
+  // The playhead sits mid-card, so half the card holds this much story time.
+  const wide = compact ? 3.6 : 3.8;
+  const full = compact ? 5.4 : 5.6;
   return wide + (full - wide) * Math.min(1, Math.max(0, zoom));
 }
 
 /** Below this drawing width the tape uses its phone layout (own ruler row, smaller type). */
 export const COMPACT_W = 640;
-/** Height of the card's chip row (the corner pills sit at 10px, 22px tall). */
-export const CHIP_ROW = 44;
+/** Height of the card's chip row (the corner pills sit at 10px, 22px tall). The ruler runs under it. */
+export const CHIP_ROW = 40;
 
-/** Rough width of a ruler label (beat number + name): 12px phones, 13.5px wide. */
-const labelWidth = (text: string, compact: boolean) => (text.length + 3) * (compact ? 6.4 : 7.6);
+/** Rough width of a ruler label (beat number + name): 13px phones, 16px wide (bold, the widest state). */
+const labelWidth = (text: string, compact: boolean) => (text.length + 3) * (compact ? 7.2 : 8.9);
 /** Rough width of a raised chip ("Peak $400 ↑"), padding included: 11.5px phones, 12.5px wide. */
 const chipWidth = (text: string, compact: boolean) => text.length * (compact ? 6.6 : 7.2) + (compact ? 18 : 22);
 
@@ -80,11 +82,6 @@ export interface TapeProps {
   /** Drawing size in px (the SVG viewBox). */
   w: number;
   h: number;
-  /**
-   * Room kept clear at the top-left / top-right for the card's corner chips. Wide tapes run the
-   * ruler through the chip row, so beat names fade out before they reach a chip.
-   */
-  reserve?: { left: number; right: number };
   className?: string;
 }
 
@@ -95,15 +92,16 @@ const ease = (x: number) => {
   return c < 0.5 ? 4 * c * c * c : 1 - (-2 * c + 2) ** 3 / 2;
 };
 
-export function FixedTape({ m, frame, w, h, reserve = { left: 12, right: 12 }, className = "" }: TapeProps) {
+export function FixedTape({ m, frame, w, h, className = "" }: TapeProps) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const compact = w < COMPACT_W;
   const b = beatBounds(m);
 
-  // Phones: the ruler gets its own row under the chips. Wide: the ruler is the chip row.
-  const RULER = compact ? 28 : CHIP_ROW;
-  const resL = compact ? 8 : reserve.left;
-  const resR = compact ? 10 : reserve.right;
+  // The ruler has its own row, under the card's chip row (the tape box starts below the chips), so
+  // beat names never meet the Illustration pill or the scale chip.
+  const RULER = compact ? 30 : 38;
+  const resL = compact ? 8 : 12;
+  const resR = compact ? 10 : 14;
   const FOOT = compact ? 16 : 20;
   const top = RULER + (compact ? 16 : 26);
   const bot = h - FOOT - 8;
@@ -111,7 +109,8 @@ export function FixedTape({ m, frame, w, h, reserve = { left: 12, right: 12 }, c
   const tagW = compact ? 98 : 150;
   const tagH = compact ? 36 : 50;
   const tagGap = compact ? 8 : 18;
-  const playX = Math.round(Math.min(w * (compact ? 0.7 : 0.72), w - tagW - tagGap - (compact ? 6 : 24)));
+  // The playhead (and so the current action) sits in the middle of the card.
+  const playX = Math.round(Math.min(w * 0.5, w - tagW - tagGap - (compact ? 6 : 24)));
   /*
    * Time camera: how much story time the tape shows behind the playhead. During "steps" (where the
    * engine's y camera closes in on the floor) the tape zooms out too, so the whole staircase sits
@@ -121,7 +120,7 @@ export function FixedTape({ m, frame, w, h, reserve = { left: 12, right: 12 }, c
   const ppt = playX / pastSpan;
   const stepsLabelW = compact ? 16 : labelWidth(BEAT_LABELS.steps, false);
   /** Labels fade out as they reach the fixed y labels at the left edge. */
-  const edge = (x: number) => Math.min(1, Math.max(0, compact ? (x - 36) / 30 : (x - 64) / 60));
+  const edge = (x: number) => Math.min(1, Math.max(0, compact ? (x - 30) / 14 : (x - 60) / 30));
   /** Rough width of an 11.5px bold chart label. */
   const textW = (text: string) => text.length * (compact ? 6.3 : 7.2);
   const X = (t: number) => playX + (t - frame.t) * ppt;
@@ -173,9 +172,11 @@ export function FixedTape({ m, frame, w, h, reserve = { left: 12, right: 12 }, c
    */
   const split = frame.splitProgress;
   const reveal = frame.floorReveal;
-  const colW = compact ? 34 : 60;
+  const colW = compact ? 40 : Math.round(Math.min(110, Math.max(72, w * 0.08)));
   const rx = compact ? 3 : 4;
-  const colRight = Math.min(X(b.start[SPLIT_I]!), playX - 4);
+  // A clear gap keeps the column apart from the playhead, its dot and the price line's end.
+  const colGap = compact ? 10 : 28;
+  const colRight = Math.min(X(b.start[SPLIT_I]!), playX - colGap);
   const colLeft = colRight - colW;
   const colMid = colLeft + colW / 2;
   const segs = columnSegments(m);
@@ -198,7 +199,7 @@ export function FixedTape({ m, frame, w, h, reserve = { left: 12, right: 12 }, c
   const showColumn = frame.beatIndex <= PUMP_I && colOpacity > 0.01 && colRight > -20;
   const fill = Math.min(100, (frame.raisedUsd / m.raiseUsd) * 100);
   const colour = ramp(split, 0, 0.35);
-  const labelSize = compact ? 12.5 : 14.5;
+  const labelSize = compact ? 12.5 : 16;
   const labelX = colLeft - (compact ? 8 : 12);
   const pctOf = (usd: number) => Math.round((usd / m.raiseUsd) * 1000) / 10;
   const splitLabels = [
@@ -211,7 +212,7 @@ export function FixedTape({ m, frame, w, h, reserve = { left: 12, right: 12 }, c
    * glyph). The labels sit at $17–$95, between the $0 / $50 / $100 tick labels, so they may pass
    * over the tick column without touching a tick.
    */
-  const labelFade = (text: string) => ramp(labelX - text.length * labelSize * 0.56, 2, 14);
+  const labelFade = (text: string) => ramp(labelX - text.length * labelSize * 0.53, -2, 6);
 
   /* ---- markers and labels ---- */
   /** Baseline of the "Bounce" label, under the dip dot. */
@@ -281,12 +282,18 @@ export function FixedTape({ m, frame, w, h, reserve = { left: 12, right: 12 }, c
   const bounceX = frame.dip ? Math.min(X(frame.dip.t), playX - textW(CHART_COPY.bounce) / 2 - 6) : 0;
   const feesIn = ramp(frame.zoom, 0.6, 0.95);
   const plotH = h - RULER - FOOT;
-  /** Ruler text line: the row's middle on phones, the corner chips' middle on wide cards. */
-  const rulerMid = compact ? RULER / 2 : 21;
-  /* "Raised $…" sits over the raise column, right-aligned with it, just above the $100 line. */
+  /** Ruler text line: the middle of its row. */
+  const rulerMid = RULER / 2;
+  /*
+   * Presale: "Raised $X" over "of $10,000", left of the column at its fill level (v22's label). It
+   * gives way to the split's labels as the column divides.
+   */
   const raisedText = CHART_COPY.raised(frame.raisedUsd);
-  const raisedW = textW(raisedText);
-  const raisedX = colRight;
+  const raisedOf = `of ${formatUsdWhole(m.raiseUsd)}`;
+  const raisedSize = compact ? 12.5 : 17;
+  const raisedX = colLeft - (compact ? 8 : 14);
+  const raisedY = Math.min(Y(0) - raisedSize * 1.6, Math.max(Y(100) + raisedSize + 8, Y(fill) + raisedSize));
+  const raisedOpacity = (1 - ramp(split, 0, 0.15)) * ramp(raisedX - raisedText.length * raisedSize * 0.53, -2, 6);
   /* The wide-camera floor note: two lines on phones so it stays clear of the split column. */
   const noteLines = compact ? FLOOR_WIDE_NOTE_LINES : [FLOOR_WIDE_NOTE];
   const noteLeft = playX - 12 - Math.max(...noteLines.map(textW));
@@ -348,18 +355,27 @@ export function FixedTape({ m, frame, w, h, reserve = { left: 12, right: 12 }, c
         {showColumn ? (
           <g opacity={colOpacity}>
             {colour < 1 ? (
-              <g opacity={1 - colour}>
-                <rect x={colLeft} y={Y(100)} width={colW} height={Math.max(0, Y(0) - Y(100))} rx={rx} style={{ fill: alpha(CHART.price, 0.06) }} />
-                <rect x={colLeft} y={Y(fill)} width={colW} height={Math.max(0, Y(0) - Y(fill))} rx={rx} style={{ fill: CHART.presaleFill }} />
-              </g>
+              <rect data-part="raise-track" opacity={1 - colour} x={colLeft} y={Y(100)} width={colW} height={Math.max(0, Y(0) - Y(100))} rx={rx} className={s.colTrack} />
             ) : null}
-            {colour > 0 ? (
-              <g opacity={colour}>
+            {split <= 0 ? (
+              <rect data-part="raise-fill" x={colLeft} y={Y(fill)} width={colW} height={Math.max(0, Y(0) - Y(fill))} rx={rx} style={{ fill: CHART.presaleFill }} />
+            ) : null}
+            {split > 0 ? (
+              <g>
                 {(["platform", "creator", "market"] as const).map((key) => {
                   const y0 = Y(segs[key].to * 100) + gapPx / 2;
                   const y1 = Y(segs[key].from * 100) - gapPx / 2;
-                  return <rect key={key} data-part={`split-${key}`} x={colLeft} y={y0} width={colW} height={Math.max(0, y1 - y0)} rx={rx} opacity={restOut} className={key === "market" ? s.colMarket : s.colFees} />;
+                  // Colour is laid over the opaque raise fill (not crossfaded with it), so it never turns muddy.
+                  return (
+                    <g key={key} opacity={restOut}>
+                      {colour < 1 ? <rect x={colLeft} y={y0} width={colW} height={Math.max(0, y1 - y0)} rx={rx} style={{ fill: CHART.presaleFill }} /> : null}
+                      <rect data-part={`split-${key}`} x={colLeft} y={y0} width={colW} height={Math.max(0, y1 - y0)} rx={rx} opacity={colour} className={key === "market" ? s.colMarket : s.colFees} />
+                    </g>
+                  );
                 })}
+                {colour < 1 ? (
+                  <rect x={colLeft} y={Y(floorTop) + floorGap} width={colW} height={Math.max(0, Y(0) - Y(floorTop) - floorGap)} rx={rx} style={{ fill: CHART.presaleFill }} />
+                ) : null}
                 {/* The floor part: once trading opens it fades to the slab's own tint (mint at 14%). */}
                 <rect
                   data-part="split-floor"
@@ -368,7 +384,7 @@ export function FixedTape({ m, frame, w, h, reserve = { left: 12, right: 12 }, c
                   width={colW}
                   height={Math.max(0, Y(0) - Y(floorTop) - floorGap)}
                   rx={rx}
-                  opacity={0.14 + 0.86 * restOut}
+                  opacity={colour * (0.14 + 0.86 * restOut)}
                   className={s.colFloor}
                 />
               </g>
@@ -384,10 +400,13 @@ export function FixedTape({ m, frame, w, h, reserve = { left: 12, right: 12 }, c
             ) : null}
           </g>
         ) : null}
-        {/* "Raised $…" over the column. */}
-        {showColumn && frame.y.min === 0 ? (
-          <text opacity={labelsOut * colOpacity * edge(raisedX - raisedW)} x={raisedX} y={Y(100) - 12} className={s.note} textAnchor="end">
+        {/* "Raised $X of $10,000" beside the filling column. */}
+        {showColumn && frame.y.min === 0 && frame.raisedUsd >= 1 && raisedOpacity > 0.01 ? (
+          <text data-part="raise-label" opacity={raisedOpacity * colOpacity} x={raisedX} y={raisedY} textAnchor="end" className={s.raisedLabel}>
             {raisedText}
+            <tspan x={raisedX} dy={raisedSize * 1.15} className={s.raisedOf}>
+              {raisedOf}
+            </tspan>
           </text>
         ) : null}
 
@@ -535,7 +554,7 @@ export function FixedTape({ m, frame, w, h, reserve = { left: 12, right: 12 }, c
               />
             ) : null}
             {fade > 0.02 ? (
-              <text opacity={fade} x={lx} y={rulerMid + (compact ? 4 : 4.5)} textAnchor={anchorEnd ? "end" : undefined} className={s.beatLabel}>
+              <text opacity={fade} x={lx} y={rulerMid + (compact ? 4.5 : 5.5)} textAnchor={anchorEnd ? "end" : undefined} className={s.beatLabel}>
                 <tspan className={s.beatNum}>{num}</tspan>
                 {full ? ` ${BEAT_LABELS[key]}` : null}
               </text>
@@ -553,7 +572,7 @@ export function FixedTape({ m, frame, w, h, reserve = { left: 12, right: 12 }, c
       })}
 
       {/* Playhead. */}
-      <line x1={playX} x2={playX} y1={RULER} y2={h - FOOT} className={s.playhead} />
+      <line data-part="playhead" x1={playX} x2={playX} y1={RULER} y2={h - FOOT} className={s.playhead} />
       <path d={`M${playX - 6} ${RULER}h12l-6 7Z`} className={s.playKnob} />
       <path d={`M${playX - 6} ${h - FOOT}h12l-6 -7Z`} className={s.playKnob} />
 

@@ -45,13 +45,17 @@ import styles from "./onePanel.module.css";
  * its one-sentence detail and the two story tiles sit on the right (stacked under the chart on
  * phones). When the active step changes, the caption and detail change in place with a short
  * crossfade: every beat's text sits in the same grid cell, so the card never resizes or jumps.
- * The split beat draws the raise as the bold vertical column of variants 1/3 (floor mint at the
- * bottom, market iris, fees butter on top, labelled inside each segment), and the floor segment
- * settles onto the floor slab the staircase starts from.
+ * The raise is its own presale-sky bar that fills from $0 ("Raised $X of $10,000"); at the split
+ * the same bar divides (floor mint at the bottom, market iris, fees butter on top, labelled inside
+ * each segment), holds, and the floor segment settles onto the floor slab the staircase starts from.
  */
 
-/** Per-step scroll runway (svh): longer where the chart has more to say. */
-const HEIGHTS: Partial<Record<BeatKey, number>> = { split: 90, pump: 90, steps: 100, bounce: 100 };
+/**
+ * Per-step scroll runway (svh): longer where the chart has more to say. The presale (the raise
+ * filling its own bar) and the split (that bar dividing, held labelled, then the floor settling;
+ * see PanelChart's splitPhase) get the longest runways.
+ */
+const HEIGHTS: Partial<Record<BeatKey, number>> = { presale: 120, split: 150, pump: 90, steps: 100, bounce: 100 };
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 /** The active rail segment fills while its beat plays (q 0.05..0.75), on a 1/200 grid. */

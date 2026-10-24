@@ -194,3 +194,14 @@ export const easeInOut = (x: number) => {
   const t = clamp01(x);
   return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
 };
+
+/**
+ * The split beat's own phases, from its scroll progress (the step is 150svh): the column divides and
+ * its labels come in over the first ~40%, the labelled column then holds, and only from 60% does the
+ * floor segment drop onto the slab (done by 95%). Before the split both are 0; after it both are 1.
+ */
+export function splitPhases(f: StoryFrame): { sp: number; reveal: number } {
+  if (f.beatIndex < 1) return { sp: 0, reveal: 0 };
+  if (f.beatIndex > 1) return { sp: 1, reveal: 1 };
+  return { sp: ramp(f.beatProgress, 0.02, 0.4), reveal: easeInOut(ramp(f.beatProgress, 0.6, 0.95)) };
+}

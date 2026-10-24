@@ -25,6 +25,7 @@ import {
 } from "../shared";
 import { LedgerChart } from "./LedgerChart";
 import { LedgerSidebar } from "./LedgerSidebar";
+import { pacedFrame } from "./timing";
 import { ledgerAt } from "./vaultLedger";
 import styles from "./editorialLedger.module.css";
 
@@ -42,7 +43,9 @@ import styles from "./editorialLedger.module.css";
  * the captions for screen readers): native scroll, one passive listener, exact reversal.
  */
 
-const HEIGHTS = { pump: 85, steps: 100, bounce: 100, exits: 80 } as const;
+// Presale and split run longer here (the founder's review: "raised" is its own bar, and the period
+// should last longer on scroll); timing.ts paces the column's phases over these runways.
+const HEIGHTS = { presale: 120, split: 150, pump: 85, steps: 100, bounce: 100, exits: 80 } as const;
 
 const num = (i: number) => String(i + 1).padStart(2, "0");
 
@@ -66,7 +69,9 @@ function Heading() {
   );
 }
 
-function Panels({ m, frame, still = false, activeBeat }: { m: LaunchMath; frame: StoryFrame; still?: boolean; activeBeat?: number }) {
+function Panels({ m, frame: raw, still = false, activeBeat }: { m: LaunchMath; frame: StoryFrame; still?: boolean; activeBeat?: number }) {
+  // One paced frame for the chart and the ledger, so both read the same phase of the raise.
+  const frame = useMemo(() => pacedFrame(m, raw), [m, raw]);
   const ledger = useMemo(() => ledgerAt(m, frame), [m, frame]);
   return (
     <div className={`${styles.panels} ${still ? styles.panelsStill : styles.panelsLive}`} data-beat={frame.beat} data-chart={still ? "still" : "stage"}>

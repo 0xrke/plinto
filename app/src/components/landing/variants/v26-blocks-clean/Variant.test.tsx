@@ -64,6 +64,22 @@ describe("v26 Blocks · clean", () => {
     expect(stills.querySelector('[data-part="split-labels"]')).not.toBeNull();
   });
 
+  it("the presale is its own bar labelled \"Raised $X of $10,000\", and the split divides that same column", () => {
+    const pre = render(<CleanBlocksStage m={m} frame={storyFrame(m, 0.5)} />).container;
+    const label = pre.querySelector('[data-part="raise-label"]');
+    expect(label?.textContent).toMatch(/^Raised \$[\d,]+of \$10,000$/);
+    expect(pre.querySelector('[data-part="raise-bar"]')).not.toBeNull();
+    // The same column, at the same x, from the end of the presale into the split (no jump).
+    const frontX = (c: Element, kind: string) => c.querySelector(`[data-block="${kind}"] polygon:last-of-type`)!.getAttribute("points")!.split(/[ ,]/)[0];
+    const end = render(<CleanBlocksStage m={m} frame={storyFrame(m, 0.999)} />).container;
+    const start = render(<CleanBlocksStage m={m} frame={splitAt(0.001)} />).container;
+    expect(frontX(start, "presale")).toBe(frontX(end, "presale"));
+    const divided = render(<CleanBlocksStage m={m} frame={splitAt(0.4)} />).container;
+    expect(frontX(divided, "colFloor")).toBe(frontX(end, "presale"));
+    // The raise label hands over to the segment labels once the column has divided.
+    expect(divided.querySelector('[data-part="raise-label"]')).toBeNull();
+  });
+
   it("splits the column vertically into floor, market and fees, labelled directly", () => {
     const labels = splitLabels(m);
     expect(labels.floor).toBe("Floor 50%");

@@ -46,6 +46,8 @@ const ns = { vectorEffect: "non-scaling-stroke" as const, fill: "none" };
 const SPLIT = BEATS.find((b) => b.key === "split")!;
 /** The raise column in world units (story time, USD per $100). */
 const COL = { x0: 0.08, x1: 0.72, top: 100 };
+/** The raise's fill in the presale (and under each share until it takes its colour in the split). */
+const PRESALE_FILL = alpha(CHART.presaleFill, 0.9);
 /** Far-off world edges for full-bleed lines. */
 const FAR_T = [-40, 60] as const;
 const FAR_V = [-5000, 50000] as const;
@@ -60,11 +62,25 @@ const SEG_FILL = {
   platform: "var(--color-graduating-soft)",
 } as const;
 
-/** Split-beat choreography (beat progress): the column divides, then the floor part lands on the slab. */
-const DIVIDE: readonly [number, number] = [0, 0.25];
-const LAND: readonly [number, number] = [0.32, 0.78];
+/**
+ * Split-beat choreography (beat progress; the split is a long 150svh beat): the presale column takes
+ * its colours share by share (floor, market, fees, each with its label) while gaps open, the
+ * labelled divided column holds still (the camera holds too, see camera.ts), then the floor part
+ * lands on the slab.
+ */
+const DIVIDE: readonly [number, number] = [0.04, 0.24];
+/** When each share takes its colour (and its label appears), bottom to top. */
+const TINT = { floor: [0.04, 0.16], market: [0.12, 0.24], fees: [0.2, 0.32] } as const;
+const LAND: readonly [number, number] = [0.56, 0.86];
 /** The landed floor block hands over to the slab and the staircase. */
-const HANDOVER: readonly [number, number] = [0.74, 0.92];
+const HANDOVER: readonly [number, number] = [0.84, 0.97];
+/** The presale's "Raised" label leaves as the column starts to divide. */
+const RAISED_OUT: readonly [number, number] = [0.02, 0.1];
+
+/** How far a share has taken its colour (1 outside the split once divided, 0 before it). */
+function tintOf(f: StoryFrame, key: keyof typeof TINT): number {
+  return f.beatIndex === 1 ? ramp(f.beatProgress, TINT[key][0], TINT[key][1]) : f.beatIndex > 1 ? 1 : 0;
+}
 
 /** Progress through the split choreography: 0 before the split, 1 after it. */
 function splitBp(f: StoryFrame): number {
@@ -289,9 +305,17 @@ export function Scene({ m, frame: f, cam, still = false }: SceneProps) {
           <span className={styles.tickLabel}>{tickLabel(v)}</span>
         </At>
       ))}
-      {f.beatIndex === 0 && f.raisedUsd >= 1 ? (
-        <At x={px((COL.x0 + COL.x1) / 2)} y={py(COL.top)}>
-          <span className={`${styles.label} ${styles.raised} tnum`}>{CHART_COPY.raised(f.raisedUsd)}</span>
+      {f.beatIndex <= 1 && f.raisedUsd >= 1 ? (
+        // Beside the column at the fill line ("Raised $8,210 of $10,000"); it stays under the $100 line.
+        <At
+          x={px(COL.x1)}
+          y={py(Math.min(0.86 * COL.top, Math.max(0.06 * COL.top, (f.raisedUsd / m.raiseUsd) * COL.top)))}
+          opacity={f.beatIndex === 0 ? 1 : 1 - ramp(bp, RAISED_OUT[0], RAISED_OUT[1])}
+        >
+          <span className={`${styles.splitLabel} ${styles.raised} tnum`} data-part="raise-label">
+            {CHART_COPY.raised(f.raisedUsd)}
+            <span className={styles.raisedOf}> of {formatUsdWhole(m.raiseUsd)}</span>
+          </span>
         </At>
       ) : null}
       {f.beatIndex >= 1 && f.beatIndex <= 2 ? <SplitLabels m={m} f={f} px={px} py={py} /> : null}
@@ -395,7 +419,7 @@ function RaiseColumn({ m, f }: { m: LaunchMath; f: StoryFrame }) {
         {/* The empty column is an outline on a faint sky track; the raise fills it in presale sky. */}
         <rect x={X(COL.x0)} y={Y(COL.top)} width={width} height={COL.top * SY} style={{ fill: alpha(CHART.presaleFill, 0.08) }} />
         {outline}
-        <rect x={X(COL.x0)} y={Y(fill)} width={width} height={fill * SY} style={{ fill: alpha(CHART.presaleFill, 0.9) }} data-part="raise-fill" />
+        <rect x={X(COL.x0)} y={Y(fill)} width={width} height={fill * SY} style={{ fill: PRESALE_FILL }} data-part="raise-fill" />
         {fill > 0 ? <line x1={X(COL.x0)} x2={X(COL.x1)} y1={Y(fill)} y2={Y(fill)} {...ns} style={{ stroke: CHART.presaleFill }} strokeWidth={2} /> : null}
       </g>
     );
@@ -416,29 +440,33 @@ function RaiseColumn({ m, f }: { m: LaunchMath; f: StoryFrame }) {
             // The column divides: gaps open between the segments.
             const lo = s.from * COL.top + blk.gap / 2;
             const hi = s.to * COL.top - blk.gap / 2;
+            // Each share takes its colour over the presale fill (laid on top, not crossfaded), so the
+            // column the presale filled is the same column that divides: no jump at the beat boundary.
+            const tint = tintOf(f, s.key === "market" ? "market" : "fees");
+            const rect = { x: X(COL.x0), y: Y(hi), width, height: Math.max(0, (hi - lo) * SY) };
             return (
-              <rect
-                key={s.key}
-                x={X(COL.x0)}
-                y={Y(hi)}
-                width={width}
-                height={Math.max(0, (hi - lo) * SY)}
-                style={{ fill: SEG_FILL[s.key as keyof typeof SEG_FILL] }}
-                data-part={`split-${s.key}`}
-              />
+              <g key={s.key}>
+                {tint < 1 ? <rect {...rect} style={{ fill: PRESALE_FILL }} /> : null}
+                <rect {...rect} style={{ fill: SEG_FILL[s.key as keyof typeof SEG_FILL] }} opacity={tint} data-part={`split-${s.key}`} />
+              </g>
             );
           })}
       </g>
       {blockOpacity > 0 ? (
-        <rect
-          x={X(blk.x0)}
-          y={Y(blk.top)}
-          width={X(Math.max(0, blk.x1 - blk.x0))}
-          height={Math.max(0, blk.top - blk.bottom) * SY}
-          style={{ fill: CHART.floor }}
-          opacity={blockOpacity}
-          data-part="split-floor"
-        />
+        <g opacity={blockOpacity}>
+          {tintOf(f, "floor") < 1 ? (
+            <rect x={X(blk.x0)} y={Y(blk.top)} width={X(Math.max(0, blk.x1 - blk.x0))} height={Math.max(0, blk.top - blk.bottom) * SY} style={{ fill: PRESALE_FILL }} />
+          ) : null}
+          <rect
+            x={X(blk.x0)}
+            y={Y(blk.top)}
+            width={X(Math.max(0, blk.x1 - blk.x0))}
+            height={Math.max(0, blk.top - blk.bottom) * SY}
+            style={{ fill: CHART.floor }}
+            opacity={tintOf(f, "floor")}
+            data-part="split-floor"
+          />
+        </g>
       ) : null}
     </g>
   );
@@ -454,7 +482,7 @@ function SplitLabels({ m, f, px, py }: { m: LaunchMath; f: StoryFrame; px: (t: n
   const x = px(COL.x1);
   const fees = segs[2]!;
   const platform = segs[3]!;
-  const floorO = f.beat === "pump" ? 1 - ramp(f.beatProgress, 0, 0.1) : inn(0.02);
+  const floorO = f.beat === "pump" ? 1 - ramp(f.beatProgress, 0, 0.1) : inn(TINT.floor[0] + 0.04);
   const perHundredO = ramp(blk.land, 0.6, 1);
   return (
     <>
@@ -470,12 +498,12 @@ function SplitLabels({ m, f, px, py }: { m: LaunchMath; f: StoryFrame; px: (t: n
           ) : null}
         </span>
       </At>
-      <At x={x} y={py(((segs[1]!.from + segs[1]!.to) / 2) * COL.top)} opacity={inn(0.08) * rest}>
+      <At x={x} y={py(((segs[1]!.from + segs[1]!.to) / 2) * COL.top)} opacity={inn(TINT.market[0] + 0.04) * rest}>
         <span className={`${styles.splitLabel} ${styles.splitMarket} tnum`} data-part="split-label-market">
           {CHART_COPY.market} {pctOf(m, m.split.poolUsd)}%
         </span>
       </At>
-      <At x={x} y={py(((fees.from + platform.to) / 2) * COL.top)} opacity={inn(0.14) * rest}>
+      <At x={x} y={py(((fees.from + platform.to) / 2) * COL.top)} opacity={inn(TINT.fees[0] + 0.04) * rest}>
         <span className={`${styles.splitLabel} ${styles.splitFees} tnum`} data-part="split-label-fees">
           Fees {CHART_COPY.fees(pctOf(m, m.split.creatorUsd), pctOf(m, m.split.platformUsd))}
         </span>

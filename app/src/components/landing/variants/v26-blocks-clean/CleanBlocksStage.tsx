@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { floor100At } from "@/lib/landing/sim/floorPath";
 import { BEAT_START, STORY_T_END, T_GRAD, easeInOut } from "@/lib/landing/sim/timeline";
-import { BrandChartFrame, CHART, CHART_COPY, DASH, STROKE, TILE_FLOOR, TILE_NOW, formatUsdCents, tileValues, type StoryFrame, type VariantProps } from "../shared";
+import { BrandChartFrame, CHART, CHART_COPY, DASH, STROKE, TILE_FLOOR, TILE_NOW, formatUsdCents, formatUsdWhole, tileValues, type StoryFrame, type VariantProps } from "../shared";
 import { boxFaces, clamp01, easeOutCubic, lerpMap, niceTicks, plotFor, polyline, within, type Plot, type Size } from "./geometry";
 import styles from "./blocksClean.module.css";
 
@@ -62,24 +62,26 @@ const TAG_T = 0.34;
 const DROP_PX = { compact: 18, wide: 28 } as const;
 
 /**
- * The split beat's own phases (beat progress 0..1; the beat plays over its first 0.05..0.75 of scroll).
- * The column divides and is labelled, holds, then the market and fees lift away and the floor's slabs
- * slide one by one into the floor slab.
+ * The split beat's own phases (beat progress 0..1 over a 150svh step). The "Raised" label hands over
+ * while the column divides; the labelled column then holds for about half the step (~70svh of
+ * scroll), then the market and fees lift away and the floor's slabs slide one by one into the floor slab.
  */
 const SPLIT = {
-  divide: [0.02, 0.18],
+  divide: [0.04, 0.2],
   /** Floor label fades in over this window; market and fees follow LABEL_STAGGER and 2× later. */
-  labels: [0.06, 0.18],
-  leave: [0.62, 0.74],
+  labels: [0.1, 0.2],
+  leave: [0.68, 0.78],
   /** Floor slab i moves over [move0 + i·stagger, … + moveLen]. */
-  move0: 0.62,
-  stagger: 0.02,
-  moveLen: 0.14,
+  move0: 0.68,
+  stagger: 0.016,
+  moveLen: 0.12,
   /** The mint staircase and the floor chip appear once every slab has landed. */
-  edge: [0.92, 1],
+  edge: [0.94, 1],
 } as const;
 /** Reduced-motion still of the split: the labelled column, before it breaks up. */
 const STILL_SPLIT_P = 0.45;
+/** The "Raised" label fades out over this part of the split, as the column divides. */
+const RAISED_OUT = [0, 0.1] as const;
 /** Delay between the floor, market and fees labels (beat progress). */
 const LABEL_STAGGER = 0.03;
 
@@ -446,6 +448,12 @@ function Scene({ m, frame, size, under, still }: VariantProps & { frame: StoryFr
   const floorLabelO = labelIn(0) * (1 - within(sp, SPLIT.move0, SPLIT.move0 + 0.06));
   const restLabelO = (1 - leave) * (beatIndex === 1 ? 1 : 0);
   const big = p.compact ? 18 : 30;
+  /* the raise label rides the column's top as it fills, then hands over to the segment labels */
+  const raisedO = beatIndex === 0 ? 1 : beatIndex === 1 ? 1 - within(sp, RAISED_OUT[0], RAISED_OUT[1]) : 0;
+  const raisedTop = Y(Math.min(SLABS, filled) * SLAB_USD);
+  const raisedY = Math.max(Y(SLABS * SLAB_USD) + (p.compact ? 14 : 20), Math.min(Y(0) - (p.compact ? 24 : 32), raisedTop + (p.compact ? 14 : 20)));
+  /* the empty column ahead of the fill: a faint outline of the whole $100 bar */
+  const ghostO = beatIndex === 0 ? 1 : beatIndex === 1 ? 1 - divide : 0;
   const small = p.compact ? 11.5 : 14;
 
   return (
@@ -505,6 +513,13 @@ function Scene({ m, frame, size, under, still }: VariantProps & { frame: StoryFr
               );
             })
           : null}
+
+        {/* the bar the presale fills: its outline, from $0 to your $100 */}
+        {showColumn && ghostO > 0 ? (
+          <g data-part="raise-bar" opacity={ghostO}>
+            <rect x={cx0} y={Y(SLABS * SLAB_USD)} width={cx1 - cx0} height={Y(0) - Y(SLABS * SLAB_USD)} style={{ fill: CHART.grid, fillOpacity: 0.6, stroke: CHART.axis, strokeOpacity: 0.55, strokeWidth: 1, strokeDasharray: DASH.guide }} />
+          </g>
+        ) : null}
 
         {/* the column: presale sky, then floor / market / fees; the floor's slabs travel into the foundation */}
         {columnSlabs.map((s) => (
@@ -661,9 +676,16 @@ function Scene({ m, frame, size, under, still }: VariantProps & { frame: StoryFr
         </g>
       ) : null}
 
-      {/* labels that live outside the clip */}
-      {showColumn && beatIndex === 0 && filled >= 1 ? (
-        <Chip x={lx + p.dx / 2} y={Y(Math.min(SLABS, filled) * SLAB_USD) + p.dy - 18} text={CHART_COPY.raised(Math.round(frame.raisedUsd / 100) * 100)} />
+      {/* the raise: the column's own label, "Raised $X of $10,000", beside its front face */}
+      {showColumn && raisedO > 0 && frame.raisedUsd >= 1 ? (
+        <g data-part="raise-label" opacity={raisedO}>
+          <text x={cx1 + (p.compact ? 10 : 18)} y={raisedY} className={styles.raiseBig} style={fill(CHART.price, { fontSize: p.compact ? 16 : 24 })}>
+            {CHART_COPY.raised(Math.round(frame.raisedUsd / 100) * 100)}
+          </text>
+          <text x={cx1 + (p.compact ? 10 : 18)} y={raisedY + (p.compact ? 17 : 24)} className={styles.raiseOf} style={fill(CHART.axis, { fontSize: p.compact ? 12 : 15 })}>
+            {`of ${formatUsdWhole(m.raiseUsd)}`}
+          </text>
+        </g>
       ) : null}
       {floorChip && frame.floor100 !== null ? (
         <Chip

@@ -95,12 +95,17 @@ const LEAD_X = 0.05;
 const LEAD_Y = 0.1;
 const FLOOR_Y = 0.06;
 
+/** Share of the split beat the camera holds still on the dividing column. */
+const SPLIT_HOLD = 0.5;
+const ramp01 = (x: number) => Math.min(1, Math.max(0, x));
+
 /** The camera at a frame (frame.pos), keeping the price head in view. */
 export function cameraAt(m: LaunchMath, frame: StoryFrame): Camera {
   const shots = cameraShots(m);
   const pos = frame.pos;
   const b = pos <= 0 ? 0 : Math.min(shots.length - 2, Math.ceil(pos) - 1);
-  const u = easeInOut(pos - b);
+  // The split's camera holds while the column divides and its labels read, then moves as the floor lands.
+  const u = easeInOut(b === 1 ? ramp01((pos - b - SPLIT_HOLD) / (1 - SPLIT_HOLD)) : pos - b);
   const A = shots[b]!;
   const B = shots[b + 1]!;
   let [x0, x1] = lerpAxis(A[0], A[1], B[0], B[1], u);

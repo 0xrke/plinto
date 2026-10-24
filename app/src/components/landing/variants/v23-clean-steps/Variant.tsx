@@ -45,7 +45,7 @@ export default function Variant({ m }: VariantProps) {
         className={`${BRAND_CLASS.container} ${styles.root}`}
         stageClassName={styles.stage}
         stepClassName={styles.step}
-        heights={{ pump: 90, steps: 100, bounce: 110 }}
+        heights={{ presale: 120, split: 150, pump: 90, steps: 100, bounce: 110 }}
         header={
           <header className="flex flex-wrap items-center gap-3 pb-4 pt-6 lg:pb-6 lg:pt-10">
             <h2 className={BRAND_CLASS.title}>{STORY_TITLE}</h2>

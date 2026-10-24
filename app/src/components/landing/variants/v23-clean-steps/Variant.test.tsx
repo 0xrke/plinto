@@ -6,7 +6,7 @@ import { storyFrame } from "@/lib/landing/sim/story";
 import { BEAT_KEYS, ILLUSTRATION, REAL_SCALE_LABEL, TILE_FLOOR, TILE_NOW, beatCaption } from "../shared";
 import Variant from "./Variant";
 import { StepsStage } from "./StepsStage";
-import { COLUMN_TOP, columnBox, netPress, plotFor, scalesFor, treads } from "./geometry";
+import { COLUMN_TOP, columnBox, netPress, plotFor, scalesFor, splitPhases, treads } from "./geometry";
 
 const m = launchMath(simConstantsFromSdk(), 50);
 let reduceMotion = false;
@@ -124,6 +124,23 @@ describe("v23 clean steps (v20 + the v1/v3 split column)", () => {
     // Late: at the floor's real level, over the slab that starts at the split (t = 1).
     expect(b.y).toBeCloseTo(sb.y(late.floorSteps[0]![1]), 0);
     expect(b.x).toBeCloseTo(sb.x(1), 0);
+  });
+
+  it("gives presale and split longer runways and labels the raise as its own column", () => {
+    const { container } = render(<Variant m={m} />);
+    const steps = container.querySelectorAll<HTMLElement>("[data-step]");
+    expect(steps[0]!.style.getPropertyValue("--runway")).toBe("120svh");
+    expect(steps[1]!.style.getPropertyValue("--runway")).toBe("150svh");
+    cleanup();
+    // Presale: "Raised $X of $10,000" beside the filling column.
+    const pre = render(<StepsStage m={m} frame={storyFrame(m, 0.5)} still />).container;
+    expect(pre.querySelector('[data-part="raise-fill"]')).toBeTruthy();
+    expect(pre.querySelector('[data-label="raised"]')?.textContent).toMatch(/^Raised \$[\d,]+ of \$10,000$/);
+    cleanup();
+    // Split: the labelled column holds from ~40% to 60% of the beat before the floor drops.
+    expect(splitPhases(storyFrame(m, 1.42)).sp).toBe(1);
+    expect(splitPhases(storyFrame(m, 1.58)).reveal).toBe(0);
+    expect(splitPhases(storyFrame(m, 1.96)).reveal).toBe(1);
   });
 
   it("keeps the floor a rising staircase and the net taut except at the dip", () => {

@@ -65,10 +65,8 @@
 /* The tape sits under the chip row (Illustration / real scale), edge to edge like a tape. */
 .tapeBox {
   position: absolute;
-  inset: 44px 0 0;
+  inset: 40px 0 0;
 }
-
-/* Wide cards (the component sets top: 0): the ruler runs through the chip row instead. */
 
 .svg {
   position: absolute;
@@ -94,7 +92,7 @@
   display: flex;
   align-items: baseline;
   gap: 1px;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
   color: var(--color-ink-2);
@@ -102,7 +100,7 @@
 
 .status b {
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--color-floor);
 }
@@ -188,12 +186,13 @@
 .tick { font-size: 10.5px; font-weight: 600; fill: var(--color-on-dark-3); font-variant-numeric: tabular-nums; }
 .tickHundred { font-size: 10.5px; font-weight: 700; fill: var(--color-on-dark-2); }
 
-.beatLabel { font-size: 12px; font-weight: 600; }
+.beatLabel { font-size: 13px; font-weight: 600; }
 .beatNum { font-weight: 700; font-variant-numeric: tabular-nums; }
-.past .beatLabel { fill: color-mix(in srgb, var(--color-on-dark-3) 70%, transparent); }
-.current .beatLabel { fill: var(--color-white); }
+/* Neighbours stay readable (on-dark-3 is 7:1 on midnight); the current beat is white, bold, mint number. */
+.past .beatLabel { fill: var(--color-on-dark-3); }
+.current .beatLabel { fill: var(--color-white); font-weight: 700; }
 .current .beatNum { fill: var(--color-mint); }
-.future .beatLabel { fill: color-mix(in srgb, var(--color-on-dark-3) 40%, transparent); }
+.future .beatLabel { fill: color-mix(in srgb, var(--color-on-dark-3) 80%, transparent); }
 .diamond { fill: var(--color-mint); }
 .future .diamond { fill: var(--color-midnight-line); }
 .rulerProg { fill: color-mix(in srgb, var(--color-on-dark-2) 55%, transparent); }
@@ -204,6 +203,16 @@
 .eventDot { fill: var(--color-mint); stroke: var(--color-midnight); stroke-width: 2; }
 .arb { fill: none; stroke: var(--color-risk-on-dark); }
 .colMarket { fill: var(--color-iris); }
+.colTrack {
+  fill: color-mix(in srgb, var(--color-white) 5%, transparent);
+  stroke: color-mix(in srgb, var(--color-presale-ring) 55%, transparent);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+}
+
+/* "Raised $X" over "of $10,000", beside the presale column. */
+.raisedLabel { font-family: var(--font-display); font-size: 12.5px; font-weight: 700; fill: var(--color-presale-ring); font-variant-numeric: tabular-nums; }
+.raisedOf { font-family: var(--font-sans); font-size: 11px; font-weight: 600; fill: var(--color-on-dark-3); }
 .colFloor { fill: var(--color-mint); }
 .colFees { fill: var(--color-butter); }
 
@@ -222,7 +231,7 @@
 .chipText { font-size: 11.5px; font-weight: 700; fill: var(--color-white); font-variant-numeric: tabular-nums; }
 
 /* A knock-out in the card colour keeps labels readable where the price line crosses them. */
-.note, .noteIris, .noteMint, .noteMintBold, .noteRisk, .noteRiskBold, .tick, .tickHundred, .splitLabel {
+.note, .noteIris, .noteMint, .noteMintBold, .noteRisk, .noteRiskBold, .tick, .tickHundred, .splitLabel, .raisedLabel {
   paint-order: stroke;
   stroke: var(--color-midnight);
   stroke-width: 4px;
@@ -242,11 +251,13 @@
 
 /* Wide tapes (drawn at ≥ 640px): chart type a step up, to read like the landing chart at 1440. */
 .wide .tick, .wide .tickHundred { font-size: 12px; }
-.wide .beatLabel { font-size: 13.5px; }
+.wide .beatLabel { font-size: 16px; }
 .wide .note, .wide .noteRisk { font-size: 12.5px; }
 .wide .noteIris, .wide .noteMint, .wide .noteMintBold, .wide .noteRiskBold { font-size: 13px; }
 .wide .chipText { font-size: 12.5px; }
-.wide .splitLabel { font-size: 14.5px; }
+.wide .splitLabel { font-size: 16px; }
+.wide .raisedLabel { font-size: 17px; }
+.wide .raisedOf { font-size: 13px; }
 .wide .tagLabel { font-size: 12px; }
 .wide .tagValue { font-size: 20px; }
 
@@ -376,12 +387,12 @@
   }
 
   .status {
-    font-size: 13px;
-    min-width: 128px;
+    font-size: 17px;
+    min-width: 168px;
   }
 
   .status b {
-    font-size: 15px;
+    font-size: 20px;
   }
 
   /* Wide: bare Outfit text right under the card, centred like the original's deck caption. */

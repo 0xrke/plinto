@@ -12,7 +12,6 @@ import {
   beatCaption,
   floorSharePct,
   railLabel,
-  scaleLabel,
   StoryRoot,
   StoryStage,
   StorySteps,
@@ -28,7 +27,7 @@ import {
   type VariantProps,
 } from "../shared";
 import { showsIllustration } from "./tapeGeometry";
-import { CHIP_ROW, COMPACT_W, FixedTape } from "./FixedTape";
+import { CHIP_ROW, FixedTape } from "./FixedTape";
 import s from "./fixedTape.module.css";
 
 /*
@@ -43,12 +42,13 @@ import s from "./fixedTape.module.css";
  * and the two tags read in the order of their numbers. Reduced motion: eight static tape frames.
  */
 
-/** Runway per beat (svh): long beats on the tape (pump, bounce) get more scroll. */
-const HEIGHTS: StepHeights = { presale: 80, split: 90, pump: 120, selloff: 100, steps: 90, bounce: 120, exits: 100, redeem: 120 };
+/**
+ * Runway per beat (svh): long beats on the tape (pump, bounce) get more scroll, and so do the raise
+ * filling its own bar (presale) and that bar dividing (split), which the founder asked to linger on.
+ */
+const HEIGHTS: StepHeights = { presale: 120, split: 150, pump: 120, selloff: 100, steps: 90, bounce: 120, exits: 100, redeem: 120 };
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
-/** Room the "Illustration" pill takes at the card's top-left (12px inset + pill + a margin). */
-const CHIP_LEFT = 104;
 
 /** Element size via ResizeObserver (no scroll listener); a sane default for the server render. */
 function useBox(fallback: { w: number; h: number }) {
@@ -70,19 +70,15 @@ function useBox(fallback: { w: number; h: number }) {
   return [box, ref] as const;
 }
 
-/** The tape in the midnight chart card: "Illustration" pill top-left, the real-scale chip top-right. */
+/**
+ * The tape in the midnight chart card: "Illustration" pill top-left and the real-scale chip top-right
+ * in their own row; the tape (its beat ruler first) starts under that row.
+ */
 function TapeCard({ m, frame, still = false }: VariantProps & { frame: StoryFrame; still?: boolean }) {
   // Drawn at its real pixel size so chart text stays legible on phones (no viewBox scaling).
   const [box, ref] = useBox(still ? { w: 640, h: 300 } : { w: 960, h: 380 });
   const illustration = showsIllustration(frame);
   const scale = frame.zoom >= 0.5 ? "real" : null;
-  // Wide cards run the ruler through the chip row; it keeps clear of the two corner chips.
-  const compact = box.w < COMPACT_W;
-  const scaleText = scaleLabel(scale);
-  const reserve = {
-    left: illustration ? CHIP_LEFT : 12,
-    right: scaleText ? scaleText.length * 6.4 + 40 : 12,
-  };
   return (
     <BrandChartFrame
       illustration={illustration}
@@ -92,8 +88,8 @@ function TapeCard({ m, frame, still = false }: VariantProps & { frame: StoryFram
       className={still ? s.stillCard : s.deckCard}
       style={still ? { height: undefined } : undefined}
     >
-      <div ref={ref} className={s.tapeBox} style={{ top: compact ? CHIP_ROW : 0 }}>
-        <FixedTape m={m} frame={frame} w={box.w} h={box.h} reserve={reserve} />
+      <div ref={ref} className={s.tapeBox} style={{ top: CHIP_ROW }}>
+        <FixedTape m={m} frame={frame} w={box.w} h={box.h} />
       </div>
     </BrandChartFrame>
   );

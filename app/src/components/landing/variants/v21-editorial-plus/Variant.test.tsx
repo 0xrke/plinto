@@ -97,6 +97,38 @@ describe("v21 Editorial plus", () => {
     expect(xs[3]! + 20).toBeLessThanOrEqual(170 + 1e-9);
   });
 
+  it("presale: the raise is its own vertical column that fills from $0, labelled directly, apart from the price line", () => {
+    const at = (pos: number) => render(<EditorialPlusChart m={m} frame={storyFrame(m, pos)} />).container;
+    const half = at(0.5);
+    const col = half.querySelector('[data-part="raise-column"]')!;
+    expect(col).toBeTruthy();
+    expect(col.closest('[data-part="price"]')).toBeNull();
+    expect(half.querySelector('[data-part="raise-bar"]')).toBeNull();
+    const halfH = Number(half.querySelector('[data-part="raise-fill"]')!.getAttribute("height"));
+    expect(half.querySelector('[data-part="raise-label"]')!.textContent).toMatch(/^Raised \$[\d,]+ of \$10,000$/);
+    cleanup();
+    const full = at(0.98);
+    const fullH = Number(full.querySelector('[data-part="raise-fill"]')!.getAttribute("height"));
+    expect(halfH).toBeGreaterThan(0);
+    expect(fullH).toBeGreaterThan(halfH);
+    expect(full.querySelector('[data-part="split-column"]')).toBeNull();
+  });
+
+  it("presale to split is continuous: the same column, same x and width, divides", () => {
+    const at = (pos: number) => render(<EditorialPlusChart m={m} frame={storyFrame(m, pos)} />).container;
+    const pre = at(1).querySelector('[data-part="raise-fill"]')!;
+    const box = ["x", "width"].map((a) => Number(pre.getAttribute(a)));
+    const preTop = Number(pre.getAttribute("y"));
+    cleanup();
+    const split = at(1.001);
+    for (const part of ["split-floor", "split-market", "split-platform"]) {
+      const el = split.querySelector(`[data-part="${part}"]`)!;
+      expect(["x", "width"].map((a) => Number(el.getAttribute(a)))).toEqual(box);
+    }
+    expect(Number(split.querySelector('[data-part="split-platform"]')!.getAttribute("y"))).toBeCloseTo(preTop, 0);
+    expect(split.querySelector('[data-part="raise-column"]')).toBeNull();
+  });
+
   it("split beat: a tall stacked column of floor, market and fees with big direct labels", () => {
     const { container } = render(<EditorialPlusChart m={m} frame={storyFrame(m, 1.4)} />);
     for (const part of ["split-floor", "split-market", "split-creator", "split-platform"]) {
@@ -113,7 +145,7 @@ describe("v21 Editorial plus", () => {
     expect(segs[segs.length - 1]!.to).toBeCloseTo(1, 9);
   });
 
-  it("the floor segment settles onto the slab: it drops, slides left and hands over to the staircase", () => {
+  it("the floor segment settles onto the slab: it drops, slides across onto it and hands over to the staircase", () => {
     const at = (pos: number) => render(<EditorialPlusChart m={m} frame={storyFrame(m, pos)} />).container;
     const full = at(1.42).querySelector('[data-part="split-floor"]')!;
     const fullY = Number(full.getAttribute("y"));
@@ -121,7 +153,8 @@ describe("v21 Editorial plus", () => {
     cleanup();
     const landed = at(1.95).querySelector('[data-part="split-floor"]')!;
     expect(Number(landed.getAttribute("y"))).toBeGreaterThan(fullY);
-    expect(Number(landed.getAttribute("x"))).toBeLessThan(fullX);
+    // The column stands in the presale slot; the slab starts at graduation, to its right.
+    expect(Number(landed.getAttribute("x"))).toBeGreaterThan(fullX);
     const p0 = splitPhases(storyFrame(m, 1.3));
     const p1 = splitPhases(storyFrame(m, 1.97));
     expect(p0.drop).toBe(0);

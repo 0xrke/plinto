@@ -97,13 +97,18 @@
   transform: translateY(-50%);
   white-space: nowrap;
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1;
 }
 
 .colLabelStrong {
-  font-size: 15px;
+  font-size: 16px;
+}
+
+/* "of $10,000" after the raised amount: the same line, quieter. */
+.colLabelMuted {
+  font-weight: 600;
 }
 
 .swatch {
@@ -115,11 +120,11 @@
 
 @media (min-width: 1024px) {
   .colLabel {
-    font-size: 15px;
+    font-size: 16px;
   }
 
   .colLabelStrong {
-    font-size: 18px;
+    font-size: 20px;
   }
 
   .swatch {

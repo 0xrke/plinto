@@ -6,6 +6,7 @@ import { BEAT_KEYS, ILLUSTRATION, REAL_SCALE_LABEL, TILE_FLOOR, TILE_NOW, beatCa
 import { BEATS, storyValueAt } from "@/lib/landing/sim/story";
 import { LedgerChart, chipOpacity, landedValue, spreadLabels } from "./LedgerChart";
 import { LedgerSidebar } from "./LedgerSidebar";
+import { FLOOR_SETTLE, SPLIT_DIVIDE, pacedFrame } from "./timing";
 import { ledgerAt } from "./vaultLedger";
 import Variant from "./Variant";
 
@@ -103,6 +104,62 @@ describe("v22 Editorial ledger", () => {
     expect(o).toBeLessThanOrEqual(1);
     cleanup();
     expect(chart(2.5).container.querySelector('[data-part="split-column"]')).toBeNull();
+  });
+
+  it("runs presale and split on longer runways", () => {
+    const { container } = render(<Variant m={m} />);
+    const steps = container.querySelectorAll<HTMLElement>("[data-step]");
+    expect(steps[0]!.style.getPropertyValue("--runway")).toBe("120svh");
+    expect(steps[1]!.style.getPropertyValue("--runway")).toBe("150svh");
+  });
+
+  it("paces the raise: a steady presale fill, then a held labelled split before the floor settles", () => {
+    const p = (pos: number) => pacedFrame(m, storyFrame(m, pos));
+    // Presale fills monotonically and is full at the boundary, matching the split's first frame.
+    let last = -1;
+    for (let i = 0; i <= 50; i++) {
+      const r = p(i / 50 - (i === 50 ? 1e-9 : 0)).raisedUsd;
+      expect(r).toBeGreaterThanOrEqual(last);
+      last = r;
+    }
+    expect(p(0.5).raisedUsd / m.raiseUsd).toBeGreaterThan(0.4);
+    expect(p(0.5).raisedUsd / m.raiseUsd).toBeLessThan(0.6);
+    expect(p(1 - 1e-9).raisedUsd).toBeCloseTo(m.raiseUsd, 6);
+    // Held: fully divided and labelled, floor not moving yet.
+    for (const bp of [SPLIT_DIVIDE[1] + 1e-6, (SPLIT_DIVIDE[1] + FLOOR_SETTLE[0]) / 2, FLOOR_SETTLE[0] - 1e-6]) {
+      const f = p(1 + bp);
+      expect(f.splitProgress).toBeCloseTo(1, 9);
+      expect(f.floorReveal).toBeCloseTo(0, 9);
+    }
+    expect(FLOOR_SETTLE[0] - SPLIT_DIVIDE[1]).toBeGreaterThanOrEqual(0.2);
+    // Continuous into the pump: everything finished at the end of the split.
+    const end = p(2 - 1e-9);
+    expect(end.splitProgress).toBe(1);
+    expect(end.floorReveal).toBeCloseTo(1, 6);
+    // Other beats are untouched.
+    const pump = storyFrame(m, 3.5);
+    expect(pacedFrame(m, pump)).toBe(pump);
+  });
+
+  it("the presale raise column and the split column are the same object at the boundary", () => {
+    const rects = (pos: number) => {
+      const f = pacedFrame(m, storyFrame(m, pos));
+      const { container } = render(<LedgerChart m={m} frame={f} ledger={ledgerAt(m, f)} />);
+      const col = container.querySelector('[data-part="raise-column"], [data-part="split-column"]')!;
+      const rs = [...col.querySelectorAll("rect")].filter((r) => Number(r.getAttribute("height")) > 0);
+      const xs = rs.map((r) => Number(r.getAttribute("x")));
+      const x1 = rs.map((r) => Number(r.getAttribute("x")) + Number(r.getAttribute("width")));
+      const top = Math.min(...rs.map((r) => Number(r.getAttribute("y"))));
+      const bottom = Math.max(...rs.map((r) => Number(r.getAttribute("y")) + Number(r.getAttribute("height"))));
+      cleanup();
+      return { x0: Math.min(...xs), x1: Math.max(...x1), top, bottom };
+    };
+    const a = rects(1 - 1e-9);
+    const b = rects(1);
+    expect(b.x0).toBeCloseTo(a.x0, 6);
+    expect(b.x1).toBeCloseTo(a.x1, 6);
+    expect(b.top).toBeCloseTo(a.top, 6);
+    expect(b.bottom).toBeCloseTo(a.bottom, 6);
   });
 
   it("the ledger shows the split as rows and the numbered journal matches the chart's chips", () => {
