@@ -103,3 +103,56 @@ export function supplyAt(m: LaunchMath, frame: StoryFrame): { share: number; pct
   const { supplyShare } = floorStateAt(m, frame.t);
   return { share: supplyShare, pct: (supplyShare - 1) * 100 };
 }
+
+import { applyFloorEvent, floorEvents } from "@/lib/landing/sim/floorPath";
+
+/** One redemption that burns tokens: when, how much, and what it does to supply, vault and floor. */
+export interface SupplyBurn {
+  /** Story time (the chart's x). */
+  t: number;
+  /** Share of the then-outstanding supply redeemed and burned (0.004, 0.3). */
+  share: number;
+  /** Outstanding supply after the burn, as a share of listing supply. */
+  supplyAfter: number;
+  /** Supply change of this burn, percent (−0.4, −30). */
+  supplyPct: number;
+  /** Vault change of this burn, percent: the redeemers' payout leaves the vault. */
+  vaultPct: number;
+  /** Floor change of this burn, percent: only the exit fee stays, so it is small and positive. */
+  floorPct: number;
+}
+
+const burnCache = new WeakMap<LaunchMath, readonly SupplyBurn[]>();
+
+/**
+ * The story's two burns (the bounce's arbitrage redeem and the holders' exits), with their effect on
+ * supply, vault and floor. Burning 30% of supply lifts the floor by under 1%, because the vault pays
+ * the redeemers out and keeps only the exit fee: show the burn with its small floor step, never as if
+ * the burn alone pushed the floor up.
+ */
+export function supplyBurns(m: LaunchMath): readonly SupplyBurn[] {
+  let burns = burnCache.get(m);
+  if (!burns) {
+    const out: SupplyBurn[] = [];
+    let s = { vaultUsd: m.split.floorUsd, supplyShare: 1 };
+    for (const e of floorEvents(m)) {
+      const next = applyFloorEvent(m, s, e);
+      if (e.kind === "redeem") {
+        const floorBefore = s.vaultUsd / s.supplyShare;
+        const floorAfter = next.vaultUsd / next.supplyShare;
+        out.push({
+          t: e.t,
+          share: e.share,
+          supplyAfter: next.supplyShare,
+          supplyPct: (next.supplyShare / s.supplyShare - 1) * 100,
+          vaultPct: (next.vaultUsd / s.vaultUsd - 1) * 100,
+          floorPct: (floorAfter / floorBefore - 1) * 100,
+        });
+      }
+      s = next;
+    }
+    burns = Object.freeze(out);
+    burnCache.set(m, burns);
+  }
+  return burns;
+}
