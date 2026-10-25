@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import type { LaunchMath } from "@/lib/landing/sim/launch";
 import { quantize } from "@/lib/landing/sim/scroll";
 import type { ChapterProgress } from "@/components/landing/scroll/progress";
@@ -161,14 +161,57 @@ function Rail() {
   );
 }
 
-/** "Follow your $100" and the floor-share chip: the section's single h2. */
-function TitleRow({ m, pinned }: { m: LaunchMath; pinned: boolean }) {
+/** Id of the story's h2, which names the section (aria-labelledby). */
+export const STORY_TITLE_ID = "story-title";
+
+/** Room left above the control the floor-share link jumps to, px (keeps its label in view). */
+const JUMP_MARGIN = 72;
+
+/**
+ * The "Floor share" chip. On the landing it links to the sandbox's floor-share slider: scroll so the
+ * slider sits JUMP_MARGIN below the top with its label in view, and focus it (a plain anchor jump
+ * puts it at the very top and hides its label); the native jump is the fallback. In the lab it is a
+ * plain chip.
+ */
+function FloorShareChip({ m, href }: { m: LaunchMath; href?: string }) {
+  const reduced = useStoryReducedMotion() === true;
+  const onClick = useCallback(
+    (e: MouseEvent<HTMLAnchorElement>) => {
+      if (!href?.startsWith("#") || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const target = document.getElementById(decodeURIComponent(href.slice(1)));
+      if (!target) return;
+      e.preventDefault();
+      const top = window.scrollY + target.getBoundingClientRect().top - JUMP_MARGIN;
+      window.scrollTo({ top: Math.max(0, top), behavior: reduced ? "auto" : "smooth" });
+      target.focus({ preventScroll: true });
+    },
+    [href, reduced],
+  );
+  const body = (
+    <>
+      Floor share <b className="tnum">{floorSharePct(m)}%</b>
+    </>
+  );
+  return href ? (
+    <a href={href} onClick={onClick} className={`chip ${s.titleChip} ${s.titleLink}`}>
+      {body}
+    </a>
+  ) : (
+    <span className={`chip ${s.titleChip}`}>{body}</span>
+  );
+}
+
+/**
+ * "Follow your $100" and the floor-share chip: the section's single h2. Only the copy on screen
+ * carries the id (the pinned one; the stills' one under reduced motion).
+ */
+function TitleRow({ m, pinned, withId, floorShareHref }: { m: LaunchMath; pinned: boolean; withId: boolean; floorShareHref?: string }) {
   return (
     <div className={pinned ? s.titleRow : s.titleStill} data-part="title">
-      <h2 className={`${BRAND_CLASS.title} ${s.title}`}>{STORY_TITLE}</h2>
-      <span className={`chip ${s.titleChip}`}>
-        Floor share <b className="tnum">{floorSharePct(m)}%</b>
-      </span>
+      <h2 id={withId ? STORY_TITLE_ID : undefined} className={`${BRAND_CLASS.title} ${s.title}`}>
+        {STORY_TITLE}
+      </h2>
+      <FloorShareChip m={m} href={floorShareHref} />
     </div>
   );
 }
@@ -178,14 +221,15 @@ function TitleRow({ m, pinned }: { m: LaunchMath; pinned: boolean }) {
  * It also renders while the preference is unknown (first render), hidden by CSS unless reduce, so a
  * reduced-motion reader never sees the stills without it nor a late layout shift.
  */
-function StillsTitle({ m }: { m: LaunchMath }) {
-  return useStoryReducedMotion() !== false ? <TitleRow m={m} pinned={false} /> : null;
+function StillsTitle({ m, floorShareHref }: { m: LaunchMath; floorShareHref?: string }) {
+  const reduced = useStoryReducedMotion();
+  return reduced !== false ? <TitleRow m={m} pinned={false} withId={reduced === true} floorShareHref={floorShareHref} /> : null;
 }
 
-function TapeStage({ m, frame }: { m: LaunchMath; frame: StoryFrame }) {
+function TapeStage({ m, frame, floorShareHref }: { m: LaunchMath; frame: StoryFrame; floorShareHref?: string }) {
   return (
     <div className={s.stageCol} data-part="stage-col">
-      <TitleRow m={m} pinned />
+      <TitleRow m={m} pinned withId floorShareHref={floorShareHref} />
       <Rail />
       <div className={s.cardSlot} aria-hidden data-part="chart-slot">
         <TapeCard m={m} frame={frame} />
@@ -247,32 +291,48 @@ function Bubble({ m, beat, i, label, caption, srText }: StepSlot & { m: LaunchMa
 
 /* ---------- Variant ---------- */
 
-export default function Variant({ m }: VariantProps) {
+/**
+ * The story itself, used by the landing ("/", inside its container, with the chip linking to the
+ * sandbox's floor-share slider) and by the lab page below. `leadIn` adds room before the first step
+ * so the presale starts from $0 when the story opens at the very top of a page (the lab); on the
+ * landing the story scrolls in from below, so it starts from $0 anyway.
+ */
+export function TapeStory({ m, floorShareHref, className = "", leadIn = false }: { m: LaunchMath; floorShareHref?: string; className?: string; leadIn?: boolean }) {
   // Stable per launch, so the memoised StorySteps never re-renders on scroll.
   const renderStep = useCallback((slot: StepSlot) => <Bubble m={m} {...slot} />, [m]);
+  const stage = useCallback((frame: StoryFrame) => <TapeStage m={m} frame={frame} floorShareHref={floorShareHref} />, [m, floorShareHref]);
+  return (
+    <StoryHarness
+      m={m}
+      id="follow-your-100"
+      labelledBy={STORY_TITLE_ID}
+      className={`${s.root} ${leadIn ? s.leadIn : ""} ${className}`}
+      stageClassName={s.stage}
+      stepClassName={s.step}
+      heights={HEIGHTS}
+      header={<StillsTitle m={m} floorShareHref={floorShareHref} />}
+      stage={stage}
+      still={(frame) => (
+        <div className={s.still}>
+          <TapeCard m={m} frame={frame} still />
+        </div>
+      )}
+      renderStep={renderStep}
+      footer={
+        <footer className={s.footer}>
+          <p className="text-[12.5px] leading-5 text-ink-3">{STORY_FOOTNOTE}</p>
+          <p className="font-display text-[17px] font-bold text-ink lg:text-[20px]">{STORY_HONESTY}</p>
+        </footer>
+      }
+    />
+  );
+}
+
+/** The lab page (/lab/story/34): the story alone on a white page, in the brand container. */
+export default function Variant({ m }: VariantProps) {
   return (
     <div className={`${BRAND_CLASS.page} overflow-x-clip`}>
-      <StoryHarness
-        m={m}
-        className={`${BRAND_CLASS.container} ${s.root}`}
-        stageClassName={s.stage}
-        stepClassName={s.step}
-        heights={HEIGHTS}
-        header={<StillsTitle m={m} />}
-        stage={(frame) => <TapeStage m={m} frame={frame} />}
-        still={(frame) => (
-          <div className={s.still}>
-            <TapeCard m={m} frame={frame} still />
-          </div>
-        )}
-        renderStep={renderStep}
-        footer={
-          <footer className={s.footer}>
-            <p className="text-[12.5px] leading-5 text-ink-3">{STORY_FOOTNOTE}</p>
-            <p className="font-display text-[17px] font-bold text-ink lg:text-[20px]">{STORY_HONESTY}</p>
-          </footer>
-        }
-      />
+      <TapeStory m={m} className={BRAND_CLASS.container} leadIn />
     </div>
   );
 }

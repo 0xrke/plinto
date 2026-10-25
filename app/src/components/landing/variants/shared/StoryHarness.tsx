@@ -43,15 +43,23 @@ export interface StoryRootProps {
   style?: CSSProperties;
   /** Accessible name of the section. */
   label?: string;
+  /** Id of a heading inside that names the section (aria-labelledby); takes the place of `label`. */
+  labelledBy?: string;
 }
 
-export function StoryRoot({ m, children, id, className = "", style, label = "Follow your $100" }: StoryRootProps) {
+export function StoryRoot({ m, children, id, className = "", style, label = "Follow your $100", labelledBy }: StoryRootProps) {
   const { ref, reduced } = useChapterSetup();
   const jumpToBeat = useCallback((i: number, q?: number) => jumpRoot(ref.current, i, { q, reduced }), [ref, reduced]);
   const value = useMemo<StoryContextValue>(() => ({ m, ref, reduced, jumpToBeat }), [m, ref, reduced, jumpToBeat]);
   return (
     <StoryContext.Provider value={value}>
-      <section ref={ref} id={id} aria-label={label} className={`${styles.root} ${className}`} style={style}>
+      <section
+        ref={ref}
+        id={id}
+        {...(labelledBy ? { "aria-labelledby": labelledBy } : { "aria-label": label })}
+        className={`${styles.root} ${className}`}
+        style={style}
+      >
         {children}
       </section>
     </StoryContext.Provider>
@@ -203,6 +211,8 @@ export interface StoryHarnessProps {
   /** Quantisation of pos for function stages (default 0.005). */
   posStep?: number;
   id?: string;
+  /** Id of the heading that names the section (aria-labelledby), instead of the default label. */
+  labelledBy?: string;
   className?: string;
   stageClassName?: string;
   stepsClassName?: string;
@@ -222,6 +232,7 @@ export function StoryHarness({
   footer,
   posStep,
   id,
+  labelledBy,
   className = "",
   stageClassName = "",
   stepsClassName = "",
@@ -231,7 +242,7 @@ export function StoryHarness({
   const renderStill = still ?? (typeof stage === "function" ? (f: StoryFrame) => stage(f) : null);
   const overlay = layout === "overlay";
   return (
-    <StoryRoot m={m} id={id} className={className} style={style}>
+    <StoryRoot m={m} id={id} labelledBy={labelledBy} className={className} style={style}>
       {header}
       <StoryTrack className={`${overlay ? styles.overlay : styles.split} ${stageSide === "right" ? styles.stageRight : ""}`}>
         <StoryStage stacked={!overlay} className={`${styles.stage} ${stageClassName}`}>

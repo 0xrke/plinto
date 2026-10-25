@@ -1,6 +1,13 @@
 # Status — 2026-09-25 (ET)
 
 
+## Landing story = lab variant 34 — 2026-10-25 (local)
+- `/` now shows the founder-picked "Follow your $100" variant 34 (tape chart with token-supply lane,
+  speech bubbles, pinned title) via `TapeStory`; the old `LaunchStory` is no longer rendered.
+- Tests: vitest 87 files / 785 tests pass; `tsc` clean. Screenshots of `/` at 1728×936 and 390×844
+  checked; the "Floor share" chip jumps to and focuses the slider (72px from the top).
+
+
 ## Colosseum submission — 2026-10-12 PDT (founder-approved)
 - Plinto submitted to Colosseum's **Crypto World's Fair** hackathon (project 17790), status "Submitted",
   6:14 PM PDT on 2026-10-12. Category Token Launch / Tokenomics; website and live link `https://plinto.xyz`,

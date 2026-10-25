@@ -215,10 +215,10 @@ describe("landing sections", () => {
     for (const t of texts) expect(t.replace("The floor protects from zero, not from loss.", "")).not.toMatch(OVERCLAIM);
   });
 
-  it("keeps the copy short: at most 220 visible words with the lab rendered", async () => {
+  it("keeps the copy short: at most 230 visible words with the lab rendered", async () => {
     const { container } = render(await Landing({ source: new MockDataSource(0) }));
     const words = visibleWords(container.querySelector("main")!);
-    expect(words).toBeLessThanOrEqual(220);
+    expect(words).toBeLessThanOrEqual(230);
   });
 
   it("names SPYx's moving dollar value once", async () => {

@@ -645,3 +645,19 @@ Format: **decision** · alternatives · why. These supersede the matching bullet
   instead of changing SplitSandbox.
 - Not changed: the server still renders the 8 reduced-motion stills next to the stage (12.9 KB of the
   29.7 KB gzip HTML of `/`); dropping them would leave no-JS reduced-motion visitors a pinned track.
+
+## 2026-10-25 — Landing "Follow your $100" is lab variant 34
+- The founder picked variant 34 (34's tape chart with the supply lane, 33's layout and speech
+  bubbles, pinned title, small bubble drift, 130/160 svh runways). `FloorLab` now renders
+  `TapeStory` from `variants/v34-tape-compact/Variant.tsx` in place of `lab/LaunchStory`; the lab
+  page `/lab/story/34` wraps the same component.
+- On the landing the section keeps `id="follow-your-100"` and `aria-labelledby="story-title"`; only
+  the visible h2 carries the id (the pinned one, or the stills' one under reduced motion). The
+  "Floor share" chip links to the sandbox slider with the old 72px jump-and-focus behaviour.
+- The first-step lead-in (presale from $0 when the story opens at the page top) applies only in the
+  lab (`.leadIn`); on the landing the story scrolls in from below and starts at $0 anyway.
+- The landing word budget goes from 220 to 230 visible words: the bubbles' second lines and the
+  supply note ("floor = vault ÷ supply") add 5 words over the old story, and the founder asked for
+  the supply drop to be explicit.
+- `lab/LaunchStory.tsx`, `lab/StoryChart*` and their tests stay in the tree for now (no longer
+  rendered on `/`).

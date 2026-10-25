@@ -260,8 +260,8 @@ describe("v34 tape compact", () => {
     BEAT_KEYS.forEach((key, i) => expect(runway(i), key).toBe(key === "split" ? "160svh" : "130svh"));
     // A lead-in before the first step, so the presale starts from $0 even at the top of the page.
     const code = css.replace(/\/\*[\s\S]*?\*\//g, "");
-    expect(code).toMatch(/\.step:first-child \{\s*margin-top: calc\(0\.4 \* \(100svh - var\(--stage-h\)\)\);/);
-    expect(code).toMatch(/\.step:first-child \{\s*margin-top: 50svh;/);
+    expect(code).toMatch(/\.leadIn \.step:first-child \{\s*margin-top: calc\(0\.4 \* \(100svh - var\(--stage-h\)\)\);/);
+    expect(code).toMatch(/\.leadIn \.step:first-child \{\s*margin-top: 50svh;/);
   });
 
   it("the floor is a staircase, never flat, with the arbitrage line and the bounce", () => {

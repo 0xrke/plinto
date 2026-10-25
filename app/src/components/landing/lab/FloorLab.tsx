@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { launchMath } from "@/lib/landing/sim/launch";
 import { DEFAULT_FLOW_INDEX } from "@/lib/landing/sim/market";
 import type { SimConstants } from "@/lib/landing/sim/types";
-import { LaunchStory } from "./LaunchStory";
+import { TapeStory } from "@/components/landing/variants/v34-tape-compact/Variant";
 import { FLOOR_SHARE_INPUT_ID, SplitSandbox } from "./SplitSandbox";
 
 /**
@@ -24,7 +24,7 @@ export function FloorLab({ k }: { k: SimConstants }) {
         flowIndex={flowIndex}
         onFlowIndexChange={setFlowIndex}
       />
-      <LaunchStory m={m} floorShareHref={`#${FLOOR_SHARE_INPUT_ID}`} />
+      <TapeStory m={m} floorShareHref={`#${FLOOR_SHARE_INPUT_ID}`} />
     </>
   );
 }

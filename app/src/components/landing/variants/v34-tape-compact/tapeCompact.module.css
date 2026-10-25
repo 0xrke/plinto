@@ -86,6 +86,11 @@
   line-height: 24px;
 }
 
+/* On the landing the chip links to the floor-share slider. */
+.titleLink:hover {
+  border-color: var(--color-floor-ring);
+}
+
 .titleRow .titleChip {
   flex: none;
   height: 24px;
@@ -209,11 +214,11 @@
 }
 
 /*
- * A lead-in before the first step: the first step starts at the reading line (phones: 40% down the
- * space under the stage), so the presale starts from $0 even when the story opens at the very top
- * of the page, and the first bubble enters from below.
+ * The lab's lead-in before the first step: the first step starts at the reading line (phones: 40%
+ * down the space under the stage), so the presale starts from $0 even when the story opens at the
+ * very top of the page, and the first bubble enters from below. The landing does not need it.
  */
-.step:first-child {
+.leadIn .step:first-child {
   margin-top: calc(0.4 * (100svh - var(--stage-h)));
 }
 
@@ -327,7 +332,7 @@
     padding: 0;
   }
 
-  .step:first-child {
+  .leadIn .step:first-child {
     margin-top: 50svh;
   }
 
