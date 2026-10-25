@@ -19,10 +19,10 @@ function sources(folder: string): string[] {
 }
 
 describe("variant registry", () => {
-  it("has twenty-eight variants numbered 1..28 with unique slugs", () => {
-    expect(VARIANTS).toHaveLength(28);
-    expect(VARIANTS.map((v) => v.n)).toEqual(Array.from({ length: 28 }, (_, i) => i + 1));
-    expect(new Set(VARIANTS.map((v) => v.slug)).size).toBe(28);
+  it("has variants 1..32 without the dropped 22, with unique slugs", () => {
+    const expected = Array.from({ length: 32 }, (_, i) => i + 1).filter((n) => n !== 22);
+    expect(VARIANTS.map((v) => v.n)).toEqual(expected);
+    expect(new Set(VARIANTS.map((v) => v.slug)).size).toBe(expected.length);
     for (const v of VARIANTS) {
       expect(v.slug).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
       expect(v.title.length).toBeGreaterThan(0);
@@ -46,8 +46,8 @@ describe("variant registry", () => {
     }
   });
 
-  it("groups 21..28 as combos that mix earlier variants", () => {
-    expect(COMBOS.map((v) => v.n)).toEqual([21, 22, 23, 24, 25, 26, 27, 28]);
+  it("groups 21..32 (no 22) as combos that mix earlier variants", () => {
+    expect(COMBOS.map((v) => v.n)).toEqual([21, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]);
     for (const v of COMBOS) {
       expect(v.basedOn).toBeUndefined();
       expect(v.mixes?.length).toBeGreaterThan(0);
@@ -75,10 +75,13 @@ describe("variant registry", () => {
     expect(findVariant("playful-site")?.n).toBe(20);
     expect(findVariant("0")).toBeNull();
     expect(findVariant("21")?.slug).toBe("editorial-plus");
-    expect(findVariant("29")).toBeNull();
+    expect(findVariant("22")).toBeNull();
+    expect(findVariant("32")?.slug).toBe("film-sections");
+    expect(findVariant("33")).toBeNull();
     expect(findVariant("x")).toBeNull();
-    expect(neighbours(VARIANTS[0]!).prev.n).toBe(28);
-    expect(neighbours(VARIANTS[27]!).next.n).toBe(1);
+    expect(neighbours(VARIANTS[0]!).prev.n).toBe(32);
+    expect(neighbours(VARIANTS.at(-1)!).next.n).toBe(1);
+    expect(neighbours(findVariant("21")!).next.n).toBe(23);
   });
 
   it("variant client code never imports the SDK barrel or lib/format", () => {

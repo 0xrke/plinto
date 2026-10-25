@@ -1,8 +1,8 @@
 /**
  * The story-variant lab: alternative visual treatments of "Follow your $100", each in its own
  * folder `v{NN}-{slug}/Variant.tsx` (default export, props `VariantProps`). Variants 1–10 are the
- * originals; 11–20 rebuild each original's idea in the site's own style (shared/BRAND.md); 21–28
- * combine the favourites from the founder's reviews (shared/COMBOS.md). Plain
+ * originals; 11–20 rebuild each original's idea in the site's own style (shared/BRAND.md); 21–32
+ * combine the favourites from the founder's reviews (shared/COMBOS.md); 22 was dropped. Plain
  * data, safe to import from server components; the lazy client loaders live in `loaders.ts`
  * (client only).
  */
@@ -14,7 +14,7 @@
 export type VariantGroup = "original" | "site" | "combo";
 
 export interface VariantMeta {
-  /** 1..28, also the URL: /lab/story/{n}. */
+  /** 1..32 (22 was dropped), also the URL: /lab/story/{n}. */
   n: number;
   slug: string;
   title: string;
@@ -168,14 +168,6 @@ export const VARIANTS: readonly VariantMeta[] = [
     mixes: [11, 1, 3],
   },
   {
-    n: 22,
-    slug: "editorial-ledger",
-    title: "Editorial with vault ledger",
-    description: "The editorial chart and captions of 11, plus the vault ledger sidebar of 18 that ties every floor step to a line in the ledger.",
-    group: "combo",
-    mixes: [11, 18, 1],
-  },
-  {
     n: 23,
     slug: "clean-steps",
     title: "Clean numbered steps",
@@ -222,6 +214,38 @@ export const VARIANTS: readonly VariantMeta[] = [
     description: "25's layout (title and step bar on top, chart left, caption right) in 21's unboxed style, with 21's caption animation and the change since listing.",
     group: "combo",
     mixes: [25, 21],
+  },
+  {
+    n: 29,
+    slug: "split-tape",
+    title: "Chart left, tape chart",
+    description: "Chart left, content right, with 27's tape chart: beat sections along the top of the chart and value tooltips riding the price dot; step bar on top.",
+    group: "combo",
+    mixes: [27, 28, 21],
+  },
+  {
+    n: 30,
+    slug: "split-sections",
+    title: "Chart left, beat sections",
+    description: "28's layout with the whole story on one chart, split into 27-style beat sections, and 27's riding tooltips for the two values; step bar on top.",
+    group: "combo",
+    mixes: [28, 27, 25],
+  },
+  {
+    n: 31,
+    slug: "blocks-sections",
+    title: "Blocks with beat sections",
+    description: "26's block-built floor with a step bar on top, 27-style beat sections on the chart and riding tooltips.",
+    group: "combo",
+    mixes: [26, 27],
+  },
+  {
+    n: 32,
+    slug: "film-sections",
+    title: "Big chart, beat sections",
+    description: "24's big film-frame chart with the content on top, plus 27-style beat sections and riding tooltips.",
+    group: "combo",
+    mixes: [24, 27],
   },
 ];
 

@@ -98,3 +98,35 @@ Shared conventions for round 2:
 | 27 | Caption moves out from under the chart; % since listing |
 | 28 | New: 25's layout in 21's unboxed style, with 21's caption animation; % since listing |
 | 22 | Unchanged, candidate to drop |
+
+## Round 3: the founder's principles (2026-10-25)
+
+22 is dropped (its folder is deleted). Every new variant follows these four principles.
+
+1. **Layout.** One of two:
+   - **A, chart left + content right**, as in 21, 23, 25, 26 and 28;
+   - **B, one big chart with the content on top**, as in 24 and 27.
+2. **Step progress bar.** A row of line segments with beat names. It is mandatory: on its own it is
+   "useless", but it shows progress, and that matters. It goes at the top, in the header above the
+   chart.
+3. **Beat sections on the chart, exactly as in 27.**
+   - Read `v27-tape-fixed/FixedTape.tsx` and `fixedTape.module.css`, then copy and adapt them.
+   - The chart is divided into one section per beat. A strip along the top of the chart card names
+     each section ("01 Presale", "02 Split", …).
+   - The current section is bright (white name, mint number). Past and next sections are readable, not
+     ghostly.
+   - Thin dividers separate the sections. The current section is highlighted.
+   - With a camera that zooms or pans, the section names follow the camera. A name whose section is
+     out of view hides; names never collide.
+4. **Values as tooltips riding the price dot, exactly as in 27.**
+   - "Your $100 now" and "Floor pays back", each with its % since listing, sit in tooltips that ride
+     beside the price head on the chart. The founder rates these as the best way to show the values.
+   - Do not repeat the two values elsewhere, so there are fewer numbers on screen.
+   - The tooltips must stay inside the card and never cover the head dot or the bounce.
+
+| n | Folder | Layout | Built from |
+| --- | --- | --- | --- |
+| 29 | `v29-split-tape` | A | 27's tape chart (sections, strip, riding tooltips) in the left column; 28's right column with 21's caption ribbon; step bar in the header |
+| 30 | `v30-split-sections` | A | 28's whole-story chart split into 27-style sections, with 27's riding tooltips instead of the right-column metrics |
+| 31 | `v31-blocks-sections` | A | 26's block floor and animation, with a step bar on top, 27-style sections and riding tooltips |
+| 32 | `v32-film-sections` | B | 24's big film-frame chart and content on top, with 27-style sections and riding tooltips |
