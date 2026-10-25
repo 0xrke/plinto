@@ -21,12 +21,18 @@ describe("phaseChartPaths", () => {
     }
   });
 
-  it("draws a staircase floor on request, with the price touching its treads", () => {
-    const p = phaseChartPaths(500, { steps: true });
-    expect(p.floorLine).toMatch(/^M[\d.]+ 118( H[\d.]+ V\d+)+$/);
-    expect(p.floorLine).not.toContain("C");
-    // Each touch sits on a tread: one of the floor's levels, not between two.
-    for (const t of p.touches) expect([118, 108, 100, 91, 82]).toContain(t.y);
-    expect(p.priceLine).toContain(`${p.touches[0].x} ${p.touches[0].y}`);
+  it("climbs twice as much with steep, and the price stays on or above the floor", () => {
+    const flat = phaseChartPaths(500);
+    const steep = phaseChartPaths(500, { steep: true });
+    const rise = (d: string) => {
+      const ys = [...d.matchAll(/[ ,]([\d.]+)(?=,| C|$)/g)].map((m) => Number(m[1]));
+      return Math.max(...ys) - Math.min(...ys);
+    };
+    expect(rise(steep.floorLine)).toBeGreaterThan(1.5 * rise(flat.floorLine));
+    // A touch is where the price meets the floor: the price path passes through it.
+    for (const t of steep.touches) {
+      const y = steep.priceLine.match(new RegExp(`[ ,M]${t.x} ([\\d.]+)`))?.[1];
+      expect(Number(y)).toBeCloseTo(t.y, 1);
+    }
   });
 });

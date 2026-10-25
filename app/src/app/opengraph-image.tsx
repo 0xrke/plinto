@@ -5,7 +5,7 @@ import { H, phaseChartPaths } from "@/components/waitlist/phaseChartGeometry";
 
 /**
  * Link preview card (Open Graph and Twitter), light, after the X banner: the headline on white, with
- * "floor" on its mint bar as on the page, over the phase chart drawn edge to edge along the bottom, its floor a staircase.
+ * "floor" on its mint bar as on the page, over the phase chart drawn edge to edge along the bottom, its floor climbing steeper than on the page so it shows.
  * Previews shrink the card to about 500px wide, so it carries no small text.
  *
  * Satori reads neither woff2 nor variable fonts, so src/fonts/og holds static TTF instances of the
@@ -29,7 +29,7 @@ async function font(file: string) {
 
 export default async function OpengraphImage() {
   const [outfit, jakarta700] = await Promise.all([font("outfit-800.ttf"), font("jakarta-700.ttf")]);
-  const p = phaseChartPaths(VIEW_W, { steps: true });
+  const p = phaseChartPaths(VIEW_W, { steep: true });
 
   return new ImageResponse(
     (
@@ -59,7 +59,7 @@ export default async function OpengraphImage() {
           {/* Starts below the headline, clear of the bar under "floor". */}
           <line x1={p.splitX} y1="40" x2={p.splitX} y2={H} stroke="#c9c3ea" strokeWidth="0.8" strokeDasharray="3 3" />
           <path d={p.floorArea} fill="url(#floorFill)" />
-          <path d={p.floorLine} stroke={FLOOR} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          <path d={p.floorLine} stroke={FLOOR} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
           <path
             d={p.presaleLine}
             stroke="#6b6b85"
@@ -70,7 +70,7 @@ export default async function OpengraphImage() {
           />
           <path d={p.priceLine} stroke={MIDNIGHT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
           {p.touches.map((t) => (
-            <circle key={t.x} cx={t.x} cy={t.y} r="3.4" fill={FLOOR} />
+            <circle key={t.x} cx={t.x} cy={t.y} r="3.6" fill={FLOOR} stroke="#ffffff" strokeWidth="1.2" />
           ))}
         </svg>
 

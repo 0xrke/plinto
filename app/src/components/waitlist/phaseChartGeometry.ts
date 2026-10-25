@@ -25,16 +25,16 @@ const FLOOR_F: [number, number][] = [
   [1, 92],
 ];
 /**
- * The staircase floor: each tread starts at its fraction and holds its level to the next. Fewer,
- * taller steps than FLOOR_F, so they read at preview size; each rise falls between two touches.
+ * A steeper floor for small renders (the Open Graph card), so its climb shows at preview size; the
+ * price still clears it everywhere and touches it at TOUCH_F.
  */
-const STEPS_F: [number, number][] = [
-  [SPLIT, 118],
-  [0.49, 108],
-  [0.66, 100],
-  [0.79, 91],
-  [0.9, 82],
-  [1, 82],
+const FLOOR_STEEP_F: [number, number][] = [
+  [SPLIT, 120],
+  [0.45, 114],
+  [0.59, 107],
+  [0.73, 99],
+  [0.87, 91],
+  [1, 84],
 ];
 /** `null` means "sit on the floor, wherever it is by then". */
 const PRICE_F: [number, number | null][] = [
@@ -74,26 +74,21 @@ export type PhaseChartPaths = {
   touches: { x: number; y: number }[];
 };
 
-/**
- * `steps`: the floor as a staircase, flat between the same points and rising at each one, instead of
- * a smooth climb; the price still touches it at TOUCH_F.
- */
-export function phaseChartPaths(width: number, { steps = false }: { steps?: boolean } = {}): PhaseChartPaths {
+/** `steep`: FLOOR_STEEP_F's climb in place of FLOOR_F's. */
+export function phaseChartPaths(width: number, { steep = false }: { steep?: boolean } = {}): PhaseChartPaths {
   const px = (f: number) => +(-BLEED + f * (width + 2 * BLEED)).toFixed(1);
 
-  const floorPoints = (steps ? STEPS_F : FLOOR_F).map(([f, y]) => [px(f), y] as [number, number]);
+  const floorPoints = (steep ? FLOOR_STEEP_F : FLOOR_F).map(([f, y]) => [px(f), y] as [number, number]);
   const floorY = (x: number) => {
     for (let i = 1; i < floorPoints.length; i++) {
       const [x0, y0] = floorPoints[i - 1];
       const [x1, y1] = floorPoints[i];
-      if (x < x1) return steps ? y0 : y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
+      if (x <= x1) return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
     }
     return floorPoints[floorPoints.length - 1][1];
   };
 
-  const floorLine = steps
-    ? floorPoints.reduce((acc, [x, y], i) => (i === 0 ? `M${x} ${y}` : `${acc} H${x} V${y}`), "")
-    : smooth(floorPoints);
+  const floorLine = smooth(floorPoints);
   const pricePoints = PRICE_F.map(([f, y]) => [px(f), y === null ? floorY(px(f)) : y] as [number, number]);
   const priceLine = smooth(pricePoints);
 
