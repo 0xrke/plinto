@@ -5,7 +5,7 @@ import { H, phaseChartPaths } from "@/components/waitlist/phaseChartGeometry";
 
 /**
  * Link preview card (Open Graph and Twitter), light, after the X banner: the headline on white, with
- * "floor" on its mint bar as on the page, over the phase chart drawn edge to edge along the bottom.
+ * "floor" on its mint bar as on the page, over the phase chart drawn edge to edge along the bottom, its floor a staircase.
  * Previews shrink the card to about 500px wide, so it carries no small text.
  *
  * Satori reads neither woff2 nor variable fonts, so src/fonts/og holds static TTF instances of the
@@ -29,7 +29,7 @@ async function font(file: string) {
 
 export default async function OpengraphImage() {
   const [outfit, jakarta700] = await Promise.all([font("outfit-800.ttf"), font("jakarta-700.ttf")]);
-  const p = phaseChartPaths(VIEW_W);
+  const p = phaseChartPaths(VIEW_W, { steps: true });
 
   return new ImageResponse(
     (
