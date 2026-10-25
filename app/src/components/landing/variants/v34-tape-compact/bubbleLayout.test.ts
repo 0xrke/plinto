@@ -50,13 +50,14 @@ describe("bubbleLayout", () => {
     }
   });
 
-  it("fades the pushed-out bubble while it rides on top of the new one", () => {
-    const mid = bubbleLayout(4 + BUBBLE_MOTION.fadeOut / 2, H, heights);
+  it("flies the pushed-out bubble up off the top, above the new one, at full opacity", () => {
+    const mid = bubbleLayout(4 + BUBBLE_MOTION.flyOut / 2, H, heights);
+    expect(mid[3]!.o).toBe(1);
     expect(mid[3]!.y + heights[3]! + gap).toBeLessThanOrEqual(mid[4]!.y + 1e-6);
     expect(mid[3]!.y).toBeLessThan(bubbleLayout(4, H, heights)[3]!.y);
-    expect(mid[3]!.o).toBeGreaterThan(0);
-    expect(mid[3]!.o).toBeLessThan(1);
-    expect(bubbleLayout(4 + BUBBLE_MOTION.fadeOut, H, heights)[3]).toBeNull();
+    // Off the top just before it is dropped, then gone.
+    expect(bubbleLayout(4 + BUBBLE_MOTION.flyOut - 1e-6, H, heights)[3]!.y + heights[3]!).toBeLessThan(0);
+    expect(bubbleLayout(4 + BUBBLE_MOTION.flyOut + 1e-9, H, heights)[3]).toBeNull();
   });
 
   it("shows at most two bubbles, and only the last one at the end", () => {

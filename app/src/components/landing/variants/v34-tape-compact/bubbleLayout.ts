@@ -3,8 +3,8 @@
  * its progress (0..8), the bubble layer's height (the viewport) and each bubble's height. Sticky
  * bubbles cannot do this: a bubble that drifts up inside its sticky slot leaves a gap as big as the
  * drift between it and the next one, so the next never touches it. Here the next bubble catches up
- * from below the screen, meets the current one and kicks it up, and both stay in contact while the
- * new one starts its own drift and the old one fades. Scrolling back plays it in reverse exactly.
+ * from below the screen, meets the current one and kicks it up, and the old one flies off the top
+ * while the new one starts its own drift. Scrolling back plays it in reverse exactly.
  */
 
 export const BUBBLE_MOTION = {
@@ -16,8 +16,8 @@ export const BUBBLE_MOTION = {
   push: 0.25,
   /** Space between two bubbles in contact. */
   gap: 16,
-  /** Share of the next step over which the pushed-out bubble fades. */
-  fadeOut: 0.2,
+  /** Share of the next step over which the pushed-out bubble flies up off the top of the layer. */
+  flyOut: 0.3,
   /** Share of the push window over which the incoming bubble fades in. */
   fadeIn: 0.35,
 } as const;
@@ -42,7 +42,7 @@ export function bubbleLayout(u: number, layerH: number, heights: readonly number
   const n = heights.length;
   const out: (BubblePlace | null)[] = Array.from({ length: n }, () => null);
   if (n === 0) return out;
-  const { takeover, drift, push, gap, fadeOut, fadeIn } = BUBBLE_MOTION;
+  const { takeover, drift, push, gap, flyOut, fadeIn } = BUBBLE_MOTION;
   const i = Math.min(n - 1, Math.max(0, Math.floor(u)));
   const q = u >= n ? 1 : clamp01(u - i);
   const top = layerH / 2 + takeover;
@@ -63,10 +63,12 @@ export function bubbleLayout(u: number, layerH: number, heights: readonly number
   }
   out[i] = { y: cur, o: 1, active: true };
 
-  // The bubble just pushed out rides along above the current one (from where it ended) and fades.
-  if (i > 0) {
-    const o = 1 - ease(q / fadeOut);
-    if (o > 0) out[i - 1] = { y: end(i - 1) + (cur - top), o, active: false };
+  // The bubble just pushed out keeps going: it flies up off the top of the layer, from where it
+  // ended, at a steady speed (no stop at the hand-off), and is gone by flyOut of the next step.
+  if (i > 0 && q < flyOut) {
+    const from = end(i - 1) + (cur - top);
+    const t = q / flyOut;
+    out[i - 1] = { y: from - t * (end(i - 1) + heights[i - 1]! + gap), o: 1, active: false };
   }
   return out;
 }
