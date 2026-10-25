@@ -25,7 +25,7 @@ export default function WaitlistPage() {
                 plinto
               </span>
             </span>
-            <ChainPill className="flex h-10 px-3.5 text-[12px] lg:hidden" />
+            <ChainPill className="flex h-[42px] px-3.5 text-[12px] lg:hidden" />
           </nav>
 
           <main id="main" className="flex flex-col py-10 sm:py-14 lg:my-auto lg:py-12">
@@ -49,7 +49,7 @@ export default function WaitlistPage() {
         {/* Right: lavender column with the phase card */}
         <div className="flex flex-col bg-cloud px-3 py-3 sm:px-8 sm:py-8 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:px-10 lg:pb-[30px] lg:pt-[34px] xl:px-14">
           <div className="hidden min-h-12 items-center justify-end lg:flex">
-            <ChainPill className="flex h-10 px-4 text-[13px]" />
+            <ChainPill className="flex h-[42px] px-4 text-[13px]" />
           </div>
 
           <LaunchRunsCard className="lg:my-auto" />

@@ -25,7 +25,7 @@ export function Hero() {
           <nav id={HERO_NAV_ID} aria-label="Site" className="flex min-h-12 items-center justify-between gap-3">
             <Wordmark size="lg" />
             <div className="flex items-center gap-2.5 lg:hidden">
-              <ChainPill className="flex h-10 px-3.5 text-[12px]" />
+              <ChainPill className="flex h-[42px] px-3.5 text-[12px]" />
               <Link href={LANDING_ROUTES.app} className="btn btn-dark hidden sm:inline-flex">
                 Open app
               </Link>
@@ -62,7 +62,7 @@ export function Hero() {
         {/* Right: the phase card on white, the network pill and Open app above it */}
         <div className="flex flex-col lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:pb-[30px] lg:pt-[34px]">
           <div className="hidden min-h-12 items-center justify-end gap-2.5 lg:flex">
-            <ChainPill className="flex h-10 px-4 text-[13px]" />
+            <ChainPill className="flex h-[42px] px-4 text-[13px]" />
             <Link href={LANDING_ROUTES.app} className="btn btn-dark">
               Open app
             </Link>
