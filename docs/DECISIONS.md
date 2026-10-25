@@ -715,3 +715,5 @@ Format: **decision** · alternatives · why. These supersede the matching bullet
   h1 and tighter padding so the CTAs fit the first screen. Small controls follow the pills: Max chips,
   the launch list's Dismiss and the candle interval tabs are 36px pills, the create submit uses the
   `.btn-lg` label size, and the butter Redeem `NotchedCta` drops to 56px (52px in the phone card).
+
+- 2026-10-25: The landing hero and the pinned header sit in the same 1120px container as the story, live floors and CTA, so the logo, h1 and section headings share one left edge at every width (was a 1440px frame for the hero only).

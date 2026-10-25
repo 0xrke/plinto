@@ -23,16 +23,14 @@ export async function Landing({ source }: { source?: LaunchDataSource } = {}) {
   return (
     <div className={`${styles.page} flex min-h-dvh flex-col bg-surface`}>
       <PinnedHeader watch={HERO_NAV_ID} className={styles.header}>
-        {/* The hero's frame and nav padding, so the logo and Open app stay put as the header slides in. */}
-        <div className="h-full px-3 sm:px-6 lg:px-10">
-          <div className="mx-auto h-full max-w-[1440px] px-2 sm:px-4 lg:pl-2 lg:pr-0 xl:pl-8">
-            <TopBar />
-          </div>
+        {/* The page container, as the hero's nav: the logo and Open app stay put as the header slides in. */}
+        <div className={`${CONTAINER} h-full`}>
+          <TopBar />
         </div>
       </PinnedHeader>
       <main id="main" className="flex-1 pb-12 sm:pb-20">
-        <Hero />
         <div className={CONTAINER}>
+          <Hero />
           <LabSection />
           <LiveFloorsView launches={live} />
           <ClosingCta />
