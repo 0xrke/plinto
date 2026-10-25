@@ -10,8 +10,8 @@ export function TopBar() {
         <Wordmark size="md" />
       </Link>
       <div className="flex items-center gap-2.5">
-        <ChainPill className="hidden h-9 px-4 text-[12.5px] sm:flex" />
-        <Link href={LANDING_ROUTES.app} className="btn btn-dark btn-sm">
+        <ChainPill className="hidden h-10 px-4 text-[13px] sm:flex" />
+        <Link href={LANDING_ROUTES.app} className="btn btn-dark">
           Open app
         </Link>
       </div>

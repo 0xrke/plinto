@@ -717,3 +717,4 @@ Format: **decision** · alternatives · why. These supersede the matching bullet
   `.btn-lg` label size, and the butter Redeem `NotchedCta` drops to 56px (52px in the phone card).
 
 - 2026-10-25: The landing hero and the pinned header sit in the same 1120px container as the story, live floors and CTA, so the logo, h1 and section headings share one left edge at every width (was a 1440px frame for the hero only).
+- 2026-10-25: Buttons follow morfi.markets' "Try Morfi": 40px tall with 16px corners and 22px side padding (44px large, 32px small with 12px corners); segmented controls use 16/12px. The "Solana · Meteora DBC" pill is 40px with 16px corners to match the Open app button beside it.

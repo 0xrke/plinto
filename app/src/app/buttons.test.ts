@@ -20,24 +20,23 @@ function heightPx(decls: string, base: string): number {
 }
 
 describe("buttons", () => {
-  it("are pills with a border on every variant", () => {
+  it("have 16px corners (12px small) and a border on every variant", () => {
     const btn = rule(".btn");
-    expect(btn).toMatch(/border-radius:\s*9999px/);
+    expect(btn).toMatch(/border-radius:\s*16px/);
     expect(btn).toMatch(/border:\s*1px solid transparent/);
-    // No variant brings back a corner radius.
-    expect(rule(".btn-sm")).not.toMatch(/border-radius/);
+    expect(rule(".btn-sm")).toMatch(/border-radius:\s*12px/);
     expect(rule(".btn-lg")).not.toMatch(/border-radius/);
   });
 
-  it("are 44px, 48px large and 36px small", () => {
+  it("are 40px, 44px large and 32px small", () => {
     const btn = rule(".btn");
-    expect(heightPx(btn, btn)).toBe(44);
-    expect(heightPx(rule(".btn-lg"), btn)).toBe(48);
-    expect(heightPx(rule(".btn-sm"), btn)).toBe(36);
+    expect(heightPx(btn, btn)).toBe(40);
+    expect(heightPx(rule(".btn-lg"), btn)).toBe(44);
+    expect(heightPx(rule(".btn-sm"), btn)).toBe(32);
   });
 
-  it("round the segmented tabs as pills too", () => {
-    expect(rule(".segmented")).toMatch(/border-radius:\s*9999px/);
-    expect(rule(".segmented > button,\n  .segmented > a")).toMatch(/border-radius:\s*9999px/);
+  it("round the segmented track and tabs to match", () => {
+    expect(rule(".segmented")).toMatch(/border-radius:\s*16px/);
+    expect(rule(".segmented > button,\n  .segmented > a")).toMatch(/border-radius:\s*12px/);
   });
 });

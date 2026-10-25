@@ -1,6 +1,6 @@
 /**
  * The midnight network pill: "Solana · Meteora DBC" with a mint dot. Callers set its display, height,
- * padding and type size (`flex h-9 px-3.5 text-[12px]`); below 360px it shortens to "Solana".
+ * padding and type size (`flex h-10 px-4 text-[13px]`), matching a 40px .btn beside it; below 360px it shortens to "Solana".
  */
 export function ChainPill({ className = "" }: { className?: string }) {
   return (
