@@ -1,7 +1,7 @@
 /**
  * The story-variant lab: alternative visual treatments of "Follow your $100", each in its own
  * folder `v{NN}-{slug}/Variant.tsx` (default export, props `VariantProps`). Variants 1–10 are the
- * originals; 11–20 rebuild each original's idea in the site's own style (shared/BRAND.md); 21–32
+ * originals; 11–20 rebuild each original's idea in the site's own style (shared/BRAND.md); 21–36
  * combine the favourites from the founder's reviews (shared/COMBOS.md); 22 was dropped. Plain
  * data, safe to import from server components; the lazy client loaders live in `loaders.ts`
  * (client only).
@@ -14,7 +14,7 @@
 export type VariantGroup = "original" | "site" | "combo";
 
 export interface VariantMeta {
-  /** 1..32 (22 was dropped), also the URL: /lab/story/{n}. */
+  /** 1..36 (22 was dropped), also the URL: /lab/story/{n}. */
   n: number;
   slug: string;
   title: string;
@@ -246,6 +246,38 @@ export const VARIANTS: readonly VariantMeta[] = [
     description: "24's big film-frame chart with the content on top, plus 27-style beat sections and riding tooltips.",
     group: "combo",
     mixes: [24, 27],
+  },
+  {
+    n: 33,
+    slug: "playful-top",
+    title: "Playful, values on top",
+    description: "20's compact layout and ball-and-staircase chart, with the value tiles moved above the chart, a line-segment step bar and 18's token supply.",
+    group: "combo",
+    mixes: [20, 18],
+  },
+  {
+    n: 34,
+    slug: "tape-compact",
+    title: "Tape chart, compact",
+    description: "29 at 20's size (narrower page, shorter stage) with 18's token supply in the right column.",
+    group: "combo",
+    mixes: [29, 20, 18],
+  },
+  {
+    n: 35,
+    slug: "blocks-compact",
+    title: "Blocks, compact",
+    description: "31 at 20's size with 18's token supply in the right column.",
+    group: "combo",
+    mixes: [31, 20, 18],
+  },
+  {
+    n: 36,
+    slug: "film-compact",
+    title: "Big chart, compact",
+    description: "32 at 20's size with 18's token supply in the content on top.",
+    group: "combo",
+    mixes: [32, 20, 18],
   },
 ];
 

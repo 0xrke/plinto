@@ -87,3 +87,19 @@ export function formatPctChange(pct: number): string {
   if (Number(text) === 0) return "0.0%";
   return `${pct > 0 ? "+" : "−"}${text}%`;
 }
+
+import { floorStateAt } from "@/lib/landing/sim/floorPath";
+
+/** Label for the outstanding token supply (variant 18's ledger row). */
+export const TILE_SUPPLY = "Token supply";
+
+/**
+ * Token supply still outstanding, as a share of the supply at listing (1 = 100%), and its change in
+ * percent. Redemptions burn tokens, so it only ever falls: by 0.4% at the bounce's arbitrage redeem
+ * and by 30% when holders redeem in the exits beat. Null before trading opens, like sinceListing.
+ */
+export function supplyAt(m: LaunchMath, frame: StoryFrame): { share: number; pct: number } | null {
+  if (frame.beatIndex < LISTING_POS) return null;
+  const { supplyShare } = floorStateAt(m, frame.t);
+  return { share: supplyShare, pct: (supplyShare - 1) * 100 };
+}

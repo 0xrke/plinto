@@ -130,3 +130,43 @@ Shared conventions for round 2:
 | 30 | `v30-split-sections` | A | 28's whole-story chart split into 27-style sections, with 27's riding tooltips instead of the right-column metrics |
 | 31 | `v31-blocks-sections` | A | 26's block floor and animation, with a step bar on top, 27-style sections and riding tooltips |
 | 32 | `v32-film-sections` | B | 24's big film-frame chart and content on top, with 27-style sections and riding tooltips |
+
+## Round 4: 20's size and 18's token supply (2026-10-25)
+
+Finalists after round 3: **29** (layout A, tape chart; the founder's favourite), **31** (layout A,
+block floor) and **32** (layout B). 29 and 31 differ only in the chart. On a second look the founder
+also picked out two older variants:
+
+- **18** is the only one that shows, besides the price and the floor, that the **token supply
+  shrinks** (its vault ledger's "Token supply" row). Show that too.
+- **20**: the chart size and the layout as a whole are the best. Bring every finalist to that size.
+  20 itself is liked as it is: move its two value tiles from under the chart to the top and replace
+  its dotted rail with the step bar, and it is a finalist too.
+
+**20's size**, the target for every round-4 variant on desktop:
+- The brand container (`BRAND_CLASS.container`: max-width 1120px, 48px side padding on desktop), not
+  a wider page.
+- The stage is the harness default: `--stage-h: min(640px, 82svh)` for everything in it (step bar,
+  chart, anything stacked with it), vertically centred on the reading line; the chart and the
+  content column split 6fr / 4fr with a 48px gap (layout A). On a 1440×900 screen 20's chart card is
+  about 590×510px. Layout B keeps the same 1120px container and 640px stage, with the chart full
+  width.
+- White space around the stage is intended; it is what makes 20 calm.
+
+**Token supply** (`supplyAt(m, frame)` and `TILE_SUPPLY` from `shared`):
+- The share of the listing supply still outstanding (100% → 99.6% at the bounce's arbitrage redeem
+  → 69.7% after the holders' exits) and its change since listing ("−30% since listing").
+- Draw it as 18 does (`v18-cause-effect-site/LedgerPanel.tsx`, the supply row): a supply icon
+  (`SupplyIcon` from `@/components/ui/icons`), the label, the value, the change, and a bar that
+  shrinks with the burned part hatched. The burn is the event: when supply drops, the row lights up
+  for a moment, as 18's rows do.
+- One short line says why it matters: redeemed tokens are burned, so the same vault backs fewer
+  tokens (floor = vault ÷ supply).
+- Null before listing: show the row from listing on, or at 100% with "—" for the change.
+
+| n | Folder | From | Change |
+| --- | --- | --- | --- |
+| 33 | `v33-playful-top` | 20 | Value tiles above the chart, line-segment step bar with names, a token-supply tile, % since listing |
+| 34 | `v34-tape-compact` | 29 | 20's size; token supply in the right column under the caption |
+| 35 | `v35-blocks-compact` | 31 | 20's size; token supply in the right column under the caption |
+| 36 | `v36-film-compact` | 32 | 20's size; token supply in the content on top |
