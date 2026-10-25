@@ -133,8 +133,8 @@ describe("v34 tape compact", () => {
     // stage, and `top` stays the plain stick line, so the next step's push starts where it always did.
     expect(drift).toMatch(/top: calc\(var\(--stage-h\) \+ var\(--gap\)\);/);
     expect(code).not.toMatch(/top:[^;]*--drift-lead/);
-    expect(code).toMatch(/\.root \{[^}]*--drift: 22px;[^}]*--drift-lead: 22px;/);
-    expect(code).toMatch(/--drift: 40px;\s*--drift-lead: 20px;/);
+    expect(code).toMatch(/\.root \{[^}]*--drift: 34px;[^}]*--drift-lead: 34px;/);
+    expect(code).toMatch(/--drift: 72px;\s*--drift-lead: 36px;/);
     // Scrubbed, never transitioned (only the bubble inside rises in with MOTION.settle).
     expect(drift).not.toMatch(/transition/);
     expect(code).toMatch(/\.bubble \{[^}]*transition:[^}]*transform 240ms cubic-bezier\(0\.2, 0\.7, 0\.2, 1\)/);
