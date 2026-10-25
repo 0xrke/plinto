@@ -170,3 +170,25 @@ also picked out two older variants:
 | 34 | `v34-tape-compact` | 29 | 20's size; token supply in the right column under the caption |
 | 35 | `v35-blocks-compact` | 31 | 20's size; token supply in the right column under the caption |
 | 36 | `v36-film-compact` | 32 | 20's size; token supply in the content on top |
+
+## Round 5: the chart is 34's, the layout is 33's (2026-10-25)
+
+Round 4.5 put token supply on the chart in 33–36: a burn marker on the floor at each redeem ("−30%
+supply → floor +0.9%", from `supplyBurns(m)`), a thin supply lane at the foot of the card on its own
+0–100% scale, and the current supply as a third riding tag (a top tile in 33).
+
+The founder's decision: **the chart is 34's** (27's tape inside 20's size). Two changes, made to 34
+in place:
+
+1. **A more explicit supply drop.** On the true 0–100% scale the 30% burn was a step of about 10px
+   and the 0.4% burn was invisible. Make the drop read at a glance without distorting the scale: a
+   taller lane, the burned part between 100% and the supply line hatched and labelled ("30% burned"),
+   and the riser clearly tied to its flame on the floor. The scale stays 0–100%; never magnify
+   silently.
+2. **33's layout and 33's speech bubbles.**
+   - Left column: the line-segment step bar on top, the chart under it, both in the sticky stage.
+   - Right column: the captions as 33's speech bubbles (number badge, beat label, caption, a short
+     muted detail), scrolling past natively as in 33.
+   - The title row ("Follow your $100", the floor-share chip) sits above the story and scrolls away,
+     as in 33.
+   - 34's own caption ribbon (the rule, the kicker, the deck, the cover masks) goes.
