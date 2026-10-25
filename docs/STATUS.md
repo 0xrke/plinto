@@ -1,6 +1,20 @@
 # Status — 2026-09-25 (ET)
 
 
+## Mainnet upgrade: reserved token names — 2026-10-25 (founder-approved)
+- Program `98NLryxegA9KLsED1TkSQdF2MDt6X8C7B1PmepJN6HpA` upgraded from `main` (`ccf96a6`; program code from
+  `b397a72`): `register_pool` now rejects Plinto-like names and bidi controls on chain. Extended by 16,416 bytes
+  (0.0840 SOL rent into the programdata account), upgraded in
+  `36sa7GXChaJB3wQiy666pH7XiLsPykgdncEG4TC488fa5Z1RkhzJoiwWCHB3ZS1YhngsXRhL2wE3vsRMY9AtK2k1` (slot 461228024).
+  On-chain ELF equals `target/deploy/stockfloor.so` byte for byte (sha256 `81675bd5…`). Buffer closed; total cost
+  0.0865 SOL; deployer holds 3.9459 SOL. Upgrade authority unchanged (deployer).
+- Pre-deploy checks: Rust 71/71, SDK 477/477, fork suite 134/134 (audit PoCs excluded), app 498/498.
+- `main` pushed to `origin` (`36717a8..ccf96a6`) first; Vercel redeployed plinto.xyz with the new landing.
+- The Helius key in `.env` (`MAINNET_RPC_URL`) answers 403; the upgrade used the public endpoint.
+- **Open:** `PINATA_JWT` is not set on Vercel (`/api/upload` answers 501); the founder adds it, or logs in the
+  Vercel CLI so it can be added from here.
+
+
 ## Landing story = lab variant 34 — 2026-10-25 (local)
 - `/` now shows the founder-picked "Follow your $100" variant 34 (tape chart with token-supply lane,
   speech bubbles, pinned title) via `story/tape/TapeStory.tsx`. The old `LaunchStory` is deleted;
