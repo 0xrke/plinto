@@ -192,3 +192,14 @@ in place:
    - The title row ("Follow your $100", the floor-share chip) sits above the story and scrolls away,
      as in 33.
    - 34's own caption ribbon (the rule, the kicker, the deck, the cover masks) goes.
+
+### Round 5, polish (2026-10-25)
+
+The founder: 34 "looks great". Two changes, the rest stays as is (scroll pace and the exits redeem
+timing are unchanged):
+
+1. **The current bubble drifts.** Today a bubble arrives, then stands still (sticky) until the next
+   one pushes it up. Instead it appears (a short rise and fade in) and then drifts gently while it is
+   current; the next bubble catches up and pushes it up as now, and the new one drifts in turn.
+2. **The title is pinned.** "Follow your $100" (with the floor-share chip) sits in the sticky stage
+   on top, above the step bar, instead of scrolling away.
