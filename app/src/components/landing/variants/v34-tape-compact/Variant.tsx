@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import type { LaunchMath } from "@/lib/landing/sim/launch";
 import { quantize } from "@/lib/landing/sim/scroll";
 import type { ChapterProgress } from "@/components/landing/scroll/progress";
@@ -16,8 +16,6 @@ import {
   floorSharePct,
   formatUsdCents,
   formatUsdCompact,
-  beatCaption,
-  beatSrText,
   railLabel,
   railStatus,
   storyNumbers,
@@ -32,7 +30,6 @@ import {
   type VariantProps,
 } from "../shared";
 import { showsIllustration } from "./tapeGeometry";
-import { bubbleLayout } from "./bubbleLayout";
 import { CHIP_ROW, CompactTape } from "./CompactTape";
 import s from "./tapeCompact.module.css";
 
@@ -191,7 +188,6 @@ function TapeStage({ m, frame }: { m: LaunchMath; frame: StoryFrame }) {
       <div className={s.cardSlot} aria-hidden data-part="chart-slot">
         <TapeCard m={m} frame={frame} />
       </div>
-      <BubbleLayer m={m} />
     </div>
   );
 }
@@ -209,91 +205,43 @@ const driftStyle = (i: number) => ({ "--bq": `var(--q${i}, 1)` }) as CSSProperti
  * and one short muted detail (the beat's plain-English sentence; on the exits beat, why the burn
  * matters instead). The detail doubles as the screen-reader sentence where it is that sentence.
  */
-function BubbleCard({ m, beat, i, label, caption, srText }: StepSlot & { m: LaunchMath }) {
+function Bubble({ m, beat, i, label, caption, srText }: StepSlot & { m: LaunchMath }) {
   const note = NOTE_BEATS.has(beat);
   const short = note ? null : bubbleDetail(m, beat);
   return (
-    <div className={s.bubble} data-part="bubble">
-      <span className={s.badge} aria-hidden>
-        {i + 1}
-      </span>
-      <div className={s.bubbleBody}>
-        <p className={`caps ${s.bubbleLabel}`}>{label}</p>
-        <p className={s.bubbleCaption}>{caption}</p>
-        {note ? (
-          <>
-            <p className={s.bubbleDetail} data-part="supply-note">
-              {SUPPLY_NOTE} <span className={s.equation}>{SUPPLY_EQUATION}</span>
+    <div className={s.drift} data-part="bubble-drift" style={driftStyle(i)}>
+      <div className={s.bubble} data-part="bubble">
+        <span className={s.badge} aria-hidden>
+          {i + 1}
+        </span>
+        <div className={s.bubbleBody}>
+          <p className={`caps ${s.bubbleLabel}`}>{label}</p>
+          <p className={s.bubbleCaption}>{caption}</p>
+          {note ? (
+            <>
+              <p className={s.bubbleDetail} data-part="supply-note">
+                {SUPPLY_NOTE} <span className={s.equation}>{SUPPLY_EQUATION}</span>
+              </p>
+              <p className="sr-only">{srText}</p>
+            </>
+          ) : short ? (
+            <>
+              <p className={s.bubbleDetail} data-part="detail" aria-hidden>
+                {short}
+              </p>
+              <p className="sr-only">{srText}</p>
+            </>
+          ) : (
+            <p className={s.bubbleDetail} data-part="detail">
+              {srText}
             </p>
-            <p className="sr-only">{srText}</p>
-          </>
-        ) : short ? (
-          <>
-            <p className={s.bubbleDetail} data-part="detail" aria-hidden>
-              {short}
-            </p>
-            <p className="sr-only">{srText}</p>
-          </>
-        ) : (
-          <p className={s.bubbleDetail} data-part="detail">
-            {srText}
-          </p>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-/** The runway's bubble: sticky and drifting on phones; on desktop the layer draws it (kept for AT). */
-function Bubble(props: StepSlot & { m: LaunchMath }) {
-  return (
-    <div className={s.drift} data-part="bubble-drift" style={driftStyle(props.i)}>
-      <BubbleCard {...props} />
-    </div>
-  );
-}
-
-/** Desktop: u = the active step plus its progress, to 1/1000 of a step (re-renders only the layer). */
-const selectU = (p: ChapterProgress): number => Math.round((p.active + (p.q[p.active] ?? 1)) * 1000) / 1000;
-
-/**
- * Desktop: the bubbles drawn in a layer beside the stage, one viewport tall, placed by bubbleLayout
- * (the current one drifts; the next catches up from below, kicks it up and takes over). Heights are
- * measured once and on resize; positions are a pure function of the scroll. Hidden below 1024px,
- * where the runway's own sticky bubbles show. aria-hidden: the runway's bubbles carry the text.
- */
-const BubbleLayer = memo(function BubbleLayer({ m }: { m: LaunchMath }) {
-  const u = useStoryProgress(selectU);
-  const ref = useRef<HTMLDivElement>(null);
-  const [box, setBox] = useState<{ h: number; heights: number[] } | null>(null);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const measure = () => {
-      if (el.clientHeight === 0) return;
-      setBox({ h: el.clientHeight, heights: Array.from(el.children, (c) => (c as HTMLElement).offsetHeight) });
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    for (const c of Array.from(el.children)) ro.observe(c);
-    return () => ro.disconnect();
-  }, []);
-  const places = box ? bubbleLayout(u, box.h, box.heights) : null;
-  return (
-    <div ref={ref} className={s.layer} aria-hidden data-part="bubble-layer">
-      {BEAT_KEYS.map((beat, i) => {
-        const p = places?.[i] ?? null;
-        const style = p ? { transform: `translate3d(0, ${p.y.toFixed(1)}px, 0)`, opacity: p.o } : { opacity: 0 };
-        return (
-          <div key={beat} className={s.layerBubble} data-active={p?.active ? "true" : "false"} style={style}>
-            <BubbleCard m={m} beat={beat} i={i} label={BEAT_LABELS[beat]} caption={beatCaption(m, beat)} srText={beatSrText(m, beat)} />
-          </div>
-        );
-      })}
-    </div>
-  );
-});
 
 /* ---------- Variant ---------- */
 
