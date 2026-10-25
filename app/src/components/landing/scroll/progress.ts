@@ -22,7 +22,7 @@ export interface ChapterProgress {
   active: number;
 }
 
-/** Same media query as lab/story.module.css's wide layout. */
+/** Same media query as story/harness.module.css's wide layout. */
 export const WIDE_QUERY = "(min-width: 1024px), (orientation: landscape) and (max-height: 500px)";
 /** Smallest change that triggers a write. */
 const EPSILON = 0.001;

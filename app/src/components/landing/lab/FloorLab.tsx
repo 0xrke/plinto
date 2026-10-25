@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { launchMath } from "@/lib/landing/sim/launch";
 import { DEFAULT_FLOW_INDEX } from "@/lib/landing/sim/market";
 import type { SimConstants } from "@/lib/landing/sim/types";
-import { TapeStory } from "@/components/landing/variants/v34-tape-compact/Variant";
+import { TapeStory } from "@/components/landing/story/tape/TapeStory";
 import { FLOOR_SHARE_INPUT_ID, SplitSandbox } from "./SplitSandbox";
 
 /**

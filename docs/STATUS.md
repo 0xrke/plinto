@@ -3,8 +3,9 @@
 
 ## Landing story = lab variant 34 — 2026-10-25 (local)
 - `/` now shows the founder-picked "Follow your $100" variant 34 (tape chart with token-supply lane,
-  speech bubbles, pinned title) via `TapeStory`; the old `LaunchStory` is no longer rendered.
-- Tests: vitest 87 files / 785 tests pass; `tsc` clean. Screenshots of `/` at 1728×936 and 390×844
+  speech bubbles, pinned title) via `story/tape/TapeStory.tsx`. The old `LaunchStory` is deleted;
+  the story lab moved to the local `lab` branch (`/lab/story/*` now 404 on `main`).
+- Tests: vitest 50 files / 498 tests pass (the lab's tests left with it); `tsc` clean. Screenshots of `/` at 1728×936 and 390×844
   checked; the "Floor share" chip jumps to and focuses the slider (72px from the top).
 
 

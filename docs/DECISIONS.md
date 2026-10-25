@@ -659,5 +659,9 @@ Format: **decision** · alternatives · why. These supersede the matching bullet
 - The landing word budget goes from 220 to 230 visible words: the bubbles' second lines and the
   supply note ("floor = vault ÷ supply") add 5 words over the old story, and the founder asked for
   the supply drop to be explicit.
-- `lab/LaunchStory.tsx`, `lab/StoryChart*` and their tests stay in the tree for now (no longer
-  rendered on `/`).
+- Follow-up (same day, founder's call): the old story (`LaunchStory`, `StoryChart`, `StoryRail`,
+  `StoryTiles`, `story.module.css`, `storyChartGeometry`) is deleted; its copy tests moved to
+  `lab/storyCopy.test.ts`. The story lab (`/lab/story/*`, all 36 variants, `COMBOS.md`) moved to the
+  local `lab` branch (at `57c3795`) and is gone from `main`. The harness lives in
+  `components/landing/story/`, the story in `story/tape/TapeStory.tsx`; the lab-only lead-in and the
+  page wrapper are dropped on `main`.
