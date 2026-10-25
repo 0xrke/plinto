@@ -1,0 +1,852 @@
+/*
+ * Variant 35, "Blocks · compact": variant 31 (28's sticky frame: title and the line-segment step rail
+ * on top, chart left, plain scrolling captions right; 26's block chart with 27's section strip and
+ * riding value tags inside the midnight card) at variant 20's size, plus 18's token-supply row in the
+ * right column. Colours are site tokens only (var(--color-…)); radii and type follow shared/BRAND.md.
+ * Native scrolling only: no scroll-snap, no scroll-behavior. Scrubbed values change inline from the
+ * frame, never through transitions.
+ *
+ * 20's size on wide screens: the brand container (max 1120px, 48px side padding) and the harness's
+ * stage, min(640px, 82svh), vertically centred on the reading line (50svh). The stage holds the title
+ * row, the step rail and the main row (chart 6fr, right column 4fr, 48px gap). The chart card comes
+ * out ~586 × 538 at 1440 × 900 (20's is 586 × 512).
+ *
+ * How the captions work (28's ribbon): the stage (z 2) is sticky over the runway (StorySteps, z 1).
+ * On wide screens the stage is opaque above the main row and under the supply row's top edge; the
+ * rest of the right column is transparent, so the runway's captions show through. Each caption rises
+ * out from behind the supply row (dimmed), sticks at the main row's top while its beat plays and is
+ * pushed up by the next one; the one already read fades out first.
+ */
+
+.root {
+  /* Phones: the stacked stage's height (title, rail, chart, supply); the captions stick under it. */
+  --bs-stage-h: min(66svh, 560px);
+  --bs-gap: 14px;
+  overflow-x: clip;
+}
+
+.track {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* ---------- the sticky stage: phones (title, rail, chart, supply; captions below) ---------- */
+
+.pin {
+  grid-area: 1 / 1;
+  align-self: start;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: var(--bs-stage-h);
+  min-width: 0;
+  padding: 8px 16px 6px;
+  background: var(--color-surface);
+}
+
+/* A soft edge under the phone stage, so captions slide under it gently. */
+.pin::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+  height: 12px;
+  background: linear-gradient(var(--color-surface), transparent);
+  pointer-events: none;
+}
+
+.frame {
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "top"
+    "chart"
+    "supply";
+  row-gap: 8px;
+}
+
+.top {
+  grid-area: top;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.title {
+  white-space: nowrap;
+}
+
+.shareChip {
+  flex: none;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.shareChip b {
+  color: var(--color-floor);
+}
+
+.chartSlot {
+  grid-area: chart;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.supplySlot {
+  grid-area: supply;
+  position: relative;
+  min-width: 0;
+}
+
+/* ---------- step rail (the landing's line segments) ---------- */
+
+.rail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.railList {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0 2px;
+  list-style: none;
+}
+
+.railItem {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.railBtn {
+  --fill: 0;
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+/* Hit area: at least 24 × 44 px, centred on the segment. */
+.railBtn::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  height: 44px;
+  min-width: 24px;
+  transform: translateY(-50%);
+}
+
+.railBtn:focus-visible {
+  outline: 2px solid var(--color-violet);
+  outline-offset: 2px;
+}
+
+.railTrack {
+  position: absolute;
+  inset-inline: 0;
+  top: 11px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-track);
+  overflow: hidden;
+}
+
+.railFill {
+  position: absolute;
+  inset: 0;
+  background: var(--color-floor);
+  transform-origin: left center;
+  transform: scaleX(var(--fill));
+}
+
+/* The current step: a taller segment with a floor-coloured ring (visible without colour alone). */
+.railBtn[aria-current="step"] .railTrack {
+  top: 9px;
+  height: 8px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1.5px var(--color-floor);
+}
+
+.railLabel {
+  display: none;
+}
+
+.railStatus {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--color-ink-2);
+}
+
+/* ---------- captions: phones (under the stage) ---------- */
+
+.steps {
+  grid-area: 1 / 1;
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  margin: 0;
+  padding: calc(var(--bs-stage-h) + var(--bs-gap)) 16px 0;
+  list-style: none;
+}
+
+.cap {
+  position: sticky;
+  top: calc(var(--bs-stage-h) + var(--bs-gap));
+  padding: 14px 0 0;
+  transition: opacity 120ms ease;
+}
+
+/* A short floor-green tick marks the caption being read. */
+.rule {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 32px;
+  height: 4px;
+  border-radius: 2px;
+  background: transparent;
+}
+
+.step[data-active="true"] .rule {
+  background: var(--color-floor);
+}
+
+.kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-ink-3);
+}
+
+.badge {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 22px;
+  border-radius: 8px;
+  background: var(--color-track);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-ink-3);
+}
+
+.step[data-active="true"] .badge {
+  background: var(--color-floor-soft);
+  color: var(--color-floor);
+}
+
+.step[data-active="true"] .kicker {
+  color: var(--color-floor);
+}
+
+.sentence {
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+  color: var(--color-ink);
+  text-wrap: balance;
+}
+
+.deck {
+  margin-top: 6px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--color-ink-2);
+}
+
+/* The caption still to come waits dimmed; the ones already read leave entirely. */
+.step[data-active="false"] .cap {
+  opacity: 0.4;
+}
+
+.step:has(~ .step[data-active="true"]) .cap {
+  opacity: 0;
+}
+
+/* ---------- token supply (18's ledger row): phones, one compact tile under the chart ---------- */
+
+.supply {
+  --k: var(--color-violet);
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "head head pct"
+    "bar bar bar";
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 6px;
+  padding: 7px 10px 8px;
+  border-radius: 14px;
+  background: var(--color-cloud);
+  opacity: 0;
+  visibility: hidden;
+}
+
+.supply[data-shown] {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* The burn lights the row up (violet, 18's redemption colour), fading as the story moves on. */
+.supply::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--color-violet-soft);
+  box-shadow: inset 0 0 0 1.5px var(--k);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.supply[data-hot]::before {
+  opacity: var(--fresh, 0);
+}
+
+.supply > * {
+  position: relative;
+}
+
+.supplyHead {
+  grid-area: head;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* IconTile look: violet tint, radius 35%. */
+.supplyIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: var(--color-violet-soft);
+  color: var(--color-violet-strong);
+}
+
+.supply[data-hot] .supplyIcon {
+  box-shadow: 0 0 0 calc(var(--fresh, 0) * 2.5px) var(--k);
+}
+
+.supplyLabel {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink-2);
+  white-space: nowrap;
+}
+
+.supplyValue {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-ink);
+  white-space: nowrap;
+}
+
+.supplyPct {
+  grid-area: pct;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-ink-2);
+  white-space: nowrap;
+}
+
+.supplyPct b {
+  font-weight: 800;
+  color: var(--color-violet-strong);
+}
+
+/* FloorMeter look: soft track; what is left in iris, the burned part hatched. */
+.supplyBar {
+  grid-area: bar;
+  display: flex;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-track);
+  overflow: hidden;
+}
+
+.supplyBar > span {
+  flex: none;
+  height: 100%;
+}
+
+.supplyLeft {
+  background: var(--color-iris);
+}
+
+.supplyBurned {
+  background-color: var(--color-violet-soft);
+  background-image: repeating-linear-gradient(135deg, var(--color-iris) 0 1.5px, transparent 1.5px 5px);
+}
+
+.supplyWhy {
+  display: none;
+}
+
+/* ---------- wide: 20's size; title and rail on top, chart left, captions and supply right ---------- */
+
+@media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
+  .root {
+    /* The harness's stage, centred on the reading line; the main row starts at --bs-main-top. */
+    --bs-frame-h: min(640px, 82svh);
+    --bs-off: calc(50svh - var(--bs-frame-h) / 2);
+    --bs-top-h: 84px;
+    --bs-row-gap: 18px;
+    --bs-main-top: calc(var(--bs-off) + var(--bs-top-h) + var(--bs-row-gap));
+    --bs-cols: minmax(0, 6fr) minmax(0, 4fr);
+    --bs-col-gap: 48px;
+    /* BRAND_CLASS.container: max 1120px, 48px side padding. */
+    --bs-width: min(1120px, 100%);
+    --bs-pad-x: 48px;
+  }
+
+  .pin {
+    height: 100svh;
+    padding: 0;
+    background: none;
+  }
+
+  /* Covers the runway above the main row, so the read captions slide away under the title. */
+  .pin::before {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: var(--bs-main-top);
+    background: var(--color-surface);
+  }
+
+  .pin::after {
+    display: none;
+  }
+
+  .frame {
+    position: relative;
+    box-sizing: border-box;
+    width: var(--bs-width);
+    height: var(--bs-frame-h);
+    margin: var(--bs-off) auto 0;
+    padding: 0 var(--bs-pad-x);
+    grid-template-columns: var(--bs-cols);
+    grid-template-rows: var(--bs-top-h) minmax(0, 1fr);
+    grid-template-areas:
+      "top top"
+      "chart supply";
+    column-gap: var(--bs-col-gap);
+    row-gap: var(--bs-row-gap);
+  }
+
+  .top {
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  .heading {
+    justify-content: flex-start;
+    gap: 14px;
+    height: 36px;
+  }
+
+  .title {
+    font-size: 28px;
+  }
+
+  .shareChip {
+    height: 30px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+
+  .railList {
+    gap: 6px;
+  }
+
+  .railBtn {
+    height: 40px;
+  }
+
+  .railTrack {
+    top: 8px;
+  }
+
+  .railBtn[aria-current="step"] .railTrack {
+    top: 6px;
+  }
+
+  .railLabel {
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 19px;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    color: var(--color-ink-3);
+  }
+
+  .railBtn[aria-current="step"] .railLabel {
+    font-weight: 700;
+    color: var(--color-ink);
+  }
+
+  .railStatus {
+    display: none;
+  }
+
+  /* The supply row sits at the foot of the right column, level with the chart card's bottom. */
+  .supplySlot {
+    align-self: end;
+  }
+
+  /* Its ground masks the runway from just above the row down to the viewport's foot, so the next
+     caption rises out from behind it rather than from the bottom edge. */
+  .supplySlot::before {
+    content: "";
+    position: absolute;
+    inset-inline: -8px;
+    top: -36px;
+    bottom: calc(0px - var(--bs-off) - 2px);
+    background: linear-gradient(transparent, var(--color-surface) 32px);
+    pointer-events: none;
+  }
+
+  /* The runway: the same width and columns as the frame; every step sits in the right column. */
+  .steps {
+    box-sizing: border-box;
+    width: var(--bs-width);
+    margin-inline: auto;
+    display: grid;
+    grid-template-columns: var(--bs-cols);
+    column-gap: var(--bs-col-gap);
+    align-content: start;
+    padding: 50svh var(--bs-pad-x) 50svh;
+  }
+
+  .step {
+    grid-column: 2;
+  }
+
+  .cap {
+    top: calc(var(--bs-main-top) + 4px);
+    padding: 16px 0 0;
+  }
+
+  .sentence {
+    margin-top: 10px;
+    font-size: 26px;
+    line-height: 1.25;
+    letter-spacing: -0.012em;
+  }
+
+  .deck {
+    margin-top: 10px;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  /* The supply row, 18's size: icon tile, label and value, the change, the bar, the reason. */
+  .supply {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "head head head"
+      "pct pct pct"
+      "bar bar bar"
+      "why why why";
+    row-gap: 8px;
+    padding: 14px 16px 14px;
+    border-radius: 20px;
+  }
+
+  .supplyIcon {
+    width: 32px;
+    height: 32px;
+    border-radius: 11px;
+  }
+
+  .supplyHead {
+    gap: 10px;
+  }
+
+  .supplyLabel {
+    flex: 1;
+    font-size: 13px;
+  }
+
+  .supplyValue {
+    font-size: 22px;
+  }
+
+  .supplyPct {
+    margin-top: -2px;
+    font-size: 13px;
+  }
+
+  .supplyBar {
+    height: 8px;
+  }
+
+  .supplyWhy {
+    display: block;
+    grid-area: why;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--color-ink-3);
+  }
+}
+
+/* Landscape phones: the same composition, packed into ~390px of height. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .root {
+    --bs-frame-h: calc(100svh - 16px);
+    --bs-top-h: 28px;
+    --bs-row-gap: 8px;
+    --bs-col-gap: 24px;
+    --bs-pad-x: 16px;
+  }
+
+  .top { flex-direction: row; align-items: center; gap: 24px; }
+  .heading { flex: none; height: auto; }
+  .rail { flex: 1 1 auto; }
+  .title { font-size: 20px; }
+  .railLabel { display: none; }
+  .railBtn { height: 24px; }
+  .cap { padding-top: 10px; }
+  .kicker { display: none; }
+  .sentence { margin-top: 0; font-size: 18px; }
+  .deck { display: none; }
+  .supply { row-gap: 4px; padding: 8px 10px; }
+  .supplyValue { font-size: 15px; }
+  .supplyWhy { display: none; }
+}
+
+/* ---------- the chart stage (26's blocks in the midnight card) ---------- */
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+}
+
+.chart.chart {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+}
+
+.stageStill .chart.chart {
+  flex: none;
+  height: auto;
+  aspect-ratio: 1 / 1;
+}
+
+@media (min-width: 640px) {
+  .stageStill .chart.chart {
+    aspect-ratio: 16 / 9;
+  }
+}
+
+/* The drawing sits under the card's chip row (Illustration / real scale), edge to edge, so the
+   section strip runs across the whole card. */
+.scene {
+  position: absolute;
+  inset: 40px 0 0;
+}
+
+.svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  font-family: var(--font-sans);
+}
+
+.tick {
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.labelStrong {
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.chipText {
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* the split column's labels (sizes are set inline from the plot size) */
+.raiseBig {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.raiseOf {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.segName {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.segPct {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.line {
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.stair {
+  fill: none;
+  stroke-linejoin: miter;
+  stroke-linecap: square;
+}
+
+/* ---------- 27's sections and riding tags ---------- */
+
+.boundary { stroke: var(--color-midnight-line); stroke-width: 1; }
+.boundaryZoom { stroke: color-mix(in srgb, var(--color-mint) 40%, transparent); stroke-width: 1; stroke-dasharray: 2 4; }
+
+.beatLabel { font-size: 12.5px; font-weight: 600; }
+.beatNum { font-weight: 700; font-variant-numeric: tabular-nums; }
+/* Neighbours stay readable (on-dark-3 is 7:1 on midnight); the current beat is white, bold, mint number. */
+.past .beatLabel { fill: var(--color-on-dark-3); }
+.current .beatLabel { fill: var(--color-white); font-weight: 700; }
+.current .beatNum { fill: var(--color-mint); }
+.future .beatLabel { fill: color-mix(in srgb, var(--color-on-dark-3) 80%, transparent); }
+.diamond { fill: var(--color-mint); }
+.future .diamond { fill: var(--color-midnight-line); }
+.rulerProg { fill: color-mix(in srgb, var(--color-on-dark-2) 55%, transparent); }
+
+.priceDot { fill: var(--color-white); stroke: var(--color-midnight); stroke-width: 2; }
+.floorDot { fill: var(--color-mint); stroke: var(--color-midnight); stroke-width: 2; }
+.connWhite { stroke: color-mix(in srgb, var(--color-white) 50%, transparent); stroke-width: 1; fill: none; }
+.connMint { stroke: color-mix(in srgb, var(--color-mint) 60%, transparent); stroke-width: 1; fill: none; }
+.tagPrice { fill: var(--color-white); }
+.tagFloor { fill: var(--color-mint); }
+.tagLabel { font-size: 10.5px; font-weight: 600; fill: var(--color-ink-2); }
+.tagValue { font-family: var(--font-display); font-size: 16px; font-weight: 700; fill: var(--color-ink); font-variant-numeric: tabular-nums; }
+/* The change since listing, under the value: the percent bold in its colour, the suffix muted. */
+.tagPct { font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tagPctSuffix { fill: var(--color-ink-2); font-weight: 600; }
+.pctUp { fill: var(--color-floor); font-weight: 800; }
+.pctDown { fill: var(--color-risk); font-weight: 800; }
+/* On the mint tag the floor colour's darker shade keeps the contrast (floor on mint is too light). */
+.pctFloor { fill: var(--color-floor-strong); font-weight: 800; }
+
+/* Wide drawings: chart type a step up, to read like the landing chart at 1440. */
+.wide .tick { font-size: 12px; }
+.wide .label { font-size: 12.5px; }
+.wide .labelStrong { font-size: 13px; }
+.wide .chipText { font-size: 12.5px; }
+.wide .beatLabel { font-size: 15px; }
+.wide .tagLabel { font-size: 12px; }
+.wide .tagValue { font-size: 20px; }
+.wide .tagPct { font-size: 13px; }
+
+/* ---------- stills (reduced motion) and footer ---------- */
+
+.stillsWrap {
+  padding-top: 16px;
+}
+
+.stills figcaption p:nth-child(2) {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--color-ink);
+}
+
+.footer {
+  display: grid;
+  gap: 6px;
+  padding-top: 12px;
+  padding-bottom: 48px;
+}
+
+.footnote {
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--color-ink-3);
+}
+
+.honesty {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cap {
+    transition: none;
+  }
+}
+
+/* A reduced-motion still: the chart card with the supply row under it (from listing on). */
+.stillCol {
+  display: grid;
+  gap: 8px;
+}
+
+.stillCol .supply {
+  max-width: 420px;
+}
