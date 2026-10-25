@@ -1,5 +1,7 @@
 "use client";
 
+import type { CSSProperties } from "react";
+import type { LaunchMath } from "@/lib/landing/sim/launch";
 import {
   BEAT_KEYS,
   BEAT_LABELS,
@@ -14,24 +16,29 @@ import {
   StoryStills,
   StoryTrack,
   floorSharePct,
+  railLabel,
+  railStatus,
   useActiveBeat,
   useJumpToBeat,
   type StepSlot,
   type VariantProps,
 } from "../shared";
 import { EditorialPlusChart } from "./EditorialPlusChart";
+import { FigureTiles, LiveFigures, figureValues } from "./StoryFigures";
 import styles from "./editorialPlus.module.css";
 
 /*
- * Variant 21: "Editorial plus", a combo built on variant 11 (the founder's favourite). It keeps 11's
- * composition exactly: the two headline figures above a directly-labelled midnight chart on the
- * left, and on the right the "In this story" index with one large editorial sentence per beat that
- * scrolls past. What changes, per the review: the chart is much taller (it fills most of the stage
- * column at 1440×900); the split beat shows your $100 as the bold vertical column of variants 1 and 3
- * (wide, saturated floor / market / fee segments with big direct labels, the floor segment dropping
- * to the floor and sliding onto the slab the staircase starts from); and the chrome is trimmed.
- * Same harness blocks (StoryRoot / StoryStage / StorySteps / StoryStills): native scroll, one passive
- * listener, exact reversal.
+ * Variant 21: "Editorial plus", a combo built on variant 11 (the founder's favourite), round 2.
+ * It keeps 11's core: a directly-labelled midnight chart on the left and, on the right, one large
+ * editorial sentence per beat that scrolls past (the caption ribbon). Round 2 changes, per the
+ * founder's review: the "In this story" index card is gone; a sticky header row above the chart
+ * and captions carries the title, the floor-share chip and the landing's horizontal step line
+ * (line segments with the beat names under them, the current one highlighted, each one a native
+ * scroll jump). "Your $100 now" and "Floor pays back" left their small place above the chart and
+ * are now big tiles at the top of the right column, in the reader's eye line, each with its change
+ * since listing; the caption ribbon flows under them. The split beat is still the bold vertical
+ * raise column of variants 1 and 3. Same harness blocks (StoryRoot / StoryStage / StorySteps /
+ * StoryStills): native scroll, one passive listener, exact reversal.
  */
 
 // The presale and split get a longer runway: the raise column fills, then the full labelled column
@@ -57,32 +64,53 @@ function Caption({ i, label, caption, srText }: StepSlot) {
 
 const renderStep = (slot: StepSlot) => <Caption {...slot} />;
 
-/** Wide screens: a sticky "In this story" index above the captions; each entry jumps (native scroll). */
-function BeatIndex() {
+/**
+ * The step line: one segment per beat with its name under it. Each segment fills from the driver's
+ * --qN variable (pure CSS, written on this [data-rail] element), so scrolling never re-renders it;
+ * only the active beat change does. Every segment jumps to its beat with a native scroll.
+ */
+function StepLine() {
   const { index } = useActiveBeat();
   const jump = useJumpToBeat();
   return (
-    <nav className={styles.index} aria-label="Story steps">
-      <div className={styles.indexPanel}>
-        <p className={`${BRAND_CLASS.caps} ${styles.indexHead}`}>In this story</p>
-        <ol className={styles.indexList}>
-          {BEAT_KEYS.map((key, i) => (
-            <li key={key}>
-              <button
-                type="button"
-                className={styles.indexItem}
-                data-state={i === index ? "active" : i < index ? "done" : "next"}
-                aria-current={i === index ? "step" : undefined}
-                onClick={() => jump(i)}
-              >
-                <span className="tnum">{num(i)}</span>
+    <nav className={styles.line} aria-label="Story steps" data-rail="">
+      <ol className={styles.lineList}>
+        {BEAT_KEYS.map((key, i) => (
+          <li key={key} className={styles.lineItem}>
+            <button
+              type="button"
+              className={styles.lineBtn}
+              aria-label={railLabel(i)}
+              aria-current={i === index ? "step" : undefined}
+              data-state={i === index ? "active" : i < index ? "done" : "next"}
+              onClick={() => jump(i)}
+              style={{ "--seg-q": `var(--q${i}, 1)` } as CSSProperties}
+            >
+              <span className={styles.lineTrack} aria-hidden>
+                <span className={styles.lineFill} />
+              </span>
+              <span className={styles.lineLabel} aria-hidden>
                 {BEAT_LABELS[key]}
-              </button>
-            </li>
-          ))}
-        </ol>
-      </div>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ol>
+      <span className={`${styles.lineStatus} tnum`} aria-hidden>
+        {railStatus(index)}
+      </span>
     </nav>
+  );
+}
+
+function Title({ m, className = "" }: { m: LaunchMath; className?: string }) {
+  return (
+    <div className={`${styles.titleRow} ${className}`}>
+      <h2 className={`${BRAND_CLASS.title} ${styles.title}`}>{STORY_TITLE}</h2>
+      <span className={`chip ${styles.shareChip}`}>
+        Floor share <b className="tnum">{floorSharePct(m)}%</b>
+      </span>
+    </div>
   );
 }
 
@@ -90,23 +118,33 @@ export default function Variant({ m }: VariantProps) {
   return (
     <div className={`${BRAND_CLASS.page} ${styles.page}`}>
       <StoryRoot m={m} className={`${BRAND_CLASS.container} ${styles.root}`}>
-        <header className={styles.head}>
+        {/* Phones and the reduced-motion page: the title scrolls away; the sticky bar below keeps the step line. */}
+        <header className={styles.intro}>
           <p className="eyebrow">Explainer</p>
-          <div className={styles.titleRow}>
-            <h2 className={BRAND_CLASS.title}>{STORY_TITLE}</h2>
-            <span className="chip">
-              Floor share <b className="tnum">{floorSharePct(m)}%</b>
-            </span>
-          </div>
+          <Title m={m} />
         </header>
         <StoryTrack className={styles.track}>
+          <div className={styles.bar} data-part="bar">
+            <Title m={m} className={styles.barTitle} />
+            <StepLine />
+          </div>
           <StoryStage className={styles.stage}>
             <FrameView render={(frame) => <EditorialPlusChart m={m} frame={frame} />} />
           </StoryStage>
-          <BeatIndex />
+          <div className={styles.tiles} aria-hidden data-part="live-figures">
+            <LiveFigures />
+          </div>
           <StorySteps className={styles.steps} stepClassName={styles.step} heights={HEIGHTS} renderStep={renderStep} />
         </StoryTrack>
-        <StoryStills className={styles.stills} renderStill={(frame) => <EditorialPlusChart m={m} frame={frame} still />} />
+        <StoryStills
+          className={styles.stills}
+          renderStill={(frame) => (
+            <div className={styles.stillCard}>
+              <FigureTiles v={figureValues(m, frame)} still />
+              <EditorialPlusChart m={m} frame={frame} still />
+            </div>
+          )}
+        />
         <footer className={styles.footer}>
           <p className={BRAND_CLASS.footnote + " " + styles.footnote}>
             <span className={styles.footLabel}>Note</span> {STORY_FOOTNOTE}

@@ -7,19 +7,16 @@ import {
   BEAT_LABELS,
   BrandChartFrame,
   CHART_COPY,
-  TILE_FLOOR,
-  TILE_NOW,
   floorSharePct,
   formatUsdCents,
   formatUsdWhole,
-  tileValues,
   type StoryFrame,
 } from "../shared";
 import styles from "./editorialPlus.module.css";
 
 /*
  * Variant 21, "Editorial plus": variant 11's newspaper-graphics chart (direct labels with leader
- * lines, the active-beat column, beats along the x axis, the two headline figures above the plot),
+ * lines, the active-beat column, beats along the x axis; the headline figures live in StoryFigures),
  * drawn taller, with the split beat redrawn as variant 3's bold raise column: your $100 stacked on
  * the $ axis as floor (mint), market (iris) and fees (butter), each labelled with its share, then the
  * floor segment drops to the floor per $100 and slides onto the slab under the staircase. The plot sits
@@ -128,52 +125,16 @@ function Note({ ax, ay, tx, ty, text, anchor, opacity, tone = "ink", strong = fa
 /** The made-up trading path is drawn from the pump on (and stays drawn, faded, through redeem). */
 export const showsMadeUpPath = (f: StoryFrame): boolean => f.illustrative || (f.beatIndex >= 2 && f.priceOpacity > 0);
 
-/** The two headline figures, as site tiles with a direct-label key glyph each. */
-function Figures({ m, f, still }: { m: LaunchMath; f: StoryFrame; still: boolean }) {
-  const tiles = tileValues(f);
-  const floor = tiles.floor;
-  // The head as drawn (see landedValue): differs from the engine value only inside the bounce's dip.
-  const shown = landedValue(m, f.t, f.valueOf100);
-  const now = f.redeemProgress >= 1 || shown === f.valueOf100 ? tiles.now : formatUsdCents(shown);
-  return (
-    <div className={`${styles.figures} ${still ? styles.figuresStill : ""}`}>
-      <p className={`${styles.fig} bg-cloud`}>
-        <span className={styles.figLabel}>
-          <svg width="18" height="10" className={styles.key} aria-hidden>
-            <path d="M1 7 C5 7 7 2 11 3 S15 4 17 2" className={styles.keyInk} />
-          </svg>
-          <span className="truncate">{TILE_NOW}</span>
-        </span>
-        <b className={`${styles.figValue} tnum`} data-part="now">
-          {now}
-        </b>
-      </p>
-      <p className={`${styles.fig} bg-floor-wash`}>
-        <span className={`${styles.figLabel} text-floor`}>
-          <svg width="18" height="10" className={styles.key} aria-hidden>
-            <path d="M1 8 H7 V5 H12 V2 H17" className={styles.keyFloor} />
-          </svg>
-          <span className="truncate">{TILE_FLOOR}</span>
-        </span>
-        <b className={`${styles.figValue} ${styles.figFloor} tnum`} data-part="floor">
-          {floor}
-        </b>
-      </p>
-    </div>
-  );
-}
-
 export interface EditorialPlusChartProps {
   m: LaunchMath;
   frame: StoryFrame;
-  /** Reduced-motion still: a fixed-height card, compact figures. */
+  /** Reduced-motion still: a fixed-height card. */
   still?: boolean;
 }
 
 export function EditorialPlusChart({ m, frame: f, still = false }: EditorialPlusChartProps): JSX.Element {
   return (
     <div className={`${styles.chart} ${still ? styles.chartStill : ""}`} aria-hidden data-chart={still ? "still" : "stage"}>
-      <Figures m={m} f={f} still={still} />
       <BrandChartFrame
         className={still ? "" : "flex-1"}
         size={still ? "still" : "stage"}

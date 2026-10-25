@@ -1,0 +1,834 @@
+/*
+ * Variant 28, "Editorial panel": variant 25's layout (title and step rail on top, chart left, caption
+ * right) in variant 21's unboxed style (a plain white page, the midnight chart card as the one
+ * surface, big Outfit captions) with 21's caption ribbon. Colours are site tokens only
+ * (var(--color-…)); radii and type follow shared/BRAND.md. Native scrolling only: no scroll-snap, no
+ * scroll-behavior. Scrubbed values change inline from the frame, never through transitions.
+ *
+ * How the ribbon works: the stage (z 2) is sticky over the runway (StorySteps, z 1). On wide screens
+ * the stage is opaque only where it draws: the title row on top and the two metrics at the head of
+ * the right column, right beside the chart's top. Below them it is transparent, so the runway's
+ * captions show through. Each caption rises from the viewport's foot (the one still to come waits
+ * dimmed), sticks just under the metrics while its beat plays, and is pushed up under them by the
+ * next one; the one already read fades out first (as in 21).
+ */
+
+.root {
+  /* Phones: the stacked stage's height; the captions stick just under it. */
+  --ep-stage-h: min(62svh, 540px);
+  --ep-gap: 14px;
+  overflow-x: clip;
+}
+
+.track {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* ---------- stage: phones (title, rail, chart, metrics; captions below) ---------- */
+
+.stage {
+  grid-area: 1 / 1;
+  align-self: start;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: var(--ep-stage-h);
+  min-width: 0;
+  padding: 8px 16px 6px;
+  background: var(--color-surface);
+}
+
+/* A soft edge under the phone stage, so captions slide under it gently. */
+.stage::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+  height: 12px;
+  background: linear-gradient(var(--color-surface), transparent);
+  pointer-events: none;
+}
+
+.frame {
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "top"
+    "chart"
+    "side";
+  row-gap: 8px;
+}
+
+.top {
+  grid-area: top;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.title {
+  white-space: nowrap;
+}
+
+.shareChip {
+  flex: none;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.shareChip b {
+  color: var(--color-floor);
+}
+
+.chartSlot {
+  grid-area: chart;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chart {
+  flex: 1 1 0;
+  height: auto;
+  min-height: 0;
+}
+
+.side {
+  grid-area: side;
+  min-width: 0;
+}
+
+/* ---------- rail (the landing's segments) ---------- */
+
+.rail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.railList {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0 2px;
+  list-style: none;
+}
+
+.railItem {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.railBtn {
+  --fill: 0;
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+/* Hit area: at least 24 × 44 px, centred on the segment. */
+.railBtn::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  height: 44px;
+  min-width: 24px;
+  transform: translateY(-50%);
+}
+
+.railBtn:focus-visible {
+  outline: 2px solid var(--color-violet);
+  outline-offset: 2px;
+}
+
+.railTrack {
+  position: absolute;
+  inset-inline: 0;
+  top: 11px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-track);
+  overflow: hidden;
+}
+
+.railFill {
+  position: absolute;
+  inset: 0;
+  background: var(--color-floor);
+  transform-origin: left center;
+  transform: scaleX(var(--fill));
+}
+
+/* The current step: a taller segment with a floor-coloured ring (visible without colour alone). */
+.railBtn[aria-current="step"] .railTrack {
+  top: 9px;
+  height: 8px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1.5px var(--color-floor);
+}
+
+.railLabel {
+  display: none;
+}
+
+.railStatus {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--color-ink-2);
+}
+
+/* ---------- metrics: large, unboxed, each with its change since listing ---------- */
+
+.metrics {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 16px;
+  margin: 0;
+}
+
+.metric {
+  min-width: 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-line-strong);
+}
+
+.metricLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--color-ink-2);
+}
+
+.key {
+  flex: none;
+  overflow: visible;
+}
+
+.keyInk {
+  fill: none;
+  stroke: var(--color-ink);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.keyFloor {
+  fill: none;
+  stroke: var(--color-floor);
+  stroke-width: 2;
+}
+
+.metricRow {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+}
+
+.value {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+/* The change since listing: smaller than the value, clearly readable; its slot always exists. */
+.since {
+  display: block;
+  min-height: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.since b {
+  font-weight: 700;
+}
+
+/* ---------- caption ribbon: phones (under the stage) ---------- */
+
+.steps {
+  grid-area: 1 / 1;
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  margin: 0;
+  padding: calc(var(--ep-stage-h) + var(--ep-gap)) 16px 0;
+  list-style: none;
+}
+
+.cap {
+  position: sticky;
+  top: calc(var(--ep-stage-h) + var(--ep-gap));
+  padding: 14px 0 0;
+  transition: opacity 120ms ease;
+}
+
+/* A short floor-green tick marks the caption being read. */
+.rule {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 32px;
+  height: 4px;
+  border-radius: 2px;
+  background: transparent;
+}
+
+.step[data-active="true"] .rule {
+  background: var(--color-floor);
+}
+
+.kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-ink-3);
+}
+
+.badge {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 22px;
+  border-radius: 8px;
+  background: var(--color-track);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-ink-3);
+}
+
+.step[data-active="true"] .badge {
+  background: var(--color-floor-soft);
+  color: var(--color-floor);
+}
+
+.step[data-active="true"] .kicker {
+  color: var(--color-floor);
+}
+
+.sentence {
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+  color: var(--color-ink);
+  text-wrap: balance;
+}
+
+.deck {
+  margin-top: 6px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--color-ink-2);
+}
+
+/* The caption still to come waits dimmed; the ones already read leave entirely (as in 21). */
+.step[data-active="false"] .cap {
+  opacity: 0.4;
+}
+
+.step:has(~ .step[data-active="true"]) .cap {
+  opacity: 0;
+}
+
+/* ---------- wide: title and rail on top, chart left, ribbon and metrics right ---------- */
+
+@media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
+  .root {
+    /* The frame: at most 880px tall, centred; its main row starts at --ep-main-top. */
+    --ep-frame-h: min(880px, 100svh);
+    --ep-off: max(0px, calc((100svh - 880px) / 2));
+    --ep-pad-top: 22px;
+    --ep-top-h: 48px;
+    --ep-row-gap: 22px;
+    --ep-main-top: calc(var(--ep-off) + var(--ep-pad-top) + var(--ep-top-h) + var(--ep-row-gap));
+    /* The metrics block at the head of the right column, and the gap before the sticky caption. */
+    --ep-metrics-h: 104px;
+    --ep-cap-gap: 30px;
+    --ep-cols: minmax(0, 13fr) minmax(0, 8fr);
+    --ep-col-gap: 56px;
+    --ep-width: min(1120px, calc(100% - 80px));
+  }
+
+  .stage {
+    height: 100svh;
+    padding: 0;
+    background: none;
+  }
+
+  /* Covers the runway above the main row, so the read captions slide away under the title. */
+  .stage::before {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: var(--ep-main-top);
+    background: var(--color-surface);
+  }
+
+  .stage::after {
+    display: none;
+  }
+
+  .frame {
+    position: relative;
+    width: var(--ep-width);
+    height: var(--ep-frame-h);
+    margin: var(--ep-off) auto 0;
+    padding: var(--ep-pad-top) 0 28px;
+    grid-template-columns: var(--ep-cols);
+    grid-template-rows: var(--ep-top-h) minmax(0, 1fr);
+    grid-template-areas:
+      "top top"
+      "chart side";
+    column-gap: var(--ep-col-gap);
+    row-gap: var(--ep-row-gap);
+  }
+
+  .top {
+    flex-direction: row;
+    align-items: center;
+    gap: 56px;
+  }
+
+  .heading {
+    flex: none;
+    justify-content: flex-start;
+    gap: 14px;
+  }
+
+  .title {
+    font-size: 28px;
+  }
+
+  .shareChip {
+    height: 30px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+
+  .rail {
+    flex: 1 1 auto;
+  }
+
+  .railList {
+    gap: 6px;
+  }
+
+  .railBtn {
+    height: 40px;
+  }
+
+  .railTrack {
+    top: 8px;
+  }
+
+  .railBtn[aria-current="step"] .railTrack {
+    top: 6px;
+  }
+
+  .railLabel {
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 19px;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    color: var(--color-ink-3);
+  }
+
+  .railBtn[aria-current="step"] .railLabel {
+    font-weight: 700;
+    color: var(--color-ink);
+  }
+
+  .railStatus {
+    display: none;
+  }
+
+  /* The right column: the metrics (opaque) at its head, beside the chart's top; below them a
+     transparent window for the ribbon. */
+  .side {
+    position: relative;
+  }
+
+  /* Captions still to come rise in softly from the viewport's foot. */
+  .side::after {
+    content: "";
+    position: absolute;
+    inset-inline: -8px;
+    bottom: calc(-28px - var(--ep-off));
+    height: 72px;
+    background: linear-gradient(transparent, var(--color-surface));
+    pointer-events: none;
+  }
+
+  .metrics {
+    position: relative;
+    z-index: 1;
+    height: var(--ep-metrics-h);
+    column-gap: 24px;
+    align-content: start;
+    background: var(--color-surface);
+  }
+
+  /* Read captions slide away under the metrics through a short fade. */
+  .metrics::after {
+    content: "";
+    position: absolute;
+    inset-inline: -8px;
+    top: 100%;
+    height: calc(var(--ep-cap-gap) - 4px);
+    background: linear-gradient(var(--color-surface), transparent);
+    pointer-events: none;
+  }
+
+  .metric {
+    padding-top: 14px;
+  }
+
+  .metricLabel {
+    gap: 8px;
+    font-size: 13.5px;
+  }
+
+  .metricRow {
+    margin-top: 4px;
+  }
+
+  .value {
+    font-size: 34px;
+    line-height: 1.15;
+  }
+
+  .since {
+    min-height: 20px;
+    margin-top: 2px;
+    font-size: 15px;
+    line-height: 20px;
+  }
+
+  /* The runway: the same width and columns as the frame; every step sits in the right column. */
+  .steps {
+    width: var(--ep-width);
+    margin-inline: auto;
+    display: grid;
+    grid-template-columns: var(--ep-cols);
+    column-gap: var(--ep-col-gap);
+    align-content: start;
+    padding: 50svh 0 50svh;
+  }
+
+  .step {
+    grid-column: 2;
+  }
+
+  .cap {
+    top: calc(var(--ep-main-top) + var(--ep-metrics-h) + var(--ep-cap-gap));
+    padding: 18px 0 0;
+  }
+
+  .sentence {
+    margin-top: 12px;
+    font-size: 30px;
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+  }
+
+  .deck {
+    margin-top: 14px;
+    max-width: 40ch;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+}
+
+/* Large screens: a wider frame, so the chart grows in width as well as height. */
+@media (min-width: 1600px) and (min-height: 760px) {
+  .root {
+    --ep-width: min(1280px, calc(100% - 96px));
+  }
+}
+
+/* Landscape phones: the same composition, packed into ~390px of height. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .root {
+    --ep-pad-top: 8px;
+    --ep-top-h: 28px;
+    --ep-row-gap: 8px;
+    --ep-col-gap: 24px;
+    --ep-width: calc(100% - 32px);
+    --ep-metrics-h: 60px;
+    --ep-cap-gap: 14px;
+  }
+
+  .frame { padding-bottom: 10px; }
+  .title { font-size: 20px; }
+  .railLabel { display: none; }
+  .railBtn { height: 24px; }
+  .top { gap: 24px; }
+  .metrics { column-gap: 16px; }
+  .metric { padding-top: 4px; }
+  .metricLabel { font-size: 11px; }
+  .value { font-size: 18px; }
+  .since { min-height: 15px; margin-top: 0; font-size: 11.5px; line-height: 15px; }
+  .side::after { height: 32px; bottom: -10px; }
+  .cap { padding-top: 10px; }
+  .kicker { display: none; }
+  .sentence { margin-top: 0; font-size: 18px; }
+  .deck { display: none; }
+}
+
+/* ---------- chart (inside BrandChartFrame), as in 25 ---------- */
+
+.plot {
+  --gutter: 44px;
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: var(--gutter) minmax(0, 1fr);
+}
+
+/* Y-axis gutter: tick labels sit here, vertically centred on their grid line. */
+.yaxis {
+  position: relative;
+}
+
+.tickLbl {
+  left: auto;
+  right: 8px;
+  transform: translateY(-50%);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.area {
+  position: relative;
+  min-width: 0;
+}
+
+.svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.at {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.lbl {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.lblStrong {
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.above { transform: translateY(-100%); padding-bottom: 3px; }
+.below { padding-top: 3px; }
+.center.above { transform: translate(-50%, -100%); }
+.center.below { transform: translateX(-50%); padding-top: 9px; }
+.alignR { left: auto; right: 0; }
+.belowLeft { transform: translate(-100%, -50%); padding-right: 6px; }
+/* The presale's raise label: two lines beside the sky bar, top-aligned with the fill's top. */
+.raised {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(12px, 10px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  white-space: nowrap;
+  line-height: 1.2;
+  color: var(--color-presale-ring);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.raised b {
+  color: var(--color-white);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.005em;
+}
+.raisedOf { color: var(--color-presale-ring); }
+
+/* The split column's labels: centred inside their segments, midnight on mint / iris / butter. */
+.segLbl {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--color-midnight);
+}
+
+.chipAt {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, calc(-100% - 8px));
+}
+
+.pt {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+}
+
+.redeemChip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-100%, -50%);
+  white-space: nowrap;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--color-mint);
+  color: var(--color-midnight);
+}
+
+.slabLbl {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--color-mint);
+}
+
+.segLblSide {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(10px, -50%);
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--color-butter);
+}
+
+@media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
+  .plot { --gutter: 54px; }
+  .lbl { font-size: 11.5px; }
+  .tickLbl { font-size: 11px; }
+  .segLbl,
+  .segLblSide,
+  .slabLbl { font-size: 14px; }
+  .raised { font-size: 13px; }
+  .raised b { font-size: 18px; }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .segLbl,
+  .segLblSide,
+  .slabLbl { font-size: 11px; }
+  .raised { font-size: 10.5px; }
+  .raised b { font-size: 13px; }
+}
+
+/* ---------- stills (reduced motion) and footer ---------- */
+
+.stillsWrap {
+  padding-top: 16px;
+}
+
+.still {
+  display: grid;
+  gap: 12px;
+}
+
+.metricsStill .value {
+  font-size: 22px;
+}
+
+.metricsStill .metricRow {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 10px;
+}
+
+.stills figcaption p:nth-child(2) {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--color-ink);
+}
+
+.footer {
+  display: grid;
+  gap: 6px;
+  padding-top: 12px;
+  padding-bottom: 48px;
+}
+
+.footnote {
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--color-ink-3);
+}
+
+.honesty {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-ink);
+}

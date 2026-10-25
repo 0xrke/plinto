@@ -265,6 +265,29 @@
   line-height: 1.25;
 }
 
+/* The value and its change since listing: stacked on phones, side by side (baseline) on wide. */
+.tileValue {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.since {
+  display: block;
+  min-height: 16px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.since b {
+  font-weight: 700;
+}
+
 /* ---------- mini chart (inside BrandChartFrame) ---------- */
 
 .chartSlot {
@@ -560,6 +583,13 @@
   .tile dt { font-size: 13px; }
   .tile dd { font-size: 20px; }
   .card:not([data-still]) .tile dd { font-size: 30px; line-height: 1.15; margin-top: 2px; }
+  .card:not([data-still]) .tileValue {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 12px;
+  }
+  .card:not([data-still]) .since { min-height: 0; font-size: 15px; line-height: 1.3; }
   .lbl { font-size: 11.5px; }
   .tickLbl { font-size: 11px; }
   .segLbl,
@@ -585,6 +615,8 @@
   .tile dd { font-size: 15px; }
   .card:not([data-still]) .tiles { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
   .card:not([data-still]) .tile dd { font-size: 15px; margin-top: 0; }
+  .card:not([data-still]) .tileValue { column-gap: 8px; }
+  .card:not([data-still]) .since { font-size: 11px; }
   .segLbl,
   .segLblSide,
   .slabLbl { font-size: 11px; }

@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { launchMath } from "@/lib/landing/sim/launch";
 import { simConstantsFromSdk } from "@/lib/landing/sim/fromSdk";
-import { BEAT_KEYS, ILLUSTRATION, beatCaption, storyFrame } from "../shared";
+import { BEAT_KEYS, ILLUSTRATION, SINCE_LISTING, beatCaption, formatPctChange, sinceListing, storyFrame } from "../shared";
 import { PanelChart, SPLIT_DIVIDE, SPLIT_SETTLE, columnGone, floorPaysLabel, panelScales, raisedOf, splitLabels, splitPhase } from "./PanelChart";
-import Variant from "./Variant";
+import Variant, { PanelTiles } from "./Variant";
 
 const m = launchMath(simConstantsFromSdk(), simConstantsFromSdk().defaultVaultSharePct);
 
@@ -169,6 +169,47 @@ describe("v25 one panel", () => {
       const d = panelScales(storyFrame(m, i + 1e-9));
       for (const t of [0, 2, 5, 9]) expect(c.pctX(t)).toBeCloseTo(d.pctX(t), 4);
     }
+  });
+
+  it("shows the change since listing in the tiles only once trading opens, with the right signs and tones", () => {
+    const tiles = (pos: number) => render(<PanelTiles m={m} frame={storyFrame(m, pos)} />);
+    // Presale and split: no percent at all, but the row is kept so the tile keeps its height.
+    for (const pos of [0.5, 1.5, 2]) {
+      const { container, unmount } = tiles(pos);
+      expect(container.querySelector('[data-part="since-now"]')).toBeNull();
+      expect(container.querySelector('[data-part="since-floor"]')).toBeNull();
+      expect(container.textContent).not.toContain(SINCE_LISTING);
+      unmount();
+    }
+    // The pump: the price is up (floor-green, "+"), the floor up a little (floor colour).
+    {
+      const { container, unmount } = tiles(2.9);
+      const now = container.querySelector('[data-part="since-now"]')!;
+      const floor = container.querySelector('[data-part="since-floor"]')!;
+      const want = sinceListing(m, storyFrame(m, 2.9));
+      expect(now.textContent).toBe(`${formatPctChange(want.now!)} ${SINCE_LISTING}`);
+      expect(now.textContent).toMatch(/^\+/);
+      expect(now.className).toContain("text-floor");
+      expect(floor.textContent).toMatch(/^\+[\d.]+% since listing$/);
+      expect(floor.className).toContain("text-floor");
+      unmount();
+    }
+    // After the sell-off: the price is down (coral, true minus), the floor still up.
+    {
+      const { container, unmount } = tiles(5);
+      const now = container.querySelector('[data-part="since-now"]')!;
+      expect(now.textContent).toMatch(/^\u2212\d+% since listing$/);
+      expect(now.className).toContain("text-risk");
+      expect(now.className).not.toContain("text-floor");
+      expect(container.querySelector('[data-part="since-floor"]')!.textContent).toMatch(/^\+/);
+      unmount();
+    }
+    // Redeemed: the price tile says so and drops its percent; the floor keeps its gain.
+    const { container } = tiles(8);
+    expect(container.querySelector('[data-part="since-now"]')).toBeNull();
+    expect(container.querySelector('[data-part="since-floor"]')!.textContent).toBe(
+      `${formatPctChange(sinceListing(m, storyFrame(m, 8)).floor!)} ${SINCE_LISTING}`,
+    );
   });
 
   it("renders static frames under reduced motion", async () => {

@@ -15,9 +15,10 @@ import styles from "./cleanSteps.module.css";
 
 /*
  * Variant 23: Clean steps (combo of v20 with the split column of v1/v3; see shared/COMBOS.md). Keeps
- * v20's clean look: dot progress with "n/8 · Beat" above the chart, the midnight chart card with the
- * ball on the floor's platforms, the two tiles under it, and numbered caption bubbles on the right
- * that scroll past. The split beat is now one tall stacked column on the chart's own $ axis (floor
+ * v20's clean look: the midnight chart card with the ball on the floor's platforms and numbered
+ * caption bubbles on the right that scroll past. Round 2: the landing's line-segment step rail with
+ * beat names runs across the top, and the two numbers ("Your $100 now", "Floor pays back", each with
+ * its change since listing) head the caption column, large, instead of sitting under the card. The split beat is now one tall stacked column on the chart's own $ axis (floor
  * mint at the bottom, market iris, fees butter on top, each labelled directly), and its floor
  * segment drops onto the floor slab the staircase starts from. The chart is a bit larger than v20's.
  */

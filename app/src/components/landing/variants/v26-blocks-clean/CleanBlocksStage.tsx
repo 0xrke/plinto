@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { floor100At } from "@/lib/landing/sim/floorPath";
 import { BEAT_START, STORY_T_END, T_GRAD, easeInOut } from "@/lib/landing/sim/timeline";
-import { BrandChartFrame, CHART, CHART_COPY, DASH, STROKE, TILE_FLOOR, TILE_NOW, formatUsdCents, formatUsdWhole, tileValues, type StoryFrame, type VariantProps } from "../shared";
+import { BrandChartFrame, CHART, CHART_COPY, DASH, STROKE, SINCE_LISTING, TILE_FLOOR, TILE_NOW, formatPctChange, formatUsdCents, sinceListing, formatUsdWhole, tileValues, type StoryFrame, type VariantProps } from "../shared";
 import { boxFaces, clamp01, easeOutCubic, lerpMap, niceTicks, plotFor, polyline, within, type Plot, type Size } from "./geometry";
 import styles from "./blocksClean.module.css";
 
@@ -256,47 +256,45 @@ export function CleanBlocksStage({ m, frame: raw, still = false }: VariantProps 
           <Scene m={m} frame={frame} size={size} under={Math.max(0, frame.valueOf100 - raw.valueOf100)} still={still} />
         </div>
       </BrandChartFrame>
-      <Tiles frame={frame} />
+      <Metrics m={m} frame={frame} />
     </div>
   );
 }
 
-/** The landing's two tiles, plus the block count: one cube per block the floor is built of. */
-function Tiles({ frame }: { frame: StoryFrame }) {
+/**
+ * The two story metrics, large: your $100 now and what the floor pays back, each with its change
+ * since listing (none before trading opens; none for the price once redeemed). On wide screens the
+ * panel sits in the caption column, pinned above the captions; on phones it is a row above the chart.
+ */
+export function Metrics({ m, frame }: VariantProps & { frame: StoryFrame }) {
   const { now, floor } = tileValues(frame);
-  const short = TILE_NOW.replace(/ now$/, "");
-  const harvests = frame.events.filter((e) => e.kind === "harvest").length;
-  const redeems = frame.events.filter((e) => e.kind === "redeem").length;
-  const hasFloor = frame.floorReveal > 0.5;
+  const pct = sinceListing(m, frame);
   return (
-    <div className={styles.tiles}>
-      <p className={styles.tileNow}>
-        <span>
-          {short}
-          {short !== TILE_NOW ? <span className={styles.wideOnly}>{TILE_NOW.slice(short.length)}</span> : null}
-        </span>
-        <b data-part="tile-now">{now}</b>
+    <div className={styles.metrics} data-part="metrics">
+      <p className={styles.metricNow}>
+        <span>{TILE_NOW}</span>
+        <b className={styles.metricValue} data-part="tile-now">
+          {now}
+        </b>
+        <Pct value={pct.now} part="pct-now" tone={pct.now !== null && pct.now < 0 ? "down" : "up"} />
       </p>
-      <p className={styles.tileFloor}>
+      <p className={styles.metricFloor}>
         <span>{TILE_FLOOR}</span>
-        <b data-part="tile-floor">{floor}</b>
+        <b className={styles.metricValue} data-part="tile-floor">
+          {floor}
+        </b>
+        <Pct value={pct.floor} part="pct-floor" tone="floor" />
       </p>
-      <div className={styles.tileBlocks} data-part="blocks">
-        <span className={styles.blocksHead}>
-          <span>Floor blocks</span>
-          <b className="tnum">{hasFloor ? 1 + harvests + redeems : 0}</b>
-        </span>
-        <span className={styles.cubes}>
-          {hasFloor ? <i className={`${styles.cube} ${styles.cubeBase}`} /> : null}
-          {Array.from({ length: harvests }, (_, i) => (
-            <i key={`h${i}`} className={`${styles.cube} ${styles.cubeHarvest}`} />
-          ))}
-          {Array.from({ length: redeems }, (_, i) => (
-            <i key={`r${i}`} className={`${styles.cube} ${styles.cubeRedeem}`} />
-          ))}
-        </span>
-      </div>
     </div>
+  );
+}
+
+function Pct({ value, part, tone }: { value: number | null; part: string; tone: "up" | "down" | "floor" }) {
+  if (value === null) return <span className={styles.pct} aria-hidden />;
+  return (
+    <span className={`${styles.pct} ${tone === "down" ? styles.pctDown : styles.pctUp}`} data-part={part} data-tone={tone}>
+      <b className="tnum">{formatPctChange(value)}</b> {SINCE_LISTING}
+    </span>
   );
 }
 

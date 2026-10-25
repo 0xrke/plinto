@@ -3,7 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { launchMath } from "@/lib/landing/sim/launch";
 import { simConstantsFromSdk } from "@/lib/landing/sim/fromSdk";
 import { storyFrame } from "@/lib/landing/sim/story";
-import { BEAT_KEYS, ILLUSTRATION, REAL_SCALE_LABEL, TILE_FLOOR, TILE_NOW, beatCaption } from "../shared";
+import { BEAT_KEYS, BEAT_LABELS, ILLUSTRATION, REAL_SCALE_LABEL, SINCE_LISTING, TILE_FLOOR, TILE_NOW, beatCaption, formatPctChange, sinceListing } from "../shared";
 import Variant from "./Variant";
 import { StepsStage } from "./StepsStage";
 import { COLUMN_TOP, columnBox, netPress, plotFor, scalesFor, splitPhases, treads } from "./geometry";
@@ -50,12 +50,17 @@ describe("v23 clean steps (v20 + the v1/v3 split column)", () => {
     expect(container.textContent).toContain(TILE_NOW);
     expect(container.textContent).toContain(TILE_FLOOR);
     expect(container.querySelector('[data-part="ball"]')).toBeTruthy();
-    // The landing's tiles sit under the card; the ball has no face; the pill stays butter.
-    expect(container.querySelector('[data-part="tile-now"]')).toBeTruthy();
+    // The two numbers are their own block (not the small tiles under the card); the ball has no face.
+    expect(container.querySelector('[data-part="metrics"] [data-part="tile-now"]')).toBeTruthy();
+    expect(container.querySelector('[data-part="metrics"] [data-part="tile-floor"]')).toBeTruthy();
     expect(container.querySelector("[data-mood]")).toBeNull();
-    const card = container.querySelector('[data-brand-chart="stage"]')!;
-    const tiles = container.querySelector('[data-part="tile-now"]')!;
-    expect(card.compareDocumentPosition(tiles) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The step rail: eight line segments with the beat names, no dots; the last one is current.
+    const rail = container.querySelector('nav[aria-label="Story steps"]')!;
+    const buttons = rail.querySelectorAll("button");
+    expect(buttons).toHaveLength(8);
+    BEAT_KEYS.forEach((key, i) => expect(buttons[i]!.textContent).toBe(BEAT_LABELS[key]));
+    expect(buttons[7]!.getAttribute("aria-current")).toBe("step");
+    expect(buttons[0]!.getAttribute("data-state")).toBe("done");
     // The final frame (redeem) shows the arbitrage line as a full staircase, no dent.
     const arb = container.querySelector('[data-part="arb"] path[stroke-dasharray]');
     expect(arb).toBeTruthy();
@@ -149,5 +154,50 @@ describe("v23 clean steps (v20 + the v1/v3 split column)", () => {
     for (let i = 1; i < runs.length; i++) expect(runs[i]![2]).toBeGreaterThan(runs[i - 1]![2]);
     expect(netPress(storyFrame(m, 5 + 1 / 3))).toBeGreaterThan(0.9);
     expect(netPress(storyFrame(m, 8))).toBe(0);
+  });
+
+  it("shows the change since listing beside both numbers only once trading has opened", () => {
+    const at = (pos: number) => render(<StepsStage m={m} frame={storyFrame(m, pos)} still />).container;
+    // Presale and split: no market yet, no percents (and no stray suffix).
+    for (const pos of [0.5, 1.6, 2]) {
+      const c = at(pos);
+      expect(c.querySelector('[data-part="since-now"]')).toBeNull();
+      expect(c.querySelector('[data-part="since-floor"]')).toBeNull();
+      expect(c.textContent).not.toContain(SINCE_LISTING);
+      cleanup();
+    }
+    // The pump's peak: price up (floor green), floor flat-or-up (floor colour).
+    const pump = storyFrame(m, 2.7);
+    const up = sinceListing(m, pump);
+    expect(up.now!).toBeGreaterThan(0);
+    let c = at(2.7);
+    const nowUp = c.querySelector('[data-part="since-now"]')!;
+    expect(nowUp.textContent).toBe(`${formatPctChange(up.now!)} ${SINCE_LISTING}`);
+    expect(nowUp.textContent).toMatch(/^\+/);
+    expect(nowUp.getAttribute("data-tone")).toBe("up");
+    expect(nowUp.className).toContain("text-floor");
+    cleanup();
+    // After the selloff: price down (coral risk), floor up since listing.
+    const late = storyFrame(m, 5.5);
+    const down = sinceListing(m, late);
+    c = at(5.5);
+    const nowDown = c.querySelector('[data-part="since-now"]')!;
+    expect(nowDown.textContent).toBe(`${formatPctChange(down.now!)} ${SINCE_LISTING}`);
+    expect(nowDown.textContent).toMatch(/^\u2212\d/);
+    expect(nowDown.getAttribute("data-tone")).toBe("down");
+    expect(nowDown.className).toContain("text-risk");
+    const floor = c.querySelector('[data-part="since-floor"]')!;
+    expect(floor.textContent).toBe(`${formatPctChange(down.floor!)} ${SINCE_LISTING}`);
+    expect(floor.textContent).toMatch(/^\+/);
+    expect(floor.className).toContain("text-floor");
+    // Each percent sits with its own value, in the same tile.
+    expect(nowDown.closest("dd")!.querySelector('[data-part="tile-now"]')).toBeTruthy();
+    expect(floor.closest("dd")!.querySelector('[data-part="tile-floor"]')).toBeTruthy();
+    cleanup();
+    // Redeemed: the price percent goes, the floor's stays.
+    c = at(8);
+    expect(c.querySelector('[data-part="tile-now"]')!.textContent).toBe("Redeemed");
+    expect(c.querySelector('[data-part="since-now"]')).toBeNull();
+    expect(c.querySelector('[data-part="since-floor"]')).toBeTruthy();
   });
 });

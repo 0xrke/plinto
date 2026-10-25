@@ -3,10 +3,10 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { launchMath } from "@/lib/landing/sim/launch";
 import { simConstantsFromSdk } from "@/lib/landing/sim/fromSdk";
 import { storyFrame } from "@/lib/landing/sim/story";
-import { BEAT_KEYS, ILLUSTRATION, REAL_SCALE_LABEL, beatCaption } from "../shared";
+import { BEAT_KEYS, ILLUSTRATION, REAL_SCALE_LABEL, SINCE_LISTING, beatCaption, formatPctChange, sinceListing } from "../shared";
 import { cameraAt, closeness } from "./camera";
 import { Scene } from "./CleanScene";
-import Variant from "./Variant";
+import Variant, { Metrics } from "./Variant";
 
 const k = simConstantsFromSdk();
 const m = launchMath(k, k.defaultVaultSharePct);
@@ -155,6 +155,53 @@ describe("v24 cinematic, clean", () => {
       }
       unmount();
     }
+  });
+
+  it("shows the change since listing beside both metrics, only once trading opens", () => {
+    const part = (el: ParentNode, p: string) => el.querySelector(`[data-part="${p}"]`);
+    // Presale and split: no market yet, so no percent (the slot stays laid out, empty).
+    for (const pos of [0.5, 1.9]) {
+      const { container, unmount } = render(<Metrics m={m} frame={storyFrame(m, pos)} />);
+      expect(part(container, "tile-now")).toBeTruthy();
+      expect(part(container, "change-now")).toBeNull();
+      expect(part(container, "change-floor")).toBeNull();
+      expect(container.textContent).not.toContain(SINCE_LISTING);
+      unmount();
+    }
+    // Pump finished: the price is up (floor green), the floor has grown from fees.
+    const pump = storyFrame(m, 3);
+    const up = render(<Metrics m={m} frame={pump} />);
+    const nowUp = part(up.container, "change-now")!;
+    expect(nowUp.textContent).toBe(`${formatPctChange(sinceListing(m, pump).now!)} ${SINCE_LISTING}`);
+    expect(nowUp.textContent).toMatch(/^\+/);
+    expect(nowUp.className).not.toMatch(/down/);
+    expect(part(up.container, "change-floor")!.textContent).toMatch(/^\+[\d.]+% since listing$/);
+    up.unmount();
+    // Selloff finished: the price is down (coral), the floor never is.
+    const sell = storyFrame(m, 4);
+    const down = render(<Metrics m={m} frame={sell} />);
+    const nowDown = part(down.container, "change-now")!;
+    expect(nowDown.textContent).toMatch(/^−\d+% since listing$/);
+    expect(nowDown.className).toMatch(/down/);
+    const floor = part(down.container, "change-floor")!;
+    expect(floor.textContent).toBe(`${formatPctChange(sinceListing(m, sell).floor!)} ${SINCE_LISTING}`);
+    expect(floor.className).toMatch(/up/);
+    down.unmount();
+    // Redeemed: your $100 has no price change any more; the floor keeps its own.
+    const end = render(<Metrics m={m} frame={storyFrame(m, 8)} />);
+    expect(part(end.container, "tile-now")!.textContent).toBe("Redeemed");
+    expect(part(end.container, "change-now")).toBeNull();
+    expect(part(end.container, "change-floor")!.textContent).toMatch(/^\+/);
+  });
+
+  it("renders the metrics before the screen and a line-segment progress with one segment per beat", () => {
+    const { container } = render(<Variant m={m} />);
+    const stage = container.querySelector("[data-brand-chart]")!.closest("[class]")!.parentElement!;
+    const order = Array.from(stage.querySelectorAll('[data-part="progress"], [data-beat="presale"], [data-part="tile-now"], [data-brand-chart]'));
+    const pos = (el: Element) => order.indexOf(el);
+    const card = stage.querySelector("[data-brand-chart]")!;
+    expect(pos(stage.querySelector('[data-part="tile-now"]')!)).toBeLessThan(pos(card));
+    expect(container.querySelector('[data-part="progress"]')?.children).toHaveLength(BEAT_KEYS.length);
   });
 
   it("renders one static frame per beat under reduced motion", async () => {

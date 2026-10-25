@@ -4,7 +4,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { launchMath } from "@/lib/landing/sim/launch";
 import { simConstantsFromSdk } from "@/lib/landing/sim/fromSdk";
-import { BEAT_KEYS, ILLUSTRATION, REAL_SCALE_LABEL, TILE_FLOOR, TILE_NOW, beatCaption, storyFrame } from "../shared";
+import { BEAT_KEYS, ILLUSTRATION, REAL_SCALE_LABEL, SINCE_LISTING, TILE_FLOOR, TILE_NOW, beatCaption, formatPctChange, sinceListing, storyFrame } from "../shared";
 import { FixedTape } from "./FixedTape";
 import { layoutTags } from "./tapeGeometry";
 import Variant from "./Variant";
@@ -56,8 +56,48 @@ describe("v27 tape, fixed", () => {
     // The finished frame: both value tags ride the playhead.
     expect(card!.textContent).toContain(TILE_NOW);
     expect(card!.textContent).toContain(TILE_FLOOR);
-    // The caption under the deck follows the chart's beat: the finished frame is the redeem beat.
-    expect(container.textContent).toContain(beatCaption(m, "redeem"));
+    // The caption heading follows the chart's beat (the finished frame is the redeem beat), and it
+    // sits above the card in the stage, not under it.
+    const caption = container.querySelector('[data-part="caption"]')!;
+    expect(caption.textContent).toBe(beatCaption(m, "redeem"));
+    expect(caption.compareDocumentPosition(card!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("the riding tags show the change since listing only once trading opens, with the right signs", () => {
+    const pct = (c: HTMLElement, part: string) => c.querySelector(`[data-part="pct-${part}"]`);
+    // Before trading opens (presale, split): values, but no percents.
+    for (const pos of [0.6, 1.9]) {
+      const { container } = render(<FixedTape m={m} frame={storyFrame(m, pos)} w={960} h={600} />);
+      expect(container.textContent).toContain(TILE_NOW);
+      expect(pct(container, "price")).toBeNull();
+      expect(pct(container, "floor")).toBeNull();
+      cleanup();
+    }
+    // Pump: the price is up; selloff: down. The floor never falls.
+    const signs: Array<[number, string]> = [
+      [2.7, "+"],
+      [3.8, "−"],
+    ];
+    for (const [pos, sign] of signs) {
+      const frame = storyFrame(m, pos);
+      const want = sinceListing(m, frame);
+      const { container } = render(<FixedTape m={m} frame={frame} w={960} h={600} />);
+      const price = pct(container, "price")!;
+      const floor = pct(container, "floor")!;
+      expect(price.textContent).toBe(`${formatPctChange(want.now!)} ${SINCE_LISTING}`);
+      expect(price.textContent!.startsWith(sign)).toBe(true);
+      // Up reads floor-green, down reads coral (risk).
+      expect(price.querySelector("tspan")!.getAttribute("class")).toMatch(sign === "+" ? /pctUp/ : /pctDown/);
+      expect(floor.textContent).toBe(`${formatPctChange(want.floor!)} ${SINCE_LISTING}`);
+      expect(want.floor!).toBeGreaterThanOrEqual(0);
+      expect(floor.textContent!.startsWith("−")).toBe(false);
+      expect(floor.querySelector("tspan")!.getAttribute("class")).toMatch(/pctFloor/);
+      cleanup();
+    }
+    // Redeemed: the price tag says so and drops its percent; the floor keeps its own.
+    const { container } = render(<FixedTape m={m} frame={storyFrame(m, 8)} w={358} h={600} />);
+    expect(pct(container, "price")).toBeNull();
+    expect(pct(container, "floor")!.textContent).toContain(SINCE_LISTING);
   });
 
   it("split: one stacked vertical column, floor at the bottom, market above, fees on top, labelled with percents", () => {

@@ -12,8 +12,10 @@ import styles from "./blocksClean.module.css";
  * segment. The market and the fees lift away, and the floor's slabs slide one by
  * one into the floor slab; every later fee harvest or kept exit fee settles one more block on top, so
  * the staircase is a stack of blocks at true scale. Clean layout: one large midnight chart card on the
- * left with its tiles under it, and plain captions on the right that scroll past (no cards replacing
- * each other); on phones the stage sits on top and the caption is the site's cloud card under it.
+ * left, and plain captions on the right that scroll past (no cards replacing each other), under the
+ * two metrics (your $100 now, floor pays back, each with its change since listing) pinned at the top
+ * of the caption column; on phones the metrics are a row above the chart, the stage sits on top and
+ * the caption is the site's cloud card under it.
  * Native scrolling only.
  */
 
@@ -81,6 +83,7 @@ export default function Variant({ m }: VariantProps) {
           heights={{ presale: 120, split: 150, pump: 90, steps: 100, bounce: 110, exits: 80 }}
           renderStep={(slot) => <Caption {...slot} />}
           stepClassName={styles.step}
+          stepsClassName={styles.steps}
           header={<Header share={floorSharePct(m)} />}
           footer={<Footer />}
         />

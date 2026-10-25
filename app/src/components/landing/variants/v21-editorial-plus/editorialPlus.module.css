@@ -1,10 +1,11 @@
 /*
- * Variant 21, "Editorial plus": variant 11's editorial layout (sticky chart, one big sentence per
- * beat, an index of beats) with a taller chart, the bold split column of variants 1 and 3, and less
- * chrome. Colours are site tokens only (var(--color-…)); radii and type follow shared/BRAND.md. Own
- * custom properties (--ep-*) so nothing collides with the harness defaults. Native scrolling only: no
- * scroll-snap, no scroll-behavior. Only opacity and geometry change with scroll (inline, from the
- * frame); no transitions on scrubbed values.
+ * Variant 21, "Editorial plus" (round 2): variant 11's editorial layout (sticky chart, one big
+ * sentence per beat scrolling past on the right) with a sticky header row (title, floor-share chip,
+ * the horizontal step line) above the chart and captions, and the two headline figures as big tiles
+ * at the top of the right column. Colours are site tokens only (var(--color-…)); radii and type
+ * follow shared/BRAND.md. Own custom properties (--ep-*) so nothing collides with the harness
+ * defaults. Native scrolling only: no scroll-snap, no scroll-behavior. Only opacity and geometry
+ * change with scroll (inline, from the frame, or the driver's --qN); no transitions on scrubbed values.
  */
 
 .page {
@@ -12,16 +13,22 @@
   padding-bottom: 56px;
 }
 
+/*
+ * Phones: a slim sticky step line, the chart under it, the two figure tiles right under the chart,
+ * and the caption card stuck under the tiles.
+ */
 .root {
-  --ep-stage-h: min(58svh, 500px);
-  --ep-gap: 12px;
-  --ep-card-room: 236px;
+  --ep-bar-h: 40px;
+  --ep-stage-h: min(50svh, 440px);
+  --ep-tiles-h: 72px;
+  --ep-gap: 10px;
+  --ep-card-room: 150px;
 }
 
 /* ---------- header ---------- */
 
-.head {
-  padding: 32px 0 16px;
+.intro {
+  padding: 32px 0 12px;
 }
 
 .titleRow {
@@ -32,35 +39,68 @@
   margin-top: 4px;
 }
 
-/* ---------- track: phones (stage on top, caption card under it) ---------- */
+.barTitle {
+  display: none;
+}
+
+/* ---------- track: phones ---------- */
 
 .root .track {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
 }
 
-.root .stage {
+.bar {
   grid-area: 1 / 1;
   align-self: start;
   position: sticky;
   top: 0;
-  z-index: 2;
-  height: var(--ep-stage-h);
-  margin-bottom: var(--ep-card-room);
-  min-width: 0;
+  z-index: 4;
+  height: var(--ep-bar-h);
   display: flex;
-  flex-direction: column;
-  padding-block: 8px 4px;
+  align-items: center;
+  min-width: 0;
   background: var(--color-surface);
 }
 
-/* A soft edge under the narrow stage, so cards slide under it gently (as on the landing). */
-.root .stage::after {
+.root .stage {
+  grid-area: 1 / 1;
+  align-self: start;
+  position: sticky;
+  top: var(--ep-bar-h);
+  z-index: 2;
+  height: var(--ep-stage-h);
+  margin-top: var(--ep-bar-h);
+  /* Released with the tiles at the end of the track, so the tiles never ride over the chart. */
+  margin-bottom: calc(var(--ep-tiles-h) + var(--ep-card-room));
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding-block: 2px 0;
+  background: var(--color-surface);
+}
+
+.tiles {
+  grid-area: 1 / 1;
+  align-self: start;
+  position: sticky;
+  top: calc(var(--ep-bar-h) + var(--ep-stage-h));
+  z-index: 3;
+  height: var(--ep-tiles-h);
+  margin-top: calc(var(--ep-bar-h) + var(--ep-stage-h));
+  margin-bottom: var(--ep-card-room);
+  min-width: 0;
+  padding-top: 8px;
+  background: var(--color-surface);
+}
+
+/* A soft edge under the tiles, so cards slide under them gently (as on the landing). */
+.tiles::after {
   content: "";
   position: absolute;
   inset-inline: 0;
   top: 100%;
-  height: 12px;
+  height: 10px;
   background: linear-gradient(var(--color-surface), transparent);
   pointer-events: none;
 }
@@ -69,13 +109,13 @@
   grid-area: 1 / 1;
   min-width: 0;
   margin: 0;
-  padding: calc(var(--ep-stage-h) + var(--ep-gap)) 0 0;
+  padding: calc(var(--ep-bar-h) + var(--ep-stage-h) + var(--ep-tiles-h) + var(--ep-gap)) 0 0;
   list-style: none;
 }
 
 .cap {
   position: sticky;
-  top: calc(var(--ep-stage-h) + var(--ep-gap));
+  top: calc(var(--ep-bar-h) + var(--ep-stage-h) + var(--ep-tiles-h) + var(--ep-gap));
   padding: 14px 16px 16px;
   border-radius: var(--radius-card);
   background: var(--color-cloud);
@@ -141,43 +181,198 @@
   color: var(--color-ink-3);
 }
 
-/* ---------- track: wide (chart left, sentences right) ---------- */
+/* ---------- step line (the landing's rail: line segments, beat names under them) ---------- */
+
+.line {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.lineList {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0 2px;
+  list-style: none;
+}
+
+.lineItem {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.lineBtn {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Hit area: at least 24 × 44 px, centred on the segment. */
+.lineBtn::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  height: 44px;
+  min-width: 24px;
+  transform: translateY(-50%);
+}
+
+.lineBtn:focus-visible {
+  outline: 2px solid var(--color-violet);
+  outline-offset: 2px;
+}
+
+.lineTrack {
+  position: absolute;
+  inset-inline: 0;
+  top: 12px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-track);
+  overflow: hidden;
+}
+
+/* Fills while its beat plays (q 0.05..0.75), straight from the driver's --qN: no re-render on scroll. */
+.lineFill {
+  position: absolute;
+  inset: 0;
+  background: var(--color-floor);
+  transform-origin: left center;
+  transform: scaleX(clamp(0, calc((var(--seg-q, 1) - 0.05) / 0.7), 1));
+}
+
+/* The current step: a taller segment with a floor-coloured ring (visible without colour alone). */
+.lineBtn[aria-current="step"] .lineTrack {
+  top: 10px;
+  height: 8px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1.5px var(--color-floor);
+}
+
+.lineLabel {
+  display: none;
+}
+
+.lineStatus {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--color-ink-2);
+}
+
+/* ---------- track: wide (header row; chart left; tiles and the caption ribbon right) ---------- */
 
 @media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
   .root {
-    --ep-stage-h: min(860px, calc(100svh - 40px));
-    /* The stage's sticky top: vertically centred. The index (tall screens) lines up with it. */
-    --ep-top: max(12px, calc(50svh - var(--ep-stage-h) / 2));
+    --ep-bar-h: 64px;
+    --ep-bar-gap: 18px;
+    --ep-tiles-h: 116px;
+    --ep-stage-max: 800px;
+    /* The bar's sticky top: the bar + chart block is vertically centred. */
+    --ep-top: max(16px, calc(50svh - (var(--ep-bar-h) + var(--ep-bar-gap) + var(--ep-stage-max)) / 2));
+    --ep-stage-top: calc(var(--ep-top) + var(--ep-bar-h) + var(--ep-bar-gap));
+    --ep-stage-h: min(var(--ep-stage-max), calc(100svh - var(--ep-stage-top) - 16px));
+    /* Where the caption ribbon reads: under the tiles. */
+    --ep-cap-top: calc(var(--ep-stage-top) + var(--ep-tiles-h) + 36px);
   }
 
-  .head {
-    padding: 64px 0 40px;
+  /* While the track shows, the bar carries the title; the intro is only for the reduced-motion page. */
+  .root:has(.track) .intro {
+    display: none;
+  }
+
+  .intro {
+    padding: 64px 0 32px;
+  }
+
+  .barTitle {
+    display: flex;
+    flex: none;
+    flex-wrap: nowrap;
+    margin-top: 0;
+    gap: 14px;
+  }
+
+  .title {
+    white-space: nowrap;
   }
 
   .root .track {
     grid-template-columns: minmax(0, 13fr) minmax(0, 7fr);
     column-gap: 56px;
+    padding-top: 24px;
+  }
+
+  .bar {
+    grid-area: 1 / 1 / 2 / 3;
+    top: var(--ep-top);
+    gap: 48px;
+  }
+
+  /* A white cover from the top of the viewport down to the bar, so outgoing captions slide away under it. */
+  .bar::before {
+    content: "";
+    position: absolute;
+    inset-inline: -16px;
+    bottom: 100%;
+    height: calc(var(--ep-top) + 8px);
+    background: var(--color-surface);
   }
 
   .root .stage {
     grid-area: 1 / 1;
-    top: var(--ep-top);
+    top: var(--ep-stage-top);
+    margin-top: calc(var(--ep-bar-h) + var(--ep-bar-gap));
     margin-bottom: 0;
     padding: 0;
     background: none;
   }
 
-  .root .stage::after {
-    display: none;
+  .tiles {
+    grid-area: 1 / 2;
+    top: var(--ep-stage-top);
+    margin-top: calc(var(--ep-bar-h) + var(--ep-bar-gap));
+    margin-bottom: 0;
+    padding-top: 0;
+  }
+
+  /* Covers the gap between the bar and the tiles. */
+  .tiles::before {
+    content: "";
+    position: absolute;
+    inset-inline: -16px;
+    bottom: 100%;
+    height: calc(var(--ep-bar-gap) + 2px);
+    background: var(--color-surface);
+  }
+
+  .tiles::after {
+    height: 24px;
   }
 
   .root .steps {
     grid-area: 1 / 2;
-    padding: 0 0 calc(var(--ep-stage-h) / 2);
+    position: relative;
+    z-index: 1;
+    padding: calc(var(--ep-cap-top) - var(--ep-top)) 0 calc(var(--ep-stage-h) / 2);
   }
 
   .cap {
-    top: max(16px, calc(50svh - 80px));
+    top: var(--ep-cap-top);
     padding: 18px 0 0;
     border-radius: 0;
     background: none;
@@ -208,7 +403,7 @@
     opacity: 0.4;
   }
 
-  /* Captions already read leave entirely, so no half-covered sentence peeks out under the index. */
+  /* Captions already read leave entirely, so no half-covered sentence peeks out under the tiles. */
   .step:has(~ .step[data-active="true"]) .cap {
     opacity: 0;
   }
@@ -226,143 +421,103 @@
     font-size: 16px;
     line-height: 1.5;
   }
-}
 
-/* ---------- beat index (wide, tall screens only) ---------- */
-
-.index {
-  display: none;
-}
-
-@media (min-width: 1024px) and (min-height: 760px) {
-  .root {
-    /* The index panel's height (4 rows of two); captions stick just under it. */
-    --ep-index-h: 188px;
+  /* The step line with the beat names under each segment. */
+  .lineList {
+    gap: 6px;
   }
 
-  /* The header stays above the index's cover while the track is still entering. */
-  .head {
-    position: relative;
-    z-index: 4;
+  .lineBtn {
+    height: 40px;
   }
 
-  /* Top-aligned with the chart stage, so the right column starts where the figures do. */
-  .index {
-    display: block;
-    grid-area: 1 / 2;
-    align-self: start;
-    position: sticky;
-    top: var(--ep-top);
-    z-index: 3;
-    height: var(--ep-index-h);
-    background: var(--color-surface);
-    box-shadow: 0 30px 0 var(--color-surface);
-  }
-
-  /* A white cover from the top of the viewport down to the index, so outgoing captions slide away under it. */
-  .index::before {
-    content: "";
-    position: absolute;
-    inset-inline: -16px;
-    bottom: 100%;
-    height: calc(var(--ep-top) + 8px);
-    background: var(--color-surface);
-  }
-
-  .indexPanel {
-    height: 100%;
-  }
-
-  .root .steps {
-    position: relative;
-    z-index: 1;
-    padding-top: calc(var(--ep-index-h) + 32px);
-  }
-
-  .cap {
-    top: calc(var(--ep-top) + var(--ep-index-h) + 32px);
-  }
-}
-
-.indexPanel {
-  padding: 16px 18px 12px;
-  border-radius: var(--radius-card);
-  background: var(--color-cloud);
-}
-
-.indexHead {
-  padding: 0 8px 6px;
-}
-
-.indexList {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  column-gap: 8px;
-  row-gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.indexItem {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  width: 100%;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 999px;
-  background: none;
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 500;
-  text-align: left;
-  color: var(--color-ink-3);
-  cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
-}
-
-.indexItem span {
-  color: inherit;
-  font-size: 11.5px;
-  font-weight: 600;
-}
-
-.indexItem[data-state="done"] {
-  color: var(--color-ink-2);
-}
-
-.indexItem[data-state="active"] {
-  background: var(--color-floor-soft);
-  color: var(--color-floor);
-  font-weight: 700;
-}
-
-.indexItem:hover {
-  color: var(--color-violet);
-}
-
-.indexItem:focus-visible {
-  outline: 2px solid var(--color-violet);
-  outline-offset: 2px;
-}
-
-@media (orientation: landscape) and (max-height: 500px) {
-  .root {
-    --ep-stage-h: calc(100svh - 16px);
-  }
-
-  .root .stage {
+  .lineTrack {
     top: 8px;
   }
 
+  .lineBtn[aria-current="step"] .lineTrack {
+    top: 6px;
+  }
+
+  .lineLabel {
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 19px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: clip;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    color: var(--color-ink-3);
+    transition: color 120ms ease;
+  }
+
+  .lineBtn[data-state="done"] .lineLabel {
+    color: var(--color-ink-2);
+  }
+
+  .lineBtn[aria-current="step"] .lineLabel {
+    font-weight: 700;
+    color: var(--color-ink);
+  }
+
+  .lineBtn:hover .lineLabel {
+    color: var(--color-violet);
+  }
+
+  .lineStatus {
+    display: none;
+  }
+}
+
+/* Landscape phones: a slimmer bar (no title, the status instead of names) and compact tiles. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .root {
+    --ep-bar-h: 32px;
+    --ep-bar-gap: 6px;
+    --ep-tiles-h: 104px;
+    --ep-top: 6px;
+    --ep-stage-h: calc(100svh - var(--ep-stage-top) - 8px);
+    --ep-cap-top: calc(var(--ep-stage-top) + var(--ep-tiles-h) + 16px);
+  }
+
+  .barTitle {
+    display: none;
+  }
+
+  .root .track {
+    padding-top: 8px;
+  }
+
+  .lineBtn {
+    height: 28px;
+  }
+
+  .lineTrack {
+    top: 12px;
+  }
+
+  .lineBtn[aria-current="step"] .lineTrack {
+    top: 10px;
+  }
+
+  .lineLabel {
+    display: none;
+  }
+
+  .lineStatus {
+    display: inline;
+  }
+
   .sentence {
-    font-size: 22px;
+    font-size: 20px;
   }
 
   .deck {
-    font-size: 13.5px;
-    margin-top: 8px;
+    font-size: 13px;
+    margin-top: 6px;
   }
 }
 
@@ -380,22 +535,25 @@
   height: auto;
 }
 
+
+/* ---------- the two headline figures ---------- */
+
 .figures {
   flex: none;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
+  height: 100%;
+  margin: 0;
 }
 
 .fig {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
   justify-content: center;
   gap: 1px;
   min-width: 0;
-  height: 48px;
-  padding: 0 12px;
+  padding: 6px 12px;
   border-radius: 12px;
 }
 
@@ -428,11 +586,20 @@
   stroke-width: 2.25;
 }
 
+.figBody {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  margin: 0;
+}
+
 .figValue {
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: 21px;
   font-weight: 700;
   line-height: 1.1;
+  letter-spacing: -0.01em;
   color: var(--color-ink);
 }
 
@@ -440,7 +607,40 @@
   color: var(--color-floor);
 }
 
-@media (min-width: 1024px) {
+/* "−61% since listing": smaller than the value, readable, always one line tall (empty before listing). */
+.since {
+  display: block;
+  min-height: 1.3em;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--color-ink-3);
+}
+
+.since b {
+  font-weight: 700;
+}
+
+.sinceUp b {
+  color: var(--color-floor);
+}
+
+.sinceDown b {
+  color: var(--color-risk);
+}
+
+.figuresStill {
+  height: auto;
+}
+
+.figuresStill .fig {
+  padding: 8px 12px;
+}
+
+@media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
   .chart {
     gap: 12px;
   }
@@ -450,9 +650,8 @@
   }
 
   .fig {
-    gap: 2px;
-    height: 64px;
-    padding: 0 18px;
+    gap: 4px;
+    padding: 12px 16px;
     border-radius: var(--radius-soft);
   }
 
@@ -460,18 +659,68 @@
     font-size: 12.5px;
   }
 
+  .figBody {
+    gap: 3px;
+  }
+
   .figValue {
-    font-size: 24px;
-    letter-spacing: -0.01em;
+    font-size: clamp(24px, 2.2vw, 32px);
+  }
+
+  .since {
+    font-size: 14px;
   }
 
   .figuresStill .fig {
-    height: 56px;
+    padding: 10px 16px;
   }
 
   .figuresStill .figValue {
     font-size: 20px;
   }
+
+  .figuresStill .since {
+    font-size: 12px;
+  }
+}
+
+/* Landscape phones: the column is narrow, so the tiles stack, each with its value and percent on one line. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .figuresLive {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .figuresLive .figBody {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .fig {
+    gap: 1px;
+    padding: 4px 12px;
+    border-radius: 12px;
+  }
+
+  .figLabel {
+    font-size: 11.5px;
+  }
+
+  .figValue {
+    font-size: 20px;
+  }
+
+  .since {
+    font-size: 11.5px;
+  }
+}
+
+/* The reduced-motion still: figures over the chart, in one white card. */
+.stillCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .svg {

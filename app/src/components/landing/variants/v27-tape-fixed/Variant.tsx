@@ -18,7 +18,6 @@ import {
   StoryStills,
   StoryTrack,
   useJumpToBeat,
-  usePos,
   useStoryFrame,
   useStoryLaunch,
   type StepHeights,
@@ -128,38 +127,32 @@ function Rail({ pos, index }: { pos: number; index: number }) {
   );
 }
 
-/** The sticky deck: the rail, then the tape card. */
+/**
+ * The beat's caption as a large heading between the rail and the card, in the eye line (round 2: it
+ * used to sit under the card and got lost against the chart). It follows the frame's beat, the same
+ * one the rail's status and the chart show. Keyed by beat, so a new caption fades in (no travel, so
+ * nothing slides when scrolling back). Screen readers get the step list instead.
+ */
+function CaptionHead({ index }: { index: number }) {
+  const m = useStoryLaunch();
+  return (
+    <div className={s.capHead} aria-hidden>
+      <p key={index} className={s.caption} data-part="caption">
+        {beatCaption(m, BEAT_KEYS[index]!)}
+      </p>
+    </div>
+  );
+}
+
+/** The sticky deck: the rail, the caption heading, then the tape card. */
 function Deck() {
   const m = useStoryLaunch();
   const frame = useStoryFrame();
   return (
     <div className={s.deck}>
       <Rail pos={frame.pos} index={frame.beatIndex} />
+      <CaptionHead index={frame.beatIndex} />
       <TapeCard m={m} frame={frame} />
-    </div>
-  );
-}
-
-/**
- * The caption under the deck, inside the sticky stage: one beat at a time, swapped when the driver's
- * active beat changes (so scrolling back swaps it back). Screen readers get the step list instead.
- */
-function CaptionPanel() {
-  const m = useStoryLaunch();
-  // The chart's beat, from pos (the engine's own mapping), not the driver's active step: the active
-  // step flips at the step's edge while the chart still holds the previous beat's finished frame, so
-  // v19's caption ran a beat ahead of the chart near every boundary.
-  const pos = usePos();
-  const index = pos <= 0 ? 0 : Math.min(BEAT_KEYS.length - 1, Math.ceil(pos) - 1);
-  const key = BEAT_KEYS[index]!;
-  return (
-    <div className={s.capPanel} aria-hidden>
-      <div key={index} className={s.card}>
-        <p className={`caps ${s.capLabel}`}>
-          <span className="tnum text-floor">{pad2(index + 1)}</span> · {BEAT_LABELS[key]}
-        </p>
-        <p className={s.caption}>{beatCaption(m, key)}</p>
-      </div>
     </div>
   );
 }
@@ -187,7 +180,6 @@ export default function Variant({ m }: VariantProps) {
         <StoryTrack className={s.track}>
           <StoryStage className={s.stage}>
             <Deck />
-            <CaptionPanel />
           </StoryStage>
           <StorySteps heights={HEIGHTS} renderStep={Caption} className={s.steps} stepClassName={s.step} />
         </StoryTrack>

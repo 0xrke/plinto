@@ -14,7 +14,10 @@ import {
   STORY_POS_END,
   storyFrame,
   alpha,
+  SINCE_LISTING,
+  formatPctChange,
   formatUsdWhole,
+  sinceListing,
   tileValues,
   type StoryFrame,
   type VariantProps,
@@ -106,8 +109,10 @@ export function FixedTape({ m, frame, w, h, className = "" }: TapeProps) {
   const top = RULER + (compact ? 16 : 26);
   const bot = h - FOOT - 8;
   /* Value tags ride the playhead on the narrow strip of unwritten tape to its right. */
-  const tagW = compact ? 98 : 150;
-  const tagH = compact ? 36 : 50;
+  const tagW = compact ? 124 : 172;
+  // A tag is label + value, plus a third line with the change since listing once trading opens.
+  const tagH0 = compact ? 36 : 50;
+  const tagH1 = compact ? 52 : 74;
   const tagGap = compact ? 8 : 18;
   // The playhead (and so the current action) sits in the middle of the card.
   const playX = Math.round(Math.min(w * 0.5, w - tagW - tagGap - (compact ? 6 : 24)));
@@ -266,7 +271,10 @@ export function FixedTape({ m, frame, w, h, className = "" }: TapeProps) {
 
   // Both tags numeric: the larger number takes the upper tag, whatever the lines' order.
   const priceOnTop = now !== TILE_REDEEMED && frame.floorNet100 !== null ? frame.valueOf100 >= frame.floorNet100 : undefined;
-  const tags = layoutTags(priceY, showFloorTag ? floorY : null, tagH, top - 8, bot, 6, priceOnTop);
+  const change = sinceListing(m, frame);
+  const priceH = change.now !== null ? tagH1 : tagH0;
+  const floorH = change.floor !== null ? tagH1 : tagH0;
+  const tags = layoutTags(priceY, showFloorTag ? floorY : null, Math.max(priceH, showFloorTag ? floorH : 0), top - 8, bot, 6, priceOnTop);
   const tagX = playX + tagGap;
   const peakText = CHART_COPY.peak(frame.peak.value);
   const peakW = chipWidth(peakText, compact);
@@ -581,28 +589,65 @@ export function FixedTape({ m, frame, w, h, className = "" }: TapeProps) {
         <g opacity={frame.floorReveal}>
           <circle cx={playX} cy={floorY} r={4.5} className={s.floorDot} />
           <path d={`M${playX + 5} ${floorY}L${tagX} ${tags.floor}`} className={s.connMint} />
-          <rect x={tagX} y={tags.floor - tagH / 2} width={tagW} height={tagH} rx={10} className={s.tagFloor} />
-          <text x={tagX + 10} y={tags.floor - tagH / 2 + (compact ? 13 : 18)} className={s.tagLabel}>
-            {TILE_FLOOR}
-          </text>
-          <text x={tagX + 10} y={tags.floor + tagH / 2 - (compact ? 7 : 10)} className={s.tagValue}>
-            {floor}
-          </text>
+          <TagBody x={tagX} cy={tags.floor} w={tagW} h={floorH} compact={compact} tone="floor" label={TILE_FLOOR} value={floor} pct={change.floor} part="floor" />
         </g>
       ) : null}
       <g opacity={Math.max(0.55, frame.priceOpacity)}>
         <circle cx={playX} cy={priceY} r={10} style={{ fill: CHART.bounceHalo }} />
         <circle cx={playX} cy={priceY} r={5} className={s.priceDot} />
         <path d={`M${playX + 6} ${priceY}L${tagX} ${tags.price}`} className={s.connWhite} />
-        <rect x={tagX} y={tags.price - tagH / 2} width={tagW} height={tagH} rx={10} className={s.tagPrice} />
-        <text x={tagX + 10} y={tags.price - tagH / 2 + (compact ? 13 : 18)} className={s.tagLabel}>
-          {TILE_NOW}
-        </text>
-        <text x={tagX + 10} y={tags.price + tagH / 2 - (compact ? 7 : 10)} className={s.tagValue}>
-          {now}
-        </text>
+        <TagBody x={tagX} cy={tags.price} w={tagW} h={priceH} compact={compact} tone="price" label={TILE_NOW} value={now} pct={change.now} part="price" />
       </g>
     </svg>
+  );
+}
+
+/**
+ * One value tag riding the playhead: label, value and (once trading opens) the change since listing
+ * under the value. The floor's change reads in the floor colour; the price's is floor-green when up
+ * and coral (risk) when down.
+ */
+function TagBody({
+  x,
+  cy,
+  w,
+  h,
+  compact,
+  tone,
+  label,
+  value,
+  pct,
+  part,
+}: {
+  x: number;
+  cy: number;
+  w: number;
+  h: number;
+  compact: boolean;
+  tone: "price" | "floor";
+  label: string;
+  value: string;
+  pct: number | null;
+  part: "price" | "floor";
+}) {
+  const y0 = cy - h / 2;
+  const pctClass = tone === "floor" ? s.pctFloor : pct !== null && pct < 0 ? s.pctDown : s.pctUp;
+  return (
+    <>
+      <rect x={x} y={y0} width={w} height={h} rx={10} className={tone === "floor" ? s.tagFloor : s.tagPrice} />
+      <text x={x + 10} y={y0 + (compact ? 13 : 18)} className={s.tagLabel}>
+        {label}
+      </text>
+      <text x={x + 10} y={y0 + (compact ? 30 : 41)} className={s.tagValue}>
+        {value}
+      </text>
+      {pct !== null ? (
+        <text data-part={`pct-${part}`} x={x + 10} y={y0 + (compact ? 45 : 63)} className={s.tagPct}>
+          <tspan className={pctClass}>{formatPctChange(pct)}</tspan>
+          <tspan className={s.tagPctSuffix}> {SINCE_LISTING}</tspan>
+        </text>
+      ) : null}
+    </>
   );
 }
 

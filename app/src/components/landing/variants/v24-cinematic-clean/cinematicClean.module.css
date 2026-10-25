@@ -1,7 +1,8 @@
 /*
- * Variant 24: Cinematic, clean (from v13-cinematic-site and v03-cinematic). A 100svh sticky stage on the white page: the screen (the
- * midnight chart card) fills the 1120px column, the subtitles sit on white under it, the reel at the
- * bottom. Caption fades read the driver's --qN variables (set on the [data-rail] caption layer).
+ * Variant 24: Cinematic, clean (from v13-cinematic-site and v03-cinematic). A 100svh sticky stage on
+ * the white page, read top-down: the header (title and step progress), the caption heading with the
+ * two metrics beside it, then the screen (the midnight chart card) filling the rest of the 1120px
+ * column. Nothing sits under the screen. Caption fades read the driver's --qN variables (set on the [data-rail] caption layer).
  * Only transform and opacity move; nothing animates on a timer. Colours are var(--color-…) tokens.
  */
 
@@ -21,23 +22,21 @@
   background: var(--color-surface);
 }
 
-/* The stage grid: screen, tiles, subtitles, reel (phone); screen over subtitles | tiles (wide). */
+/* The stage grid, top-down: header, caption, metrics, screen (phone and tablet); caption | metrics
+   side by side from 1024px. The screen takes all the height left. */
 .frame {
   height: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  /* Phones: the screen is capped (BRAND: at most min(55svh, 480px)-ish) and the reel runs under it like a
-     scrubber, so the caption never sits on the bottom edge; the block is centred in the viewport. */
-  grid-template-rows: minmax(0, min(63svh, 560px)) auto auto auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   grid-template-areas:
-    "screen"
-    "reel"
-    "tiles"
-    "subs";
-  align-content: center;
+    "head"
+    "subs"
+    "metrics"
+    "screen";
   row-gap: var(--row-gap);
   padding-top: var(--pad-y);
-  padding-bottom: calc(var(--pad-y) + 24px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(var(--pad-y) + env(safe-area-inset-bottom, 0px));
 }
 
 .screen {
@@ -46,8 +45,85 @@
   position: relative;
 }
 
-.tiles {
-  grid-area: tiles;
+/* ---------- metrics: your $100 and the floor, with the change since listing ---------- */
+
+.metrics {
+  grid-area: metrics;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 16px;
+}
+
+.metric {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--color-line);
+}
+
+.metric + .metric {
+  border-left-color: var(--color-floor-ring);
+}
+
+.metricLabel {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-ink-2);
+  white-space: nowrap;
+}
+
+.metricRow {
+  display: grid;
+  gap: 2px;
+}
+
+.metricValue {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+  white-space: nowrap;
+}
+
+.metricFloor {
+  color: var(--color-floor);
+}
+
+/* Always laid out (empty before listing), so the screen never jumps when the percent appears. */
+.change {
+  display: block;
+  min-height: 1.35em;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.change b {
+  font-weight: 700;
+}
+
+.changeSuffix {
+  font-weight: 600;
+  color: var(--color-ink-3);
+}
+
+.up {
+  color: var(--color-floor);
+}
+
+.down {
+  color: var(--color-risk);
+}
+
+/* Reduced-motion still: metrics above the still card. */
+.stillCard {
+  display: grid;
+  gap: 12px;
 }
 
 /* ---------- scene (inside BrandChartFrame) ---------- */
@@ -271,25 +347,91 @@
   white-space: nowrap;
 }
 
-/* ---------- subtitles ---------- */
+/* ---------- header: title and the step progress ---------- */
 
 .captionLayer {
   display: contents;
 }
 
+.header {
+  grid-area: head;
+  display: grid;
+  gap: 12px;
+}
+
+/* Phones: the title lives in the opening title card; the header is the progress line with names. */
+.headTitle {
+  display: none;
+  align-items: center;
+  gap: 14px;
+  white-space: nowrap;
+}
+
+.reel {
+  display: flex;
+  gap: 4px;
+}
+
+.reelItem {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  /* 1 while this beat is playing (0 < q < 1). */
+  --cur: calc(clamp(0, var(--q) * 1000, 1) * clamp(0, (1 - var(--q)) * 1000, 1));
+}
+
+.reelSeg {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-track);
+  overflow: hidden;
+  transform: scaleY(calc(1 + var(--cur) * 0.5));
+}
+
+.reelFill {
+  display: block;
+  height: 100%;
+  background: var(--color-floor);
+  transform-origin: left;
+  transform: scaleX(var(--q));
+}
+
+.reelLabel {
+  display: block;
+  /* Phones: eight names in ~43px each, so small but still legible; 12.5px from tablets up. */
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* The playing beat's name reads in ink. */
+  opacity: calc(0.7 + 0.3 * var(--cur));
+}
+
+/* Phones: "Redeem" is a touch wider than its segment, so the last name hangs right-aligned into the
+   short "Exits" slot instead of being cut. */
+.reelItem:last-child .reelLabel {
+  justify-self: end;
+  overflow: visible;
+}
+
+/* ---------- subtitles: the caption heading right above the screen ---------- */
+
 .subs {
   grid-area: subs;
   display: grid;
-  /* Room for a kicker and three caption lines, so the screen never jumps. */
-  min-height: 104px;
+  /* Room for a kicker and two caption lines, so the screen never jumps. */
+  min-height: 80px;
   pointer-events: none;
 }
 
 .titleCard,
 .sub {
   grid-area: 1 / 1;
-  /* Phones: right under the tiles; wide screens: on the tiles' baseline. */
-  align-self: start;
+  align-self: end;
 }
 
 .titleCard {
@@ -298,14 +440,14 @@
 }
 
 .title {
-  font-size: 36px;
+  font-size: 34px;
 }
 
 .titleHint {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 .sub {
@@ -324,7 +466,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .kickerRule {
@@ -338,55 +480,10 @@
   font-family: var(--font-display);
   font-size: 18px;
   font-weight: 700;
-  line-height: 1.35;
+  line-height: 1.3;
   letter-spacing: -0.01em;
   color: var(--color-ink);
   text-wrap: balance;
-}
-
-/* ---------- reel: the landing's progress rail ---------- */
-
-.reel {
-  grid-area: reel;
-  display: flex;
-  gap: 4px;
-}
-
-.reelItem {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  gap: 8px;
-  /* 1 while this beat is playing (0 < q < 1). */
-  --cur: calc(clamp(0, var(--q) * 1000, 1) * clamp(0, (1 - var(--q)) * 1000, 1));
-}
-
-.reelSeg {
-  display: block;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--color-track);
-  overflow: hidden;
-  transform: scaleY(calc(1 + var(--cur)));
-}
-
-.reelFill {
-  display: block;
-  height: 100%;
-  background: var(--color-floor);
-  transform-origin: left;
-  transform: scaleX(var(--q));
-}
-
-.reelLabel {
-  display: none;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--color-ink-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  opacity: calc(0.75 + 0.25 * var(--cur));
 }
 
 /* ---------- wide ---------- */
@@ -404,76 +501,112 @@
     right: 9%;
   }
 
-  .frame {
-    grid-template-rows: minmax(0, 1fr) auto auto auto;
-    grid-template-areas:
-      "screen"
-      "tiles"
-      "subs"
-      "reel";
-    align-content: stretch;
-    padding-bottom: calc(var(--pad-y) + env(safe-area-inset-bottom, 0px));
+  .headTitle {
+    display: flex;
   }
 
-  .reel {
-    padding-top: 4px;
+  .reelItem {
+    gap: 8px;
+  }
+
+  .reelLabel {
+    font-size: 12.5px;
+  }
+
+  .reelItem:last-child .reelLabel {
+    justify-self: stretch;
+    overflow: hidden;
+  }
+
+  /* The header carries the title from here up; the opening card is just the hint. */
+  .title,
+  .titleChip {
+    display: none;
+  }
+
+  .titleHint {
+    margin-top: 0;
   }
 
   .caption {
     font-size: 22px;
-    line-height: 1.3;
-  }
-
-  .title {
-    font-size: 46px;
+    line-height: 1.25;
   }
 
   .subs {
-    min-height: 100px;
+    min-height: 84px;
   }
 
-  .reelLabel {
-    display: block;
+  .metrics {
+    grid-template-columns: repeat(2, 200px);
+    column-gap: 28px;
+  }
+
+  .metricLabel {
+    font-size: 12.5px;
+  }
+
+  .metricValue {
+    font-size: 26px;
+  }
+
+  .change {
+    font-size: 13px;
   }
 }
 
 @media (min-width: 1024px) {
   .root {
     --pad-y: 24px;
-    --row-gap: 20px;
+    --row-gap: 18px;
   }
 
   .frame {
-    grid-template-columns: minmax(0, 1fr) 360px;
-    grid-template-rows: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto minmax(0, 1fr);
     grid-template-areas:
-      "screen screen"
-      "subs tiles"
-      "reel reel";
+      "head head"
+      "subs metrics"
+      "screen screen";
     column-gap: 48px;
   }
 
-  .tiles {
-    align-self: end;
+  .header {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 48px;
   }
 
-  .titleCard,
-  .sub {
+  .headTitle {
+    font-size: 26px;
+  }
+
+  .metrics {
     align-self: end;
+    grid-template-columns: repeat(2, 196px);
+    column-gap: 32px;
+  }
+
+  .metric {
+    padding-left: 16px;
+  }
+
+  .metricValue {
+    font-size: 30px;
+  }
+
+  .change {
+    font-size: 13.5px;
   }
 
   .caption {
     font-size: 26px;
-    line-height: 1.25;
+    line-height: 1.22;
     max-width: 34ch;
   }
 
-  .title {
-    font-size: clamp(46px, 4vw, 56px);
-  }
-
   .subs {
-    min-height: 112px;
+    min-height: 92px;
   }
 
   /* The card is ~1000px wide here: chart type and chips scale up with it so they don't read as specks. */
@@ -540,20 +673,21 @@
     --row-gap: 8px;
   }
 
-  .caption {
-    font-size: 18px;
+  .headTitle,
+  .reelLabel {
+    display: none;
   }
 
-  .title {
-    font-size: 32px;
+  .caption {
+    font-size: 17px;
   }
 
   .subs {
-    min-height: 64px;
+    min-height: 60px;
   }
 
-  .reelLabel {
-    display: none;
+  .metricValue {
+    font-size: 20px;
   }
 }
 

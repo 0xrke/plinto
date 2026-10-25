@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { launchMath } from "@/lib/landing/sim/launch";
 import { simConstantsFromSdk } from "@/lib/landing/sim/fromSdk";
-import { BEAT_KEYS, ILLUSTRATION, REAL_SCALE_LABEL, beatCaption, storyFrame } from "../shared";
+import { BEAT_KEYS, ILLUSTRATION, REAL_SCALE_LABEL, SINCE_LISTING, beatCaption, formatUsdCents, listingBaseline, storyFrame } from "../shared";
 import { BEATS, storyValueAt } from "@/lib/landing/sim/story";
 import { EditorialPlusChart, columnSegments, landedValue, splitPhases, spreadLabels } from "./EditorialPlusChart";
+import { FigureTiles, figureValues } from "./StoryFigures";
 import Variant from "./Variant";
 
 const k = simConstantsFromSdk();
@@ -39,15 +40,24 @@ afterEach(() => {
 });
 
 describe("v21 Editorial plus", () => {
-  it("renders each beat's caption in order on the motion track, with the beat index", () => {
+  it("renders each beat's caption in order on the motion track, with the step line and live figures", () => {
     const { container } = render(<Variant m={m} />);
     const steps = container.querySelectorAll<HTMLElement>("[data-step]");
     expect(steps).toHaveLength(8);
     BEAT_KEYS.forEach((key, i) => expect(steps[i]!.textContent).toContain(beatCaption(m, key)));
     expect(screen.getByTestId("story-track")).toBeTruthy();
     expect(screen.queryByTestId("story-stills")).toBeNull();
-    expect(screen.getByRole("navigation", { name: "Story steps" }).querySelectorAll("button")).toHaveLength(8);
+    const line = screen.getByRole("navigation", { name: "Story steps" });
+    expect(line.querySelectorAll("button")).toHaveLength(8);
+    // The step line carries the driver's --qN variables (pure-CSS fill), and the old index card is gone.
+    expect(line.hasAttribute("data-rail")).toBe(true);
+    expect(container.textContent).not.toContain("In this story");
     expect(container.querySelector("[data-brand-chart]")).toBeTruthy();
+    // The headline figures sit outside the chart (right column / under the chart on phones), not above it.
+    const live = container.querySelector('[data-part="live-figures"]')!;
+    expect(live.querySelector('[data-part="now"]')).toBeTruthy();
+    expect(live.querySelector('[data-part="floor"]')).toBeTruthy();
+    expect(container.querySelector('[data-chart="stage"] [data-part="figures"]')).toBeNull();
   });
 
   it("reduced motion renders eight static frames in still chart cards and no track", () => {
@@ -60,6 +70,9 @@ describe("v21 Editorial plus", () => {
     expect(stills.querySelectorAll('[data-brand-chart="still"]')).toHaveLength(8);
     for (const key of BEAT_KEYS) expect(stills.textContent).toContain(beatCaption(m, key));
     expect(stills.querySelectorAll('[data-part="floor-steps"]').length).toBeGreaterThan(0);
+    expect(stills.querySelectorAll('[data-part="figures"]')).toHaveLength(8);
+    // Presale and split stills have no since-listing percent; every later still has the floor's.
+    expect(stills.querySelectorAll('[data-part="since-floor"]')).toHaveLength(6);
   });
 
   it("bounce frame: floor staircase, arbitrage line, bounce dot, Illustration and real-scale chips", () => {
@@ -72,7 +85,10 @@ describe("v21 Editorial plus", () => {
     cleanup();
     const presale = render(<EditorialPlusChart m={m} frame={storyFrame(m, 1)} />);
     expect(presale.container.querySelector('[data-part="illustration"]')).toBeNull();
-    expect(presale.container.querySelector('[data-part="now"]')!.textContent).toBe("$100.00");
+    expect(presale.container.querySelector('[data-part="now"]')).toBeNull();
+    cleanup();
+    const tiles = render(<FigureTiles v={figureValues(m, storyFrame(m, 1))} />);
+    expect(tiles.container.querySelector('[data-part="now"]')!.textContent).toBe("$100.00");
   });
 
   it("draws the bounce landing on the arbitrage line, never under it, and leaves every other beat alone", () => {
@@ -160,5 +176,47 @@ describe("v21 Editorial plus", () => {
     expect(p0.drop).toBe(0);
     expect(p1.land).toBeGreaterThan(0.5);
     expect(splitPhases(storyFrame(m, 3)).land).toBe(1);
+  });
+
+  it("shows the change since listing only once trading opens, with the right signs and colours", () => {
+    const at = (pos: number) => render(<FigureTiles v={figureValues(m, storyFrame(m, pos))} />).container;
+    // Before trading opens (presale, split): values but no percent.
+    for (const pos of [0.5, 1, 1.9]) {
+      const c = at(pos);
+      expect(c.querySelector('[data-part="since-now"]')).toBeNull();
+      expect(c.querySelector('[data-part="since-floor"]')).toBeNull();
+      expect(c.textContent).not.toContain(SINCE_LISTING);
+      cleanup();
+    }
+    // The pump: the price is up (floor-green), the floor is up.
+    const pump = at(2.9);
+    const upNow = pump.querySelector('[data-part="since-now"]')!;
+    expect(upNow.textContent).toMatch(/^\+\d[\d.]*% since listing$/);
+    expect(upNow.className).toMatch(/sinceUp/);
+    expect(pump.querySelector('[data-part="since-floor"]')!.textContent).toMatch(/^\+\d[\d.]*% since listing$/);
+    cleanup();
+    // After the selloff: the price is down (coral, true minus sign), the floor is still up.
+    const steps = at(4.9);
+    const downNow = steps.querySelector('[data-part="since-now"]')!;
+    expect(downNow.textContent).toMatch(/^\u2212\d[\d.]*% since listing$/);
+    expect(downNow.className).toMatch(/sinceDown/);
+    const floor = steps.querySelector('[data-part="since-floor"]')!;
+    expect(floor.textContent).toMatch(/^\+\d[\d.]*% since listing$/);
+    expect(floor.className).toMatch(/sinceUp/);
+    cleanup();
+    // Redeemed: the price tile says so and carries no percent; the floor's percent stays.
+    const redeemed = at(8);
+    expect(redeemed.querySelector('[data-part="since-now"]')).toBeNull();
+    expect(redeemed.querySelector('[data-part="since-floor"]')).toBeTruthy();
+  });
+
+  it("the price percent matches the value as drawn, also inside the bounce dip", () => {
+    for (const pos of [3.5, 5.5, 5.6, 6.5]) {
+      const f = storyFrame(m, pos);
+      const v = figureValues(m, f);
+      const shown = landedValue(m, f.t, f.valueOf100);
+      expect(v.now).toBe(formatUsdCents(shown));
+      expect(v.nowPct).toBeCloseTo((shown / listingBaseline(m).now - 1) * 100, 9);
+    }
   });
 });

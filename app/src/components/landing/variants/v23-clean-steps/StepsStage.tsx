@@ -3,15 +3,21 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   BEAT_KEYS,
+  BEAT_LABELS,
   BrandChartFrame,
-  BrandTiles,
   CHART,
   CHART_COPY,
   DASH,
-  formatUsdWhole,
+  SINCE_LISTING,
   STROKE,
+  TILE_FLOOR,
+  TILE_NOW,
+  formatPctChange,
+  formatUsdWhole,
   railLabel,
   railStatus,
+  sinceListing,
+  tileValues,
   useJumpToBeat,
   type StoryFrame,
 } from "../shared";
@@ -47,12 +53,14 @@ import styles from "./cleanSteps.module.css";
  * Variant 23's stage: v20's clean playful stage with the split column of v1/v3. The price is a ball
  * whose bottom touches the value, the floor is a staircase of platforms from the engine's real fee
  * math, and from the bounce beat the arbitrage line (floor × arbLineRatio) runs under it as a dashed
- * rose staircase whose current tread dents like a trampoline net. Above the midnight card sit the
- * level dots ("n/8 · Beat"); under it the landing's two tiles. In the presale the raise fills one tall
+ * rose staircase whose current tread dents like a trampoline net. Above the midnight card runs the
+ * step rail; the two numbers head the caption column. In the presale the raise fills one tall
  * column on the chart's own $ axis up to your $100; in the split that column divides into floor
  * (mint, bottom), market (iris) and fees (butter, top), each labelled directly, and the floor segment
  * drops onto the floor slab the staircase starts from. Nothing is magnified: the close-up carries the
- * "real scale" chip.
+ * "real scale" chip. Round 2: the dots became the landing's line-segment rail with beat names, and
+ * the two numbers moved from under the card to the head of the caption column (above the chart on
+ * phones), each with its change since listing.
  */
 
 const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
@@ -86,7 +94,7 @@ export function StepsStage({ m, frame: f, still = false }: { m: LaunchMath; fram
   const madeUp = f.illustrative || f.beatIndex >= 2;
   return (
     <div className={`${styles.stageCol} ${still ? styles.stageStill : ""}`} data-v23-stage={still ? "still" : "live"}>
-      {still ? null : <Levels active={f.beatIndex} />}
+      {still ? null : <Rail active={f.beatIndex} fill={f.beatProgress} />}
       <div className={styles.cardSlot}>
         <BrandChartFrame
           inset="full"
@@ -101,36 +109,94 @@ export function StepsStage({ m, frame: f, still = false }: { m: LaunchMath; fram
           </div>
         </BrandChartFrame>
       </div>
-      <BrandTiles frame={f} className="shrink-0" />
+      <Metrics m={m} f={f} />
     </div>
   );
 }
 
-/* ---------- Level dots ---------- */
+/* ---------- Step rail ---------- */
 
-/** Level dots: where you are in the story; each jumps (native scroll) to its beat. */
-function Levels({ active }: { active: number }) {
+/**
+ * The landing's step rail: one line segment per beat with its name under it (wide screens), the
+ * current one taller with a floor ring and filling while its beat plays. Each jumps (native scroll)
+ * to its beat. Phones show "n/8 · Beat" beside the segments instead of the names.
+ */
+function Rail({ active, fill }: { active: number; fill: number }) {
   const jump = useJumpToBeat();
   return (
-    <nav className={styles.levels} aria-label="Story steps">
-      <ol className={styles.dots}>
+    <nav className={styles.rail} aria-label="Story steps">
+      <ol className={styles.railList}>
         {BEAT_KEYS.map((key, i) => (
-          <li key={key}>
+          <li key={key} className={styles.railItem}>
             <button
               type="button"
-              className={styles.dot}
+              className={styles.railBtn}
               data-state={i < active ? "done" : i === active ? "now" : "next"}
               aria-label={railLabel(i)}
               aria-current={i === active ? "step" : undefined}
               onClick={() => jump(i)}
-            />
+              style={{ "--fill": (i < active ? 1 : i > active ? 0 : Math.min(1, Math.max(0, fill))).toFixed(3) } as CSSProperties}
+            >
+              <span className={styles.railTrack} aria-hidden>
+                <span className={styles.railFill} />
+              </span>
+              <span className={styles.railLabel} aria-hidden>
+                {BEAT_LABELS[key]}
+              </span>
+            </button>
           </li>
         ))}
       </ol>
-      <span className="tnum whitespace-nowrap text-[12px] font-semibold text-ink-2" data-testid="v23-level">
+      <span className={`tnum ${styles.railStatus}`} data-testid="v23-level">
         {railStatus(active)}
       </span>
     </nav>
+  );
+}
+
+/* ---------- The two numbers ---------- */
+
+/**
+ * "Your $100 now" and "Floor pays back", large, each with how far it has moved since listing. On
+ * wide screens they head the caption column (beside the chart's top edge); on phones they sit
+ * right above the chart. The percents appear only once trading has opened.
+ */
+function Metrics({ m, f }: { m: LaunchMath; f: StoryFrame }) {
+  const { now, floor } = tileValues(f);
+  const since = sinceListing(m, f);
+  return (
+    <dl className={styles.metrics} data-part="metrics">
+      <div className={`bg-cloud ${styles.metric}`}>
+        <dt className={`${styles.metricLabel} text-ink-2`}>{TILE_NOW}</dt>
+        <dd className={styles.metricBody}>
+          <b data-part="tile-now" className={`tnum ${styles.metricValue} text-ink`}>
+            {now}
+          </b>
+          <Change pct={since.now} part="since-now" tone={since.now !== null && since.now < 0 ? "down" : "up"} />
+        </dd>
+      </div>
+      <div className={`bg-floor-wash ${styles.metric}`}>
+        <dt className={`${styles.metricLabel} text-floor`}>{TILE_FLOOR}</dt>
+        <dd className={styles.metricBody}>
+          <b data-part="tile-floor" className={`tnum ${styles.metricValue} text-floor`}>
+            {floor}
+          </b>
+          <Change pct={since.floor} part="since-floor" tone="floor" />
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
+const CHANGE_CLASS = { up: "text-floor", down: "text-risk", floor: "text-floor" } as const;
+
+/** "+4.8% since listing": the percent bold in its tone, the suffix lighter. Holds its line when empty. */
+function Change({ pct, part, tone }: { pct: number | null; part: string; tone: keyof typeof CHANGE_CLASS }) {
+  if (pct === null) return <span className={styles.change} aria-hidden />;
+  return (
+    <span className={`tnum ${styles.change} ${CHANGE_CLASS[tone]}`} data-part={part} data-tone={tone}>
+      <b>{formatPctChange(pct)}</b> <span className={styles.changeSuffix}>{SINCE_LISTING}</span>
+    </span>
   );
 }
 

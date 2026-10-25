@@ -10,6 +10,7 @@ import {
   BRAND_CLASS,
   STORY_FOOTNOTE,
   STORY_HONESTY,
+  SINCE_LISTING,
   STORY_TITLE,
   StoryRoot,
   StoryStage,
@@ -21,8 +22,10 @@ import {
   beatCaption,
   beatSrText,
   floorSharePct,
+  formatPctChange,
   railLabel,
   railStatus,
+  sinceListing,
   tileValues,
   useActiveBeat,
   useJumpToBeat,
@@ -64,23 +67,49 @@ const selectFill = (s: ChapterProgress): number => quantize(clamp01(((s.q[s.acti
 /* ---------- pieces ---------- */
 
 /**
- * The two story tiles, in BrandTiles' look ("Your $100 now" on cloud, "Floor pays back" on the floor
- * wash, radius 10), always label over value so neither label truncates at phone width.
+ * The change since listing, under (phones) or beside (wide) a tile's value: smaller than the value,
+ * in the floor colour for the floor, floor-green / coral for the price. The row always exists, so
+ * the tile keeps its height when trading opens; the percent itself is absent until then.
  */
-function PanelTiles({ frame }: { frame: StoryFrame }) {
+function SinceListing({ pct, part, tone }: { pct: number | null; part: string; tone: "floor" | "price" }) {
+  const cls = tone === "floor" || (pct !== null && pct >= 0) ? "text-floor" : "text-risk";
+  return (
+    <span className={styles.since}>
+      {pct !== null && (
+        <span data-part={part} className={`tnum ${cls}`}>
+          <b>{formatPctChange(pct)}</b> {SINCE_LISTING}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
+ * The two story tiles, in BrandTiles' look ("Your $100 now" on cloud, "Floor pays back" on the floor
+ * wash, radius 10), always label over value so neither label truncates at phone width. Each value
+ * carries its change since listing.
+ */
+export function PanelTiles({ m, frame }: { m: LaunchMath; frame: StoryFrame }) {
   const { now, floor } = tileValues(frame);
+  const change = sinceListing(m, frame);
   return (
     <dl className={styles.tiles}>
       <div className={`bg-cloud ${styles.tile}`}>
         <dt className="text-ink-2">{TILE_NOW}</dt>
-        <dd data-part="tile-now" className="tnum text-ink">
-          {now}
+        <dd className={styles.tileValue}>
+          <span data-part="tile-now" className="tnum text-ink">
+            {now}
+          </span>
+          <SinceListing pct={change.now} part="since-now" tone="price" />
         </dd>
       </div>
       <div className={`bg-floor-wash ${styles.tile}`}>
         <dt className="text-floor">{TILE_FLOOR}</dt>
-        <dd data-part="tile-floor" className="tnum text-floor">
-          {floor}
+        <dd className={styles.tileValue}>
+          <span data-part="tile-floor" className="tnum text-floor">
+            {floor}
+          </span>
+          <SinceListing pct={change.floor} part="since-floor" tone="floor" />
         </dd>
       </div>
     </dl>
@@ -96,7 +125,7 @@ function LiveChart() {
       <div className={styles.chartSlot}>
         <PanelChart m={m} frame={frame} />
       </div>
-      <PanelTiles frame={frame} />
+      <PanelTiles m={m} frame={frame} />
     </>
   );
 }
@@ -172,7 +201,7 @@ function StillCard({ m, frame }: { m: LaunchMath; frame: StoryFrame }) {
       <div className={styles.chartSlot}>
         <PanelChart m={m} frame={frame} still />
       </div>
-      <PanelTiles frame={frame} />
+      <PanelTiles m={m} frame={frame} />
     </div>
   );
 }

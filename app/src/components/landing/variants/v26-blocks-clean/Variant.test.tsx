@@ -3,9 +3,9 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { launchMath } from "@/lib/landing/sim/launch";
 import { simConstantsFromSdk } from "@/lib/landing/sim/fromSdk";
 import { BEAT_KEYS, storyFrame } from "@/lib/landing/sim/story";
-import { beatCaption, beatSrText } from "../shared";
+import { SINCE_LISTING, beatCaption, beatSrText, formatPctChange, sinceListing, tileValues } from "../shared";
 import Variant from "./Variant";
-import { CleanBlocksStage, splitLabels } from "./CleanBlocksStage";
+import { CleanBlocksStage, Metrics, onArbLine, splitLabels } from "./CleanBlocksStage";
 
 const m = launchMath(simConstantsFromSdk(), 50);
 let reduceMotion = false;
@@ -117,7 +117,6 @@ describe("v26 Blocks · clean", () => {
     const eventBlocks = container.querySelectorAll('[data-block="harvest"], [data-block="harvestAlt"], [data-block="redeem"]');
     expect(eventBlocks.length).toBe(final.events.length);
     expect(container.querySelector('[data-part="tile-floor"]')?.textContent).toMatch(/^\$\d+\.\d{2}$/);
-    expect(container.querySelector('[data-part="blocks"]')?.textContent).toContain(String(1 + final.events.length));
     const bounce = render(<CleanBlocksStage m={m} frame={storyFrame(m, 6)} />).container;
     expect(bounce.querySelector('[data-part="illustration"]')?.textContent).toBe("Illustration");
     expect(bounce.querySelector('[data-part="scale"]')?.textContent).toBe("Close-up · real scale");
@@ -136,5 +135,52 @@ describe("v26 Blocks · clean", () => {
     const html = container.innerHTML.replace(/url\(#[^)]*\)/g, "");
     expect(html).not.toMatch(/#[0-9a-f]{3,8}\b/i);
     expect(html).toContain("var(--color-mint)");
+  });
+
+  it("shows the two metrics large in the stage, and no \"Floor blocks\" tile", () => {
+    const { container } = render(<CleanBlocksStage m={m} frame={storyFrame(m, 4.5)} />);
+    const metrics = container.querySelector('[data-part="metrics"]');
+    expect(metrics?.textContent).toContain("Your $100 now");
+    expect(metrics?.textContent).toContain("Floor pays back");
+    expect(container.querySelector('[data-part="tile-now"]')?.textContent).toMatch(/^\$\d+\.\d{2}$/);
+    expect(container.querySelector('[data-part="blocks"]')).toBeNull();
+    expect(container.textContent).not.toContain("Floor blocks");
+  });
+
+  it("shows the change since listing only once trading opens, with the right signs and tones", () => {
+    const pct = (c: Element, part: string) => c.querySelector(`[data-part="${part}"]`);
+    // Presale and split: no percent yet.
+    for (const pos of [0.5, 1.5, 1.999]) {
+      const c = render(<CleanBlocksStage m={m} frame={storyFrame(m, pos)} />).container;
+      expect(pct(c, "pct-now")).toBeNull();
+      expect(pct(c, "pct-floor")).toBeNull();
+      expect(c.textContent).not.toContain(SINCE_LISTING);
+      cleanup();
+    }
+    // The pump: the price is up, in floor green.
+    const pump = render(<CleanBlocksStage m={m} frame={storyFrame(m, 2.9)} />).container;
+    expect(pct(pump, "pct-now")?.textContent).toMatch(new RegExp(`^\\+\\d+(\\.\\d)?% ${SINCE_LISTING}$`));
+    expect(pct(pump, "pct-now")?.getAttribute("data-tone")).toBe("up");
+    cleanup();
+    // The exits: the price is down (coral), the floor is up (floor colour); both match the shared helper.
+    const raw = storyFrame(m, 6.9);
+    const frame = { ...raw, valueOf100: onArbLine(m, raw, raw.t, raw.valueOf100) };
+    const exits = render(<Metrics m={m} frame={frame} />).container;
+    const want = sinceListing(m, frame);
+    expect(want.now).not.toBeNull();
+    expect(want.now!).toBeLessThan(0);
+    expect(want.floor!).toBeGreaterThan(0);
+    expect(pct(exits, "pct-now")?.textContent).toBe(`${formatPctChange(want.now!)} ${SINCE_LISTING}`);
+    expect(pct(exits, "pct-now")?.textContent).toMatch(/^−/);
+    expect(pct(exits, "pct-now")?.getAttribute("data-tone")).toBe("down");
+    expect(pct(exits, "pct-floor")?.textContent).toBe(`${formatPctChange(want.floor!)} ${SINCE_LISTING}`);
+    expect(pct(exits, "pct-floor")?.textContent).toMatch(/^\+/);
+    expect(pct(exits, "pct-floor")?.getAttribute("data-tone")).toBe("floor");
+    cleanup();
+    // Redeemed: the price has no percent, the floor keeps its.
+    const end = render(<CleanBlocksStage m={m} frame={storyFrame(m, 8)} />).container;
+    expect(end.querySelector('[data-part="tile-now"]')?.textContent).toBe(tileValues(storyFrame(m, 8)).now);
+    expect(pct(end, "pct-now")).toBeNull();
+    expect(pct(end, "pct-floor")?.textContent).toMatch(/^\+/);
   });
 });
