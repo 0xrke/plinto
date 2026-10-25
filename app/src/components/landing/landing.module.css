@@ -29,6 +29,11 @@
   --sticky-top: 64px;
 }
 
+/* The landing is white edge to edge: overscroll must not reveal the app's pastel body canvas. */
+:global(body):has(.page) {
+  background: var(--color-surface);
+}
+
 .header {
   position: fixed;
   inset: 0 0 auto;

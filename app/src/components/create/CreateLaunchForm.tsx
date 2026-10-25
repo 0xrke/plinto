@@ -817,7 +817,7 @@ export function CreateLaunchForm({
           <button
             id="launch-submit"
             type="submit"
-            className={`btn btn-lg w-full text-[17px] ${
+            className={`btn btn-lg w-full ${
               canSubmit || submit.status === "submitting"
                 ? "btn-primary"
                 : "bg-cloud text-ink-3 shadow-none ring-1 ring-inset ring-line disabled:opacity-100"

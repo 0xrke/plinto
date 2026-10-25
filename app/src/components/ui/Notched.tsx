@@ -20,7 +20,7 @@ type CtaCommon = {
   children: ReactNode;
   /** Leading icon, e.g. <ArrowUpRightIcon />, <RedeemIcon />. */
   icon?: ReactNode;
-  /** 70px on desktop cards, 64px in the phone card. */
+  /** 56px on desktop cards, 52px in the phone card (near the 48px .btn-lg; the edge SVG stretches). */
   size?: "md" | "sm";
   className?: string;
 };
@@ -34,7 +34,7 @@ export function NotchedCta(
     (({ href: string } & { "aria-label"?: string }) | ({ href?: undefined } & ButtonHTMLAttributes<HTMLButtonElement>)),
 ) {
   const { children, icon, size = "md", className = "" } = props;
-  const height = size === "sm" ? 64 : 70;
+  const height = size === "sm" ? 52 : 56;
   const inner = (
     <>
       <CtaEdge height={height} />
@@ -47,7 +47,7 @@ export function NotchedCta(
       </span>
     </>
   );
-  const cls = `group inline-flex items-stretch text-base font-extrabold text-ink disabled:cursor-not-allowed disabled:opacity-60 ${className}`;
+  const cls = `group inline-flex items-stretch text-[15px] font-extrabold text-ink disabled:cursor-not-allowed disabled:opacity-60 ${className}`;
   if (props.href !== undefined) {
     return (
       <Link href={props.href} aria-label={props["aria-label"]} className={cls} style={{ height }}>

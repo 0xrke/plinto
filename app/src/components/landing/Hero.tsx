@@ -31,10 +31,10 @@ export function Hero() {
             </div>
           </nav>
 
-          <div className="flex flex-col py-10 sm:py-14 lg:my-auto lg:py-12">
+          <div className="flex flex-col py-10 sm:py-14 lg:my-auto lg:py-12 [@media(orientation:landscape)_and_(max-height:500px)]:py-6">
             <h1
               id="hero-title"
-              className="max-w-[600px] font-display text-[46px] font-extrabold leading-[1.02] tracking-[-0.04em] text-ink sm:text-[64px] sm:leading-none xl:text-[78px]"
+              className="max-w-[600px] font-display text-[46px] font-extrabold leading-[1.02] tracking-[-0.04em] text-ink sm:text-[64px] sm:leading-none xl:text-[78px] [@media(orientation:landscape)_and_(max-height:500px)]:text-[46px] [@media(orientation:landscape)_and_(max-height:500px)]:leading-[1.02]"
             >
               Token launches with a <FloorWord />
             </h1>
@@ -59,7 +59,7 @@ export function Hero() {
         </div>
 
         {/* Right: the phase card on white, the network pill and Open app above it */}
-        <div className="flex flex-col px-0 pb-2 sm:px-4 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:px-0 lg:pb-[30px] lg:pt-[34px]">
+        <div className="flex flex-col px-2 pb-2 sm:px-4 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:px-0 lg:pb-[30px] lg:pt-[34px]">
           <div className="hidden min-h-12 items-center justify-end gap-2.5 lg:flex">
             <ChainPill className="flex h-9 px-4 text-[12.5px]" />
             <Link href={LANDING_ROUTES.app} className="btn btn-dark btn-sm">

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Landing } from "@/components/landing/Landing";
 import { SITE_URL } from "@/lib/config";
 import { SITE_DESCRIPTION, SITE_TITLE } from "@/lib/siteMeta";
@@ -11,6 +11,9 @@ export const metadata: Metadata = {
   // Without a site URL the canonical would be a bare relative path.
   alternates: SITE_URL ? { canonical: "/" } : undefined,
 };
+
+// The landing is white, so the browser chrome is too (the root's lavender belongs to the app).
+export const viewport: Viewport = { themeColor: "#ffffff" };
 
 // Live floors are read on the server (bounded by a timeout in loadLiveFloors), then served from the
 // cache for a minute, so a visit never waits on RPC.

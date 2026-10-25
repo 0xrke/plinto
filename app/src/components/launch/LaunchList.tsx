@@ -63,7 +63,7 @@ function DemoNotice() {
         type="button"
         aria-label="Dismiss"
         onClick={() => setDismissed(true)}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-3 transition-colors hover:bg-surface/70 hover:text-ink"
+        className="-my-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-3 transition-colors hover:bg-surface/70 hover:text-ink"
       >
         <CloseIcon size={14} />
       </button>

@@ -139,7 +139,7 @@ export function PriceChartCard({ launch }: { launch: LaunchSummary }) {
         ) : null}
         {status ? <span className="text-[13px] text-ink-3">{status}</span> : null}
         {view.mode === "candles" ? (
-          <div role="group" aria-label="Candle interval" className="segmented ml-auto !p-[3px] [&>button]:!min-h-8 [&>button]:!px-3 [&>button]:!text-[13px]">
+          <div role="group" aria-label="Candle interval" className="segmented ml-auto !p-[3px] [&>button]:!min-h-9 [&>button]:!px-3 [&>button]:!text-[13px]">
             {INTERVAL_KEYS.map((k) => (
               <button key={k} type="button" aria-pressed={interval === k} onClick={() => setPicked(k)}>
                 {INTERVAL_LABEL[k]}

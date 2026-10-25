@@ -285,7 +285,7 @@ function DarkAmountField({
             <button
               type="button"
               onClick={onMax}
-              className="-my-2 min-h-8 rounded-lg px-2 text-xs font-bold text-iris hover:bg-midnight-chip"
+              className="-my-2 min-h-9 rounded-full px-2.5 text-xs font-bold text-iris hover:bg-midnight-chip"
             >
               Max
             </button>

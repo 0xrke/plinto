@@ -708,3 +708,10 @@ Format: **decision** · alternatives · why. These supersede the matching bullet
   its tabs are pills (tabs 40px). The waitlist submit, wallet and faucet chips follow. `--radius-btn`
   keeps its meaning for non-button soft rows.
 - Word budget: the landing measures 203 visible words with the lab rendered; the cap is 210.
+- Review follow-ups: the pinned header's row uses the hero's frame (padding, 1440px cap, nav insets),
+  so its logo and Open app stay where the hero's were as it slides in; the story keeps the 1120px
+  container. On "/" the body canvas and `theme-color` are white, so overscroll and mobile browser
+  chrome show no lavender (the app and `/waitlist` keep the pastel). Landscape phones get the phone
+  h1 and tighter padding so the CTAs fit the first screen. Small controls follow the pills: Max chips,
+  the launch list's Dismiss and the candle interval tabs are 36px pills, the create submit uses the
+  `.btn-lg` label size, and the butter Redeem `NotchedCta` drops to 56px (52px in the phone card).
