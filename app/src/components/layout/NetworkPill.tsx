@@ -14,7 +14,7 @@ export function NetworkPill() {
   const text = dataSource.kind === "mock" ? "Demo data" : networkLabel(RPC_URL);
   return (
     <div
-      className="flex h-[52px] w-[52px] items-center justify-center gap-[9px] rounded-[18px] bg-midnight text-[13px] font-semibold text-white xl:w-full xl:px-3"
+      className="flex h-10 w-10 items-center justify-center gap-[9px] rounded-full bg-midnight text-[13px] font-semibold text-white xl:w-full xl:px-3"
       title={
         dataSource.kind === "mock"
           ? "Demo data: the launches are simulated"

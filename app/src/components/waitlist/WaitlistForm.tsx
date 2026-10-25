@@ -57,7 +57,7 @@ export function WaitlistForm() {
   return (
     <form onSubmit={submit} noValidate>
       <div
-        className={`flex flex-wrap items-center gap-1.5 rounded-field border bg-surface p-[7px] shadow-[0_1px_2px_rgba(40,30,110,.05),0_18px_36px_-22px_rgba(60,40,150,.35)] transition-colors sm:h-16 sm:flex-nowrap sm:pl-5 ${
+        className={`flex flex-wrap items-center gap-1.5 rounded-field border bg-surface p-[7px] shadow-[0_1px_2px_rgba(40,30,110,.05),0_18px_36px_-22px_rgba(60,40,150,.35)] transition-colors sm:h-[60px] sm:flex-nowrap sm:rounded-full sm:pl-5 ${
           error ? "border-risk-line" : "border-line-strong focus-within:border-violet"
         }`}
       >
@@ -82,7 +82,7 @@ export function WaitlistForm() {
         <button
           type="submit"
           disabled={state.kind === "saving"}
-          className="flex h-[50px] w-full shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[16px] bg-floor px-[22px] text-[15px] font-bold text-white shadow-cta transition hover:bg-floor-strong disabled:opacity-60 sm:w-auto"
+          className="flex h-11 w-full shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-floor px-5 text-[14px] font-bold text-white shadow-cta transition hover:bg-floor-strong disabled:opacity-60 sm:w-auto"
         >
           {state.kind === "saving" ? "Saving…" : "Join the waitlist"}
           <ChevronRightIcon size={15} strokeWidth={2.2} />

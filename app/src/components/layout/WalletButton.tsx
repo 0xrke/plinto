@@ -7,11 +7,11 @@ import { truncateAddress } from "@/lib/format";
 import { WalletIcon } from "@/components/ui/icons";
 
 const TRIGGER: Record<WalletButtonVariant, string> = {
-  // Bottom of the desktop sidebar: a square icon chip while the sidebar is collapsed (lg), a
-  // full-width chip with its label from xl.
-  sidebar: "h-[52px] w-[52px] rounded-[18px] text-sm xl:w-full xl:px-4",
+  // Bottom of the desktop sidebar: a round icon chip while the sidebar is collapsed (lg), a
+  // full-width pill with its label from xl.
+  sidebar: "h-10 w-10 rounded-full text-sm xl:w-full xl:px-4",
   // Chip in the mobile top bar.
-  bar: "h-11 rounded-2xl px-4 text-sm",
+  bar: "h-10 rounded-full px-4 text-sm",
 };
 
 const MENU: Record<WalletMenuPlacement, string> = {

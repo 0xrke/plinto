@@ -59,7 +59,7 @@ export function FaucetButton({
     <div className={`relative ${block ? "w-full" : ""}`}>
       <button
         type="button"
-        className={`btn btn-secondary btn-sm h-11 whitespace-nowrap ${block ? "w-full" : ""}`}
+        className={`btn btn-secondary btn-sm h-10 whitespace-nowrap ${block ? "w-full" : ""}`}
         onClick={onClick}
         disabled={state.status === "pending"}
         aria-busy={state.status === "pending"}
