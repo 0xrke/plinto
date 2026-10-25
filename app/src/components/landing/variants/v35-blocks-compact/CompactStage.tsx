@@ -15,16 +15,19 @@ import {
   TILE_FLOOR,
   TILE_NOW,
   TILE_REDEEMED,
+  TILE_SUPPLY,
   alpha,
   formatPctChange,
   formatUsdCents,
   sinceListing,
+  supplyAt,
   formatUsdWhole,
   tileValues,
   type StoryFrame,
   type VariantProps,
 } from "../shared";
-import { beatBounds, boxFaces, clamp01, easeOutCubic, layoutTags, lerpMap, niceTicks, plotFor, polyline, sectionLabelWidth, stripHeight, within, type Plot, type Size } from "./geometry";
+import { beatBounds, boxFaces, clamp01, easeOutCubic, layoutTags, lerpMap, niceTicks, plotFor, polyline, sectionLabelWidth, stackTags, stripHeight, within, type Plot, type Size } from "./geometry";
+import { SMALL_BURN, burnLabel, burnsSoFar, shareText, supplyLane, supplyPctText } from "./supply";
 import styles from "./blocksCompact.module.css";
 
 /*
@@ -71,6 +74,13 @@ const BLOCK = {
 } as const;
 
 type Kind = keyof typeof BLOCK;
+
+/**
+ * v35's token-supply colour: a light violet (18's supply row), distinct from the floor (mint), the
+ * price (white), the market (iris), the fees (butter) and the arbitrage line (rose).
+ */
+const SUPPLY = "color-mix(in srgb, var(--color-violet) 40%, var(--color-white))";
+const SUPPLY_FILL = `color-mix(in srgb, ${SUPPLY} 26%, transparent)`;
 
 /** The column: twenty slabs of $5 each, so its top is $100 on the y axis. */
 const SLABS = 20;
@@ -500,7 +510,79 @@ function Scene({ m, frame, size, under, still }: VariantProps & { frame: StoryFr
   );
   // Both numeric: the larger number takes the upper tag, whatever the lines' order (v27).
   const priceOnTop = now !== TILE_REDEEMED && frame.floorNet100 !== null ? frame.valueOf100 >= frame.floorNet100 : undefined;
-  const tags = layoutTags(priceHead.y, showFloorTag ? floorHead.y : null, Math.max(priceH, showFloorTag ? floorH : 0), S + 6, p.b, 6, priceOnTop);
+  /* ---- v35: the token supply on the chart: the lane at the card's foot, the burns on the floor ---- */
+  const supply = supplyAt(m, frame);
+  const LY = (share: number) => lerpMap(share, 0, 1, p.laneBot, p.laneTop);
+  const lane = supplyLane(m, frame);
+  const supplyHead = supply ? { x: nowX, y: LY(supply.share) } : null;
+  // From listing on, three tags stack right of the head: price and floor in v27's order, then the
+  // supply, lowest, beside the lane's head; before listing, v27's two.
+  let tags: { price: number; floor: number | null; supply: number | null };
+  if (supplyHead && showFloorTag) {
+    const hh = Math.max(priceH, floorH);
+    const priceAbove = priceOnTop ?? priceHead.y <= floorHead.y;
+    const [a, c] = priceAbove ? [priceHead.y, floorHead.y] : [floorHead.y, priceHead.y];
+    const ys = stackTags([{ y: a, h: hh }, { y: c, h: hh }, { y: supplyHead.y, h: tag.h1 }], S + 6, p.laneBot, 6);
+    tags = priceAbove ? { price: ys[0]!, floor: ys[1]!, supply: ys[2]! } : { price: ys[1]!, floor: ys[0]!, supply: ys[2]! };
+  } else {
+    tags = { ...layoutTags(priceHead.y, showFloorTag ? floorHead.y : null, Math.max(priceH, showFloorTag ? floorH : 0), S + 6, p.b, 6, priceOnTop), supply: null };
+  }
+  const bounceLabel = showDip && dipAt ? { x: dipAt[0], y0: dipAt[1] - 11, y1: dipAt[1] + 30 } : null;
+  // What a burn label must not cover: the arbitrage line's and the bounce's labels, the tags and the
+  // redeem chip (rough boxes, from the same font sizes as the drawn text).
+  const lfs = p.compact ? 11 : 12.5;
+  const obstacles: Box2[] = [];
+  if (arbLabelAt && arbIn > 0) obstacles.push({ x0: arbLabelAt[0], x1: arbLabelAt[0] + 4 + CHART_COPY.arbLine.length * lfs * 0.6, y0: arbLabelAt[1] + 2, y1: arbLabelAt[1] + 19 });
+  if (bounceLabel) obstacles.push({ x0: bounceLabel.x - 30, x1: bounceLabel.x + 30, y0: bounceLabel.y0, y1: bounceLabel.y1 });
+  for (const [cy, hh] of [[tags.price, priceH], [tags.floor, floorH], [tags.supply, tag.h1]] as const) {
+    if (cy !== null) obstacles.push({ x0: tagX - 4, x1: tagX + tag.w + 4, y0: cy - hh / 2 - 4, y1: cy + hh / 2 + 4 });
+  }
+  if (redeem > 0 && net !== null) {
+    const rw = CHART_COPY.redeemWord.length * 11.5 * 0.56 + 18;
+    const rx = nowX - p.ball * 1.6;
+    obstacles.push({ x0: rx - rw - 4, x1: rx + 4, y0: Y(net) + 7, y1: Y(net) + 33 });
+  }
+  const burnFs = p.compact ? 10.5 : 12.5;
+  const burns = burnsSoFar(m, frame).map((bn) => {
+    const small = bn.share < SMALL_BURN;
+    const x = X(bn.t);
+    const y = Y(floor100At(m, bn.t));
+    const r = small ? 5.5 : 9;
+    const lab = burnLabel(bn);
+    // The small burn is labelled only while its own beat (the bounce) is on, so labels never crowd.
+    const labelled = !small || frame.beat === "bounce";
+    const one = `${lab.supply} → ${lab.floor}`;
+    const cw = (str: string) => str.length * burnFs * 0.56;
+    const cwRaw = p.compact ? Math.max(cw(lab.supply), cw(`→ ${lab.floor}`)) + 16 : cw(one) + 18;
+    const ch = p.compact ? 34 : 24;
+    // Right-aligned at the burn (the leader enters near its right end), at the plot's foot; it slides
+    // sideways (then up a slot) to stay clear of the other labels and the tags.
+    const spot = placeBox(x + 10 - cwRaw, cwRaw, ch, [p.b - 14 - ch, p.b - 20 - 2 * ch], obstacles, p.l + 4, w - tag.margin);
+    const cx0 = spot.x;
+    const cx1 = spot.x + cwRaw;
+    const cy0 = spot.y;
+    // The leader runs from the marker down to the lane's riser, broken around the "Bounce" label.
+    const segs: Array<[number, number]> = [];
+    const from = y + r + 2;
+    if (bounceLabel && Math.abs(x - bounceLabel.x) < 36 && bounceLabel.y1 > from) {
+      if (bounceLabel.y0 > from) segs.push([from, bounceLabel.y0]);
+      segs.push([Math.max(from, bounceLabel.y1), p.laneTop]);
+    } else segs.push([from, p.laneTop]);
+    return {
+      bn,
+      small,
+      x,
+      y,
+      r,
+      lab,
+      one,
+      labelled,
+      chip: { x0: cx0, x1: cx1, y0: cy0, h: ch },
+      segs,
+      glyphO: within(t, bn.t, bn.t + 0.12),
+      labelO: within(t, bn.t + 0.08, bn.t + 0.3),
+    };
+  });
   const peakText = CHART_COPY.peak(frame.peak.value);
   const peakW = peakText.length * 11.5 * 0.56 + 18;
 
@@ -626,6 +708,13 @@ function Scene({ m, frame, size, under, still }: VariantProps & { frame: StoryFr
         {/* the floor's true value: the mint staircase, exact risers */}
         {floorEdge && allLanded ? <path d={floorEdge} className={styles.stair} style={{ stroke: CHART.floor, strokeWidth: STROKE.floor, opacity: edgeIn }} /> : null}
 
+        {/* v35: each burn's leader, from its marker on the floor down to the supply lane's riser */}
+        {burns.map((bm) => (
+          <g key={`lead${bm.bn.t}`} opacity={bm.glyphO * (bm.small ? 0.55 : 0.85)} data-part="burn-leader">
+            {bm.segs.map(([y0, y1]) => (y1 > y0 ? <line key={y0} x1={bm.x} x2={bm.x} y1={y0} y2={Math.min(y1, p.b)} className={styles.burnLeader} /> : null))}
+          </g>
+        ))}
+
         {/* ball shadow on the floor edge */}
         {shadowGap !== null && shadowGap >= -1 && ballOpacity > 0.5 ? (
           <ellipse
@@ -668,6 +757,14 @@ function Scene({ m, frame, size, under, still }: VariantProps & { frame: StoryFr
             </text>
           </g>
         ) : null}
+
+        {/* v35: the burn markers on the floor line, at the step each burn causes (under the ball) */}
+        {burns.map((bm) => (
+          <g key={`burn${bm.bn.t}`} opacity={bm.glyphO} data-part="burn-marker" data-small={bm.small ? "" : undefined} transform={`translate(${bm.x} ${bm.y})`}>
+            <circle r={bm.r} className={styles.burnRing} />
+            <path d={FLAME} transform={`scale(${bm.r / 8})`} className={styles.burnFlame} />
+          </g>
+        ))}
 
         <Ball cx={nowX} bottom={ballBottom} r={p.ball} squash={squash} opacity={ballOpacity} />
 
@@ -755,6 +852,51 @@ function Scene({ m, frame, size, under, still }: VariantProps & { frame: StoryFr
       {frame.y.min > 0 && showFloor ? <path d={breakEdge(X(T_GRAD) + p.dx - 2, nowX + 2, p.b - 6, p.b + 16)} style={fill(CHART.bg)} /> : null}
       {frame.y.min > 0 ? null : <line x1={p.l} x2={p.r} y1={p.b + 0.5} y2={p.b + 0.5} style={{ stroke: CHART.grid, strokeWidth: STROKE.grid }} />}
 
+      {/* v35: the supply lane (a volume pane): its own 0–100% scale, the chart's x axis */}
+      {lane ? (
+        <g data-part="supply-lane">
+          <rect x={p.l} y={p.laneTop} width={p.r - p.l} height={p.laneBot - p.laneTop} rx={4} style={fill(alpha(CHART.price, 0.03))} />
+          <line x1={p.l} x2={p.r} y1={p.laneTop} y2={p.laneTop} style={{ stroke: CHART.grid, strokeWidth: STROKE.grid, strokeDasharray: DASH.ref }} />
+          <line x1={p.l} x2={p.r} y1={p.laneBot - 0.5} y2={p.laneBot - 0.5} style={{ stroke: CHART.grid, strokeWidth: STROKE.grid }} />
+          {burns.map((bm) => (
+            <line key={`lane${bm.bn.t}`} x1={bm.x} x2={bm.x} y1={Math.max(p.b, bm.y + bm.r + 2)} y2={p.laneTop} opacity={bm.glyphO * (bm.small ? 0.55 : 0.85)} className={styles.burnLeader} />
+          ))}
+          <path d={`${polyline(lane.map(([lt, ls]) => [X(lt), LY(ls)] as [number, number]))}V${p.laneBot}H${X(lane[0]![0])}Z`} style={fill(SUPPLY_FILL)} />
+          <path d={polyline(lane.map(([lt, ls]) => [X(lt), LY(ls)] as [number, number]))} className={styles.stair} data-part="supply-line" style={{ stroke: SUPPLY, strokeWidth: 1.75 }} />
+          {supplyHead ? <circle cx={supplyHead.x} cy={supplyHead.y} r={3.5} className={styles.supplyDot} /> : null}
+          <text x={p.l - 8} y={p.laneTop + 4} textAnchor="end" className={styles.tick} style={fill(CHART.axis)} data-part="lane-tick">
+            100%
+          </text>
+          <text x={p.l - 8} y={p.laneBot - 1} textAnchor="end" className={styles.laneName} data-part="lane-name">
+            Supply
+          </text>
+        </g>
+      ) : null}
+
+      {/* v35: each burn's label at the plot's foot: the supply drop paired with its small floor step */}
+      {burns.map((bm) =>
+        bm.labelled ? (
+          <g key={`chip${bm.bn.t}`} opacity={bm.labelO} data-part="burn-label" data-small={bm.small ? "" : undefined}>
+            <rect x={bm.chip.x0} y={bm.chip.y0} width={bm.chip.x1 - bm.chip.x0} height={bm.chip.h} rx={p.compact ? 10 : 12} className={styles.burnChip} />
+            {p.compact ? (
+              <>
+                <text x={bm.chip.x0 + 8} y={bm.chip.y0 + 14} className={styles.burnText}>
+                  <tspan className={styles.burnSupply}>{bm.lab.supply}</tspan>
+                </text>
+                <text x={bm.chip.x0 + 8} y={bm.chip.y0 + 28} className={styles.burnText}>
+                  <tspan className={styles.burnFloor}>{`→ ${bm.lab.floor}`}</tspan>
+                </text>
+              </>
+            ) : (
+              <text x={bm.chip.x0 + 9} y={bm.chip.y0 + 16.5} className={styles.burnText}>
+                <tspan className={styles.burnSupply}>{bm.lab.supply}</tspan>
+                <tspan className={styles.burnFloor}>{` → ${bm.lab.floor}`}</tspan>
+              </text>
+            )}
+          </g>
+        ) : null,
+      )}
+
       {/* the section strip along the top of the card: names follow the camera, never collide */}
       <g data-part="section-strip">
         <line x1={0} x2={w} y1={S - 0.5} y2={S - 0.5} className={styles.boundary} />
@@ -799,6 +941,25 @@ function Scene({ m, frame, size, under, still }: VariantProps & { frame: StoryFr
         <path d={`M${priceHead.x + (trading ? p.ball + 2 : 5)} ${priceHead.y}L${tagX} ${tags.price}`} className={styles.connWhite} opacity={trading ? Math.max(0.55, frame.priceOpacity) : 1} />
         <TagBody x={tagX} cy={tags.price} w={tag.w} h={priceH} compact={p.compact} tone="price" label={TILE_NOW} value={now} pct={change.now} part="price" />
       </g>
+      {/* v35: the third tag, the token supply, beside the supply lane's head */}
+      {supply && supplyHead && tags.supply !== null ? (
+        <g data-part="tag-supply-group">
+          <path d={`M${supplyHead.x + 5} ${supplyHead.y}L${tagX} ${tags.supply}`} className={styles.connSupply} />
+          <TagBody
+            x={tagX}
+            cy={tags.supply}
+            w={tag.w}
+            h={tag.h1}
+            compact={p.compact}
+            tone="supply"
+            label={TILE_SUPPLY}
+            value={shareText(supply.share)}
+            pct={supply.pct}
+            pctText={supplyPctText(supply.pct)}
+            part="supply"
+          />
+        </g>
+      ) : null}
     </svg>
   );
 }
@@ -818,6 +979,7 @@ function TagBody({
   label,
   value,
   pct,
+  pctText,
   part,
 }: {
   x: number;
@@ -825,26 +987,29 @@ function TagBody({
   w: number;
   h: number;
   compact: boolean;
-  tone: "price" | "floor";
+  tone: "price" | "floor" | "supply";
   label: string;
   value: string;
   pct: number | null;
-  part: "price" | "floor";
+  /** The change as shown, when not formatPctChange(pct). */
+  pctText?: string;
+  part: "price" | "floor" | "supply";
 }) {
   const y0 = cy - h / 2;
-  const pctClass = tone === "floor" ? styles.pctFloor : pct !== null && pct < 0 ? styles.pctDown : styles.pctUp;
+  const pctClass = tone === "supply" ? styles.pctSupply : tone === "floor" ? styles.pctFloor : pct !== null && pct < 0 ? styles.pctDown : styles.pctUp;
+  const dataTone = tone === "price" ? (pct !== null && pct < 0 ? "down" : "up") : tone;
   return (
     <g data-part={`tag-${part}`}>
-      <rect x={x} y={y0} width={w} height={h} rx={10} className={tone === "floor" ? styles.tagFloor : styles.tagPrice} />
+      <rect x={x} y={y0} width={w} height={h} rx={10} className={tone === "supply" ? styles.tagSupply : tone === "floor" ? styles.tagFloor : styles.tagPrice} />
       <text x={x + 10} y={y0 + (compact ? 13 : 18)} className={styles.tagLabel}>
         {label}
       </text>
-      <text x={x + 10} y={y0 + (compact ? 30 : 41)} className={styles.tagValue} data-part={part === "price" ? "tile-now" : "tile-floor"}>
+      <text x={x + 10} y={y0 + (compact ? 30 : 41)} className={styles.tagValue} data-part={part === "price" ? "tile-now" : part === "floor" ? "tile-floor" : "tile-supply"}>
         {value}
       </text>
       {pct !== null ? (
-        <text data-part={`pct-${part}`} data-tone={tone === "floor" ? "floor" : pct < 0 ? "down" : "up"} x={x + 10} y={y0 + (compact ? 45 : 63)} className={styles.tagPct}>
-          <tspan className={pctClass}>{formatPctChange(pct)}</tspan>
+        <text data-part={`pct-${part}`} data-tone={dataTone} x={x + 10} y={y0 + (compact ? 45 : 63)} className={styles.tagPct}>
+          <tspan className={pctClass}>{pctText ?? formatPctChange(pct)}</tspan>
           <tspan className={styles.tagPctSuffix}> {SINCE_LISTING}</tspan>
         </text>
       ) : null}
@@ -853,6 +1018,8 @@ function TagBody({
 }
 
 const STEPS_I = BEAT_KEYS.indexOf("steps");
+/** A small flame (the burn glyph), drawn for a radius-8 ring and scaled to the marker's size. */
+const FLAME = "M0 -5.2C1.9 -3 3.3 -1.2 3.3 1A3.3 3.3 0 0 1 -3.3 1C-3.3 -0.4 -2.5 -1.6 -1.4 -2.6C-1.3 -1.4 -0.8 -0.7 -0.1 -0.4C-0.6 -2.1 -0.5 -3.7 0 -5.2Z";
 /** Least gap between two strip labels (px). */
 const LABEL_GAP = 5.5;
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -936,6 +1103,33 @@ export function sectionLabels(x0s: readonly number[], x1s: readonly number[], w:
   for (const i of others) tryPlace(candidate(i, false));
   for (const i of others) if (placed.has(i)) tryPlace(candidate(i, true));
   return Array.from({ length: n }, (_, i) => placed.get(i) ?? { i, x: 0, anchorEnd: false, full: false, show: false, opacity: 0, left: 0, right: 0 });
+}
+
+interface Box2 {
+  x0: number;
+  x1: number;
+  y0: number;
+  y1: number;
+}
+
+const hits = (a: Box2, b: Box2): boolean => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+
+/**
+ * A spot for a w × h label: at `x` on the first row of `ys` if that is clear of every obstacle,
+ * otherwise the nearest clear x on that row (within [min, max]), then the next row; the preferred
+ * spot when nothing is clear.
+ */
+export function placeBox(x: number, w: number, h: number, ys: readonly number[], obstacles: readonly Box2[], min: number, max: number): { x: number; y: number } {
+  const clampX = (v: number) => Math.max(min, Math.min(max - w, v));
+  for (const y of ys) {
+    for (let d = 0; d <= max - min; d += 4) {
+      for (const cx of d === 0 ? [clampX(x)] : [clampX(x + d), clampX(x - d)]) {
+        const box = { x0: cx, x1: cx + w, y0: y, y1: y + h };
+        if (obstacles.every((o) => !hits(box, o))) return { x: cx, y };
+      }
+    }
+  }
+  return { x: clampX(x), y: ys[0]! };
 }
 
 /** A soft wavy bottom edge on blocks that continue below the close-up (an axis break, not $0). */

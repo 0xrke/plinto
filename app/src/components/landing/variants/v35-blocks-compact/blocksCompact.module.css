@@ -1,8 +1,9 @@
 /*
  * Variant 35, "Blocks · compact": variant 31 (28's sticky frame: title and the line-segment step rail
  * on top, chart left, plain scrolling captions right; 26's block chart with 27's section strip and
- * riding value tags inside the midnight card) at variant 20's size, plus 18's token-supply row in the
- * right column. Colours are site tokens only (var(--color-…)); radii and type follow shared/BRAND.md.
+ * riding value tags inside the midnight card) at variant 20's size, plus the token supply drawn on
+ * the chart (a supply lane, burn markers, a third riding tag). Colours are site tokens only
+ * (var(--color-…)); radii and type follow shared/BRAND.md.
  * Native scrolling only: no scroll-snap, no scroll-behavior. Scrubbed values change inline from the
  * frame, never through transitions.
  *
@@ -12,14 +13,14 @@
  * out ~586 × 538 at 1440 × 900 (20's is 586 × 512).
  *
  * How the captions work (28's ribbon): the stage (z 2) is sticky over the runway (StorySteps, z 1).
- * On wide screens the stage is opaque above the main row and under the supply row's top edge; the
+ * On wide screens the stage is opaque above the main row and below the chart card's bottom edge; the
  * rest of the right column is transparent, so the runway's captions show through. Each caption rises
- * out from behind the supply row (dimmed), sticks at the main row's top while its beat plays and is
+ * out from behind the column's foot (dimmed), sticks at the main row's top while its beat plays and is
  * pushed up by the next one; the one already read fades out first.
  */
 
 .root {
-  /* Phones: the stacked stage's height (title, rail, chart, supply); the captions stick under it. */
+  /* Phones: the stacked stage's height (title, rail, chart); the captions stick under it. */
   --bs-stage-h: min(66svh, 560px);
   --bs-gap: 14px;
   overflow-x: clip;
@@ -30,7 +31,7 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
-/* ---------- the sticky stage: phones (title, rail, chart, supply; captions below) ---------- */
+/* ---------- the sticky stage: phones (title, rail, chart; captions below) ---------- */
 
 .pin {
   grid-area: 1 / 1;
@@ -59,11 +60,10 @@
   height: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
     "top"
-    "chart"
-    "supply";
+    "chart";
   row-gap: 8px;
 }
 
@@ -105,10 +105,9 @@
   flex-direction: column;
 }
 
-.supplySlot {
-  grid-area: supply;
-  position: relative;
-  min-width: 0;
+/* Wide screens only: an empty foot for the right column that masks the runway (see below). */
+.capFoot {
+  display: none;
 }
 
 /* ---------- step rail (the landing's line segments) ---------- */
@@ -294,133 +293,7 @@
   opacity: 0;
 }
 
-/* ---------- token supply (18's ledger row): phones, one compact tile under the chart ---------- */
-
-.supply {
-  --k: var(--color-violet);
-  position: relative;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas:
-    "head head pct"
-    "bar bar bar";
-  align-items: center;
-  column-gap: 8px;
-  row-gap: 6px;
-  padding: 7px 10px 8px;
-  border-radius: 14px;
-  background: var(--color-cloud);
-  opacity: 0;
-  visibility: hidden;
-}
-
-.supply[data-shown] {
-  opacity: 1;
-  visibility: visible;
-}
-
-/* The burn lights the row up (violet, 18's redemption colour), fading as the story moves on. */
-.supply::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: var(--color-violet-soft);
-  box-shadow: inset 0 0 0 1.5px var(--k);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.supply[data-hot]::before {
-  opacity: var(--fresh, 0);
-}
-
-.supply > * {
-  position: relative;
-}
-
-.supplyHead {
-  grid-area: head;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-/* IconTile look: violet tint, radius 35%. */
-.supplyIcon {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 8px;
-  background: var(--color-violet-soft);
-  color: var(--color-violet-strong);
-}
-
-.supply[data-hot] .supplyIcon {
-  box-shadow: 0 0 0 calc(var(--fresh, 0) * 2.5px) var(--k);
-}
-
-.supplyLabel {
-  min-width: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-ink-2);
-  white-space: nowrap;
-}
-
-.supplyValue {
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--color-ink);
-  white-space: nowrap;
-}
-
-.supplyPct {
-  grid-area: pct;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--color-ink-2);
-  white-space: nowrap;
-}
-
-.supplyPct b {
-  font-weight: 800;
-  color: var(--color-violet-strong);
-}
-
-/* FloorMeter look: soft track; what is left in iris, the burned part hatched. */
-.supplyBar {
-  grid-area: bar;
-  display: flex;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--color-track);
-  overflow: hidden;
-}
-
-.supplyBar > span {
-  flex: none;
-  height: 100%;
-}
-
-.supplyLeft {
-  background: var(--color-iris);
-}
-
-.supplyBurned {
-  background-color: var(--color-violet-soft);
-  background-image: repeating-linear-gradient(135deg, var(--color-iris) 0 1.5px, transparent 1.5px 5px);
-}
-
-.supplyWhy {
-  display: none;
-}
-
-/* ---------- wide: 20's size; title and rail on top, chart left, captions and supply right ---------- */
+/* ---------- wide: 20's size; title and rail on top, chart left, captions right ---------- */
 
 @media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
   .root {
@@ -468,7 +341,7 @@
     grid-template-rows: var(--bs-top-h) minmax(0, 1fr);
     grid-template-areas:
       "top top"
-      "chart supply";
+      "chart foot";
     column-gap: var(--bs-col-gap);
     row-gap: var(--bs-row-gap);
   }
@@ -530,14 +403,18 @@
     display: none;
   }
 
-  /* The supply row sits at the foot of the right column, level with the chart card's bottom. */
-  .supplySlot {
+  /* The right column's foot, level with the chart card's bottom: its ground masks the runway from
+     just above it down to the viewport's foot, so the next caption rises out from behind it rather
+     than from the bottom edge. */
+  .capFoot {
+    display: block;
+    grid-area: foot;
     align-self: end;
+    position: relative;
+    height: 0;
   }
 
-  /* Its ground masks the runway from just above the row down to the viewport's foot, so the next
-     caption rises out from behind it rather than from the bottom edge. */
-  .supplySlot::before {
+  .capFoot::before {
     content: "";
     position: absolute;
     inset-inline: -8px;
@@ -581,54 +458,6 @@
     line-height: 1.5;
   }
 
-  /* The supply row, 18's size: icon tile, label and value, the change, the bar, the reason. */
-  .supply {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-areas:
-      "head head head"
-      "pct pct pct"
-      "bar bar bar"
-      "why why why";
-    row-gap: 8px;
-    padding: 14px 16px 14px;
-    border-radius: 20px;
-  }
-
-  .supplyIcon {
-    width: 32px;
-    height: 32px;
-    border-radius: 11px;
-  }
-
-  .supplyHead {
-    gap: 10px;
-  }
-
-  .supplyLabel {
-    flex: 1;
-    font-size: 13px;
-  }
-
-  .supplyValue {
-    font-size: 22px;
-  }
-
-  .supplyPct {
-    margin-top: -2px;
-    font-size: 13px;
-  }
-
-  .supplyBar {
-    height: 8px;
-  }
-
-  .supplyWhy {
-    display: block;
-    grid-area: why;
-    font-size: 12.5px;
-    line-height: 1.45;
-    color: var(--color-ink-3);
-  }
 }
 
 /* Landscape phones: the same composition, packed into ~390px of height. */
@@ -651,9 +480,6 @@
   .kicker { display: none; }
   .sentence { margin-top: 0; font-size: 18px; }
   .deck { display: none; }
-  .supply { row-gap: 4px; padding: 8px 10px; }
-  .supplyValue { font-size: 15px; }
-  .supplyWhy { display: none; }
 }
 
 /* ---------- the chart stage (26's blocks in the midnight card) ---------- */
@@ -792,6 +618,21 @@
 /* On the mint tag the floor colour's darker shade keeps the contrast (floor on mint is too light). */
 .pctFloor { fill: var(--color-floor-strong); font-weight: 800; }
 
+/* v35: the token supply on the chart (light violet, 18's supply colour): the third tag, the lane at
+   the card's foot, and the burn markers on the floor with their labels. */
+.tagSupply { fill: color-mix(in srgb, var(--color-violet) 40%, var(--color-white)); }
+.pctSupply { fill: var(--color-violet-strong); font-weight: 800; }
+.connSupply { stroke: color-mix(in srgb, var(--color-violet) 40%, var(--color-white)); stroke-opacity: 0.7; stroke-width: 1; fill: none; }
+.supplyDot { fill: color-mix(in srgb, var(--color-violet) 40%, var(--color-white)); stroke: var(--color-midnight); stroke-width: 1.5; }
+.laneName { font-size: 10.5px; font-weight: 700; fill: color-mix(in srgb, var(--color-violet) 40%, var(--color-white)); }
+.burnLeader { stroke: color-mix(in srgb, var(--color-violet) 40%, var(--color-white)); stroke-width: 1; stroke-dasharray: 2 3; }
+.burnRing { fill: var(--color-midnight); stroke: color-mix(in srgb, var(--color-violet) 40%, var(--color-white)); stroke-width: 1.5; }
+.burnFlame { fill: color-mix(in srgb, var(--color-violet) 40%, var(--color-white)); }
+.burnChip { fill: var(--color-midnight-chip); stroke: color-mix(in srgb, var(--color-violet) 40%, var(--color-white)); stroke-opacity: 0.45; stroke-width: 1; }
+.burnText { font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.burnSupply { fill: color-mix(in srgb, var(--color-violet) 40%, var(--color-white)); }
+.burnFloor { fill: var(--color-mint); }
+
 /* Wide drawings: chart type a step up, to read like the landing chart at 1440. */
 .wide .tick { font-size: 12px; }
 .wide .label { font-size: 12.5px; }
@@ -801,6 +642,8 @@
 .wide .tagLabel { font-size: 12px; }
 .wide .tagValue { font-size: 20px; }
 .wide .tagPct { font-size: 13px; }
+.wide .laneName { font-size: 12px; }
+.wide .burnText { font-size: 12.5px; }
 
 /* ---------- stills (reduced motion) and footer ---------- */
 
@@ -841,12 +684,4 @@
   }
 }
 
-/* A reduced-motion still: the chart card with the supply row under it (from listing on). */
-.stillCol {
-  display: grid;
-  gap: 8px;
-}
 
-.stillCol .supply {
-  max-width: 420px;
-}

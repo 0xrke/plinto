@@ -14,6 +14,7 @@ import {
   TILE_FLOOR,
   TILE_NOW,
   TILE_REDEEMED,
+  TILE_SUPPLY,
   alpha,
   formatPctChange,
   formatUsdCents,
@@ -24,6 +25,7 @@ import {
 } from "../shared";
 import { closeness, type Camera } from "./camera";
 import { layoutTags, stripLayout, type FilmGeometry } from "./sections";
+import { burnMarks, supplyLane, supplyTag, type BurnMark } from "./supply";
 import styles from "./filmCompact.module.css";
 
 /*
@@ -48,6 +50,14 @@ import styles from "./filmCompact.module.css";
  * v36 changes: compact tooltips on phones (smaller type and padding, see sections.ts), and the
  * redeem step's price tooltip stays at full contrast: instead of dimming the white tag to 55% (grey
  * ink on grey), it crossfades into a midnight-chip tag with white text as you redeem.
+ *
+ * Token supply on the chart (round 5): a thin supply lane at the card's bottom, like a volume pane
+ * (0–100% of the listing supply, iris, sharing the camera's x), stepping down at each burn; a burn
+ * marker on the floor line at each redemption that burns tokens, tied by a leader to the lane's step,
+ * whose label pairs the supply drop with the small floor step it causes ("−30% supply → floor +0.9%":
+ * the vault pays the redeemers out, so the floor rises by under 1%); and a third tooltip at the head,
+ * "Token supply 69.7%, −30% since listing". The exits' "+0.9% from exits" chip is gone: the burn label
+ * says it, next to its cause.
  */
 
 const SX = 1000;
@@ -173,10 +183,7 @@ export function Scene({ m, frame: f, cam, g, still = false }: SceneProps) {
 
   const harvests = f.events.filter((e) => e.kind === "harvest");
   const lastFee = harvests[harvests.length - 1];
-  const holders = f.events.find((e) => e.kind === "redeem" && e.beat === "exits");
   const feesOpacity = f.feesPct === null || !lastFee ? 0 : at("steps") ? ramp(bp, 0.45, 0.9) : at("bounce") ? 1 - ramp(bp, 0, 0.25) : 0;
-  const exitsOpacity =
-    f.exitsPct === null || !holders ? 0 : at("exits") ? ramp(bp, 0.5, 0.65) : at("redeem") ? 1 - ramp(f.redeemProgress, 0, 0.4) : 0;
   const peakOpacity = f.t >= f.peak.t ? (at("pump") ? 1 : 1 - close) : 0;
   // The bounce marker appears as the head climbs off the dip, so the two dots never sit on each other.
   const bounceIn = f.dip ? ramp((f.t - f.dip.t) / w, 0.008, 0.03) : 0;
@@ -193,9 +200,9 @@ export function Scene({ m, frame: f, cam, g, still = false }: SceneProps) {
   const floorLabelX = hasFloor ? Math.max(px(labelT), 2) : 0;
   const floorLabelV = hasFloor ? liftedFloor(steps, labelT, 0.11 * w, 0.05 * w) : 0;
   const arbLabelV = hasFloor ? easedFloor(steps, labelT, 0.05 * w) * m.arbLineRatio : 0;
-  // It hangs under its line, but never into the card's rounded bottom-left corner (which would clip it).
+  // It hangs under its line, but never into the supply lane under the plot.
   const plotHpx = Math.max(1, g.H - g.pt - g.pb);
-  const arbLabelMaxY = ((g.H - g.pt - 50) / plotHpx) * 100;
+  const arbLabelMaxY = ((g.laneTop - 30 - g.pt) / plotHpx) * 100;
   const arbLabelOpacity = arbOpacity * (at("redeem") ? 1 - ramp(f.redeemProgress, 0, 0.4) : 1);
   // Any made-up price path on screen carries the label (steps and redeem too, not only the engine's illustrative beats).
   const pathShown = f.priceOpacity > 0 && f.path.length > 1 && f.beatIndex >= 2;
@@ -229,7 +236,6 @@ export function Scene({ m, frame: f, cam, g, still = false }: SceneProps) {
           cam={cam}
           g={g}
           ticks={ticks}
-          exits={exitsOpacity > 0 && holders && f.exitsPct !== null ? { text: CHART_COPY.fromExits(f.exitsPct), opacity: exitsOpacity } : null}
         />
       }
     >
@@ -396,12 +402,6 @@ export function Scene({ m, frame: f, cam, g, still = false }: SceneProps) {
           <At x={px(f.dip.t)} y={py(f.dip.value)} opacity={bounceLabelOpacity}>
             <span className={`${styles.label} ${styles.bounce}`}>{CHART_COPY.bounce}</span>
           </At>
-        </>
-      ) : null}
-      {exitsOpacity > 0 && holders && f.exitsPct !== null ? (
-        <>
-          {/* Its "+0.9% from exits" chip rides under the floor tooltip (FilmOverlay), clear of the price line. */}
-          <Dot x={px(holders.t)} y={py(holders.to)} className={styles.harvestDot} opacity={exitsOpacity} />
         </>
       ) : null}
       <Dot x={px(f.t)} y={py(f.valueOf100)} className={styles.head} opacity={f.priceOpacity} />
@@ -616,7 +616,8 @@ function tickText(ticks: readonly number[], v: number): string {
 
 /**
  * The card-pixel layer over the plot (v27's chart language): the section strip under the chip row,
- * the y labels at the right edge, and the two tooltips riding the price head.
+ * the y labels at the right edge, the supply lane at the bottom with the burn markers over it, and the
+ * three tooltips riding the price head.
  */
 function FilmOverlay({
   m,
@@ -624,15 +625,12 @@ function FilmOverlay({
   cam,
   g,
   ticks,
-  exits,
 }: {
   m: LaunchMath;
   f: StoryFrame;
   cam: Camera;
   g: FilmGeometry;
   ticks: readonly number[];
-  /** The exits' "+0.9% from exits" chip and its fade, or null when it is not shown. */
-  exits: { text: string; opacity: number } | null;
 }) {
   const { W, H, compact } = g;
   const plotW = Math.max(1, W - g.pl - g.pr);
@@ -643,6 +641,15 @@ function FilmOverlay({
   const stripBot = g.chip + g.strip;
   const stripMid = stripTop + g.strip / 2;
   const strip = stripLayout(cx, W, compact, f.beatIndex);
+
+  /* ---- supply: the lane's step line, the burns, the third tooltip (all from listing on) ---- */
+  const lane = supplyLane(m, f);
+  const burns = burnMarks(m, f);
+  const sup = supplyTag(m, f);
+  const laneBot = g.laneTop + g.laneH;
+  const ly = (share: number) => laneBot - share * g.laneH;
+  // The lane's band comes in with the pump (trading opens), over the slab running past the plot.
+  const laneIn = f.beat === "pump" ? ramp(f.beatProgress, 0, 0.06) : 1;
 
   /* ---- tooltips: right of the head, so the head dot and the bounce (always left of it) stay clear ---- */
   const headX = cx(f.t);
@@ -655,7 +662,19 @@ function FilmOverlay({
   const change = sinceListing(m, f);
   const priceH = change.now !== null ? g.tagH1 : g.tagH0;
   const floorH = change.floor !== null ? g.tagH1 : g.tagH0;
-  const tags = layoutTags(priceY, showFloorTag ? floorY : null, Math.max(priceH, showFloorTag ? floorH : 0), stripBot + 8, H - 10, 6, priceOnTop);
+  const supplyH = g.tagH1;
+  const colTop = stripBot + 8;
+  const colBot = H - 10;
+  // The supply tooltip takes the bottom of the column, as close to the lane as the others allow.
+  const tags = layoutTags(
+    priceY,
+    showFloorTag ? floorY : null,
+    Math.max(priceH, showFloorTag ? floorH : 0),
+    colTop,
+    sup ? colBot - supplyH - 6 : colBot,
+    6,
+    priceOnTop,
+  );
   const tagX = Math.min(headX + g.tagGap, W - (compact ? 6 : 8) - g.tagW);
   // As you redeem, the price tag flips from white to a midnight chip over a short stretch of scroll
   // (a slow crossfade would pass through grey on grey).
@@ -664,31 +683,31 @@ function FilmOverlay({
     { y: tags.price, h: priceH },
     ...(showFloorTag && tags.floor !== null ? [{ y: tags.floor, h: floorH }] : []),
   ];
-  // The exits chip sits in the tooltips' column, under the lower tooltip (the floor's, in the exits), or
-  // over the upper one when there is no room below: right of the head, where no line ever runs (v32 hung
-  // it off the harvest dot, over the price line).
-  const exitsH = compact ? 20 : 26;
-  const tagsTop = Math.min(...tagBoxes.map((b) => b.y - b.h / 2));
   const tagsBottom = Math.max(...tagBoxes.map((b) => b.y + b.h / 2));
-  const exitsY =
-    exits === null
-      ? null
-      : tagsBottom + 6 + exitsH <= H - 10
-        ? tagsBottom + 6
-        : tagsTop - 6 - exitsH >= stripBot + 8
-          ? tagsTop - 6 - exitsH
-          : null;
-  if (exitsY !== null) tagBoxes.push({ y: exitsY + exitsH / 2, h: exitsH });
+  const supplyY = sup ? Math.min(colBot - supplyH / 2, Math.max(tagsBottom + 6 + supplyH / 2, g.laneTop + g.laneH / 2)) : null;
+  if (supplyY !== null) tagBoxes.push({ y: supplyY, h: supplyH });
 
   /* ---- y labels at the right edge; one a tooltip would cover fades out ---- */
   const tickX = W - (compact ? 8 : 14);
   const tickW = (text: string) => text.length * (compact ? 6.4 : 7.4);
-  const tickOpacity = (y: number, text: string) => {
-    if (y < stripBot + 10 || y > H - 6) return 0;
+  const coverFade = (y: number, text: string) => {
     if (tagX + g.tagW < tickX - tickW(text) - 4) return 1;
     const d = Math.min(...tagBoxes.map((b) => Math.abs(y - b.y) - b.h / 2));
     return ramp(d, 4, 14);
   };
+  const tickOpacity = (y: number, text: string) => (y < stripBot + 10 || y > g.laneTop - 14 ? 0 : coverFade(y, text));
+
+  /* ---- burn labels in the lane, right-aligned to their step; the lane's name yields to them ---- */
+  const charW = compact ? 6.1 : 6.9;
+  const nameX = compact ? 8 : 14;
+  const nameRight = nameX + (compact ? 34 : 44);
+  const burnLabels = burns.map((b) => {
+    const x = cx(b.t) - (compact ? 5 : 8);
+    const w = compact ? Math.max(b.supplyText.length, b.floorText.length) * charW : (b.supplyText.length + b.floorText.length + 3) * charW;
+    // Fades before it would run off the card's left edge.
+    return { b, x, left: x - w, opacity: b.labelOpacity * ramp(x - w, 4, 14) };
+  });
+  const nameOpacity = Math.min(1, ...burnLabels.filter((l) => l.opacity > 0.02).map((l) => ramp(l.left - nameRight, 4, 16)));
 
   return (
     <svg className={`${styles.overlaySvg} ${compact ? "" : styles.wide}`} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden>
@@ -748,17 +767,55 @@ function FilmOverlay({
         ) : null,
       )}
 
-      {/* The exits' share of the floor's rise, in the tooltips' column. */}
-      {exits !== null && exitsY !== null ? (
-        <g opacity={exits.opacity} data-part="exits-chip">
-          <rect x={tagX} y={exitsY} width={g.tagW} height={exitsH} rx={exitsH / 2} className={styles.exitsChip} />
-          <text x={tagX + (compact ? 8 : 12)} y={exitsY + exitsH / 2 + (compact ? 3.5 : 4.5)} className={styles.exitsText}>
-            {exits.text}
+      {/* The supply lane: an opaque band under the plot (the slab runs past it), 0–100% of the listing supply. */}
+      {lane ? (
+        <g opacity={laneIn} data-part="supply-lane">
+          <rect x={0} y={g.laneTop - 8} width={W} height={H - g.laneTop + 8} style={{ fill: CHART.bg }} />
+          <line x1={0} x2={W} y1={g.laneTop - 7.5} y2={g.laneTop - 7.5} className={styles.stripRule} />
+          <line x1={0} x2={W} y1={g.laneTop + 0.5} y2={g.laneTop + 0.5} className={styles.laneRef} />
+          <path
+            d={`${lanePathD(lane, cx, ly)} L${cx(lane[lane.length - 1]![0])} ${laneBot} L${cx(lane[0]![0])} ${laneBot} Z`}
+            className={styles.laneArea}
+          />
+          <path d={lanePathD(lane, cx, ly)} className={styles.laneLine} data-part="supply-line" />
+          <text x={nameX} y={g.laneTop + (compact ? 11 : 15)} className={styles.laneName} opacity={nameOpacity} data-part="supply-name">
+            Supply
           </text>
+          {coverFade(g.laneTop, "100%") > 0.01 ? (
+            <text x={tickX} y={g.laneTop + 4} textAnchor="end" opacity={coverFade(g.laneTop, "100%")} className={styles.tick} data-part="supply-tick">
+              100%
+            </text>
+          ) : null}
+          {burnLabels.map(({ b, x, opacity }) =>
+            opacity > 0.02 ? (
+              <BurnLabel key={b.t} b={b} x={x} y={g.laneTop} h={g.laneH} compact={compact} opacity={opacity} />
+            ) : null,
+          )}
         </g>
       ) : null}
 
+      {/* Burn markers on the floor line, each tied to its step in the lane below. */}
+      {burns.map((b) => {
+        const x = cx(b.t);
+        const y = cy(b.floor);
+        const r = b.small ? (compact ? 6 : 7) : compact ? 8 : 10;
+        return (
+          <g key={b.t} opacity={b.opacity} data-part="burn-mark" data-small={b.small ? "" : undefined}>
+            <line x1={x} x2={x} y1={y + r + 2} y2={g.laneTop - 8} className={styles.burnLeader} />
+            <circle cx={x} cy={y} r={r} className={styles.burnRing} />
+            <path d={FLAME} transform={`translate(${x} ${y}) scale(${r / 10})`} className={styles.burnFlame} />
+          </g>
+        );
+      })}
+
       {/* Tooltips riding the price head. */}
+      {sup && supplyY !== null && lane ? (
+        <g opacity={laneIn} data-part="tag-supply">
+          <circle cx={headX} cy={ly(sup.share)} r={3.5} className={styles.laneDot} />
+          <path d={`M${headX + 4} ${ly(sup.share)}L${tagX} ${supplyY}`} className={styles.connIris} />
+          <TagBody x={tagX} cy={supplyY} w={g.tagW} h={supplyH} compact={compact} tone="supply" label={TILE_SUPPLY} value={sup.value} pct={sup.pct} part="supply" />
+        </g>
+      ) : null}
       {showFloorTag && floorY !== null && tags.floor !== null ? (
         <g opacity={f.floorReveal} data-part="tag-floor">
           <circle cx={headX} cy={floorY} r={4.5} className={styles.floorDot} />
@@ -783,6 +840,40 @@ function FilmOverlay({
   );
 }
 
+/** A small flame, centred on (0, 0), about 13px tall at scale 1 (it fills a 10px-radius ring). */
+const FLAME =
+  "M0 -6.5C2.6 -4 4.6 -1.6 4.6 1.4C4.6 4.2 2.6 6 0 6C-2.6 6 -4.6 4.2 -4.6 1.6C-4.6 -0.6 -3.2 -2 -2.2 -3.6C-1.8 -2 -1 -1 0.2 -0.8C0.6 -2.6 0.5 -4.6 0 -6.5Z";
+
+/** The lane's step line through its corners (card px). */
+function lanePathD(pts: ReadonlyArray<readonly [number, number]>, cx: (t: number) => number, ly: (s: number) => number): string {
+  return pts.map(([t, s], i) => `${i === 0 ? "M" : "L"}${cx(t)} ${ly(s)}`).join(" ");
+}
+
+/** A burn's label in the lane, right-aligned to its step: the supply drop, then the small floor step. */
+function BurnLabel({ b, x, y, h, compact, opacity }: { b: BurnMark; x: number; y: number; h: number; compact: boolean; opacity: number }) {
+  if (compact) {
+    return (
+      <g opacity={opacity} data-part="burn-label">
+        <text x={x} y={y + h / 2 - 1.5} textAnchor="end" className={styles.burnText}>
+          <tspan className={styles.burnSupply}>{b.supplyText}</tspan>
+        </text>
+        <text x={x} y={y + h / 2 + 10} textAnchor="end" className={styles.burnText}>
+          <tspan className={styles.burnFloor}>{b.floorText}</tspan>
+        </text>
+      </g>
+    );
+  }
+  return (
+    <text x={x} y={y + h / 2 + 4.5} textAnchor="end" opacity={opacity} className={styles.burnText} data-part="burn-label">
+      <tspan className={styles.burnSupply}>{b.supplyText}</tspan>
+      <tspan className={styles.burnArrow}> → </tspan>
+      <tspan className={styles.burnFloor}>{b.floorText}</tspan>
+    </text>
+  );
+}
+
+const TAG_FILL = { price: styles.tagPrice, floor: styles.tagFloor, muted: styles.tagChip, supply: styles.tagSupply } as const;
+
 /**
  * One tooltip (v27's tag): label, value and, once trading opens, the change since listing under the
  * value. The floor's change reads in the floor colour; the price's is floor green up, coral down.
@@ -804,19 +895,20 @@ function TagBody({
   w: number;
   h: number;
   compact: boolean;
-  tone: "price" | "floor" | "muted";
+  tone: "price" | "floor" | "muted" | "supply";
   label: string;
   value: string;
   pct: number | null;
   /** The data-part suffix; null for the hidden half of a crossfade (so tests and tools see one tag). */
-  part: "now" | "floor" | null;
+  part: "now" | "floor" | "supply" | null;
 }) {
   const y0 = cy - h / 2;
-  const pctClass = tone === "floor" ? styles.pctFloor : pct !== null && pct < 0 ? styles.pctDown : styles.pctUp;
+  const pctClass =
+    tone === "floor" ? styles.pctFloor : tone === "supply" ? styles.pctSupply : pct !== null && pct < 0 ? styles.pctDown : styles.pctUp;
   const tx = x + (compact ? 8 : 10);
   return (
-    <g className={tone === "muted" ? styles.tagMuted : undefined}>
-      <rect x={x} y={y0} width={w} height={h} rx={compact ? 8 : 10} className={tone === "floor" ? styles.tagFloor : tone === "muted" ? styles.tagChip : styles.tagPrice} />
+    <g className={tone === "muted" ? styles.tagMuted : tone === "supply" ? styles.tagSupplyTone : undefined}>
+      <rect x={x} y={y0} width={w} height={h} rx={compact ? 8 : 10} className={TAG_FILL[tone]} />
       <text x={tx} y={y0 + (compact ? 11.5 : 17)} className={styles.tagLabel}>
         {label}
       </text>

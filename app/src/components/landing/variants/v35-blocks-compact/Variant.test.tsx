@@ -4,10 +4,10 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { launchMath } from "@/lib/landing/sim/launch";
 import { simConstantsFromSdk } from "@/lib/landing/sim/fromSdk";
-import { BEAT_KEYS, BEAT_LABELS, SINCE_LISTING, TILE_FLOOR, TILE_NOW, TILE_SUPPLY, supplyAt, beatCaption, beatSrText, formatPctChange, sinceListing, storyFrame, tileValues } from "../shared";
-import { CompactStage, onArbLine, sectionLabels, xMaxFor, TAG } from "./CompactStage";
-import { beatBounds, layoutTags, plotFor } from "./geometry";
-import { SupplyRow, shareText, supplyView } from "./Supply";
+import { BEAT_KEYS, BEAT_LABELS, SINCE_LISTING, TILE_FLOOR, TILE_NOW, TILE_SUPPLY, supplyAt, supplyBurns, beatCaption, beatSrText, formatPctChange, sinceListing, storyFrame, tileValues } from "../shared";
+import { CompactStage, onArbLine, placeBox, sectionLabels, xMaxFor, TAG } from "./CompactStage";
+import { LANE, beatBounds, layoutTags, plotFor, stackTags } from "./geometry";
+import { burnLabel, burnsSoFar, shareText, supplyLane, supplyPctText } from "./supply";
 import Variant from "./Variant";
 
 const m = launchMath(simConstantsFromSdk(), 50);
@@ -247,45 +247,135 @@ describe("v35 Blocks · compact", () => {
     }
   });
 
-  it("the token supply: null before listing, 100% → 99.6% → 69.7%, lit right after each burn", () => {
-    expect(supplyView(m, storyFrame(m, 1.5))).toBeNull();
-    const listed = supplyView(m, storyFrame(m, 2.5))!;
-    expect(listed.share).toBe(1);
-    expect(listed.fresh).toBe(0);
+  it("the token supply lane: nothing before listing, 100% from listing, steps exactly at the burns", () => {
+    const burns = supplyBurns(m);
+    expect(burns.map((b) => b.t)).toEqual([6.8, 8.2]);
+    expect(supplyLane(m, storyFrame(m, 1.5))).toBeNull();
+    // Listed, before any burn: flat at 100% up to the head.
+    const early = supplyLane(m, storyFrame(m, 3))!;
+    expect(early.every(([, v]) => v === 1)).toBe(true);
+    // The finished frame: risers at 6.8 and 8.2, 69.7% at the head (as supplyAt says).
     const end = storyFrame(m, 8);
-    const v = supplyView(m, end)!;
-    expect(v.share).toBeCloseTo(supplyAt(m, end)!.share, 9);
-    expect(shareText(v.share)).toBe("69.7%");
-    // Somewhere in the bounce and in the exits the row lights up after a burn.
-    const lit = (from: number, to: number) => {
-      for (let pos = from; pos <= to; pos += 0.02) {
-        const f = storyFrame(m, pos);
-        const s = supplyView(m, f)!;
-        if (s.fresh > 0.5) return s;
-      }
-      return null;
-    };
-    expect(lit(5, 6)!.share).toBeLessThan(1);
-    expect(lit(6, 7)!.share).toBeLessThan(0.75);
+    const lane = supplyLane(m, end)!;
+    expect(lane.map(([t]) => t)).toEqual([lane[0]![0], 6.8, 6.8, 8.2, 8.2, end.t]);
+    expect(lane[2]![1]).toBeCloseTo(0.996, 9);
+    expect(lane[4]![1]).toBeCloseTo(burns[1]!.supplyAfter, 9);
+    expect(lane[5]![1]).toBeCloseTo(supplyAt(m, end)!.share, 9);
+    expect(shareText(lane[5]![1])).toBe("69.7%");
+    // Between the burns the lane has stepped only once.
+    const mid = supplyLane(m, storyFrame(m, 6))!;
+    expect(mid.filter(([t]) => t === 6.8)).toHaveLength(2);
+    expect(mid.some(([t]) => t === 8.2)).toBe(false);
+    // Drawn: no lane before listing, a lane (with its 100% tick and name) after.
+    expect(part(stage(1.5), "supply-lane")).toBeNull();
+    cleanup();
+    const c = stage(8);
+    expect(part(c, "lane-tick")!.textContent).toBe("100%");
+    expect(part(c, "lane-name")!.textContent).toBe("Supply");
+    expect(part(c, "supply-line")!.getAttribute("d")).toMatch(/^M.*L.*L.*L.*L.*L/);
   });
 
-  it("the supply row: label, value, change since listing, hatched burned part, the reason; hidden before listing", () => {
-    const pre = render(<SupplyRow m={m} frame={storyFrame(m, 0.5)} />).container;
-    expect(part(pre, "supply")!.hasAttribute("data-shown")).toBe(false);
+  it("the lane is thin and the plot gives it the room, inside the card", () => {
+    for (const [w, h] of [[358, 420], [586, 498]] as const) {
+      const p = plotFor({ w, h });
+      const lane = p.compact ? LANE.compact : LANE.wide;
+      expect(p.laneBot - p.laneTop).toBe(lane.h);
+      expect(lane.h).toBeLessThanOrEqual(56);
+      expect(p.b).toBeLessThan(p.laneTop);
+      expect(p.laneBot).toBeLessThan(h);
+    }
+  });
+
+  it("a burn marker appears on the floor line only once its burn has happened, and stays", () => {
+    const markers = (pos: number) => {
+      const c = stage(pos);
+      const out = [...c.querySelectorAll('[data-part="burn-marker"]')].map((g) => g.hasAttribute("data-small"));
+      cleanup();
+      return out;
+    };
+    expect(markers(1.5)).toEqual([]);
+    expect(markers(5)).toEqual([]); // t = 6.0, before the bounce's redeem
+    expect(markers(6)).toEqual([true]); // t = 7.6: the small arbitrage burn only
+    expect(markers(6.3)).toEqual([true]);
+    expect(markers(6.6)).toEqual([true, false]); // t = 8.32: both
+    expect(markers(8)).toEqual([true, false]);
+    // Pure in the frame: going back hides the later burn again.
+    expect(markers(5.6)).toEqual([true]);
+    expect(burnsSoFar(m, storyFrame(m, 1.5))).toEqual([]);
+  });
+
+  it("each burn label pairs the supply drop with its small floor step; the small one shows on its own beat only", () => {
+    const [arb, exits] = supplyBurns(m);
+    expect(burnLabel(exits!)).toEqual({ supply: "−30% supply", floor: "floor +0.9%" });
+    expect(burnLabel(arb!)).toEqual({ supply: "−0.4% supply", floor: "floor +0.01%" });
+    // Honest: a 30% burn moves the floor by under 1%.
+    expect(exits!.floorPct).toBeLessThan(1);
+    const labels = (pos: number) => {
+      const c = stage(pos);
+      const out = [...c.querySelectorAll('[data-part="burn-label"]')].map((g) => g.textContent);
+      cleanup();
+      return out;
+    };
+    expect(labels(5)).toEqual([]);
+    expect(labels(6)).toEqual(["−0.4% supply → floor +0.01%"]); // the bounce
+    expect(labels(6.3)).toEqual([]); // exits, before the holders' burn: the small one has stepped back
+    expect(labels(6.6)).toEqual(["−30% supply → floor +0.9%"]);
+    expect(labels(8)).toEqual(["−30% supply → floor +0.9%"]);
+  });
+
+  it("burn labels never cover the tags, the bounce or the arbitrage label (default size)", () => {
+    for (const pos of [5.8, 6, 6.6, 7, 8]) {
+      const c = stage(pos);
+      const box = (el: Element) => {
+        const r = el.querySelector("rect")!;
+        const x = Number(r.getAttribute("x"));
+        const y = Number(r.getAttribute("y"));
+        return { x0: x, x1: x + Number(r.getAttribute("width")), y0: y, y1: y + Number(r.getAttribute("height")) };
+      };
+      const tagBoxes = ["tag-price", "tag-floor", "tag-supply"].map((n) => part(c, n)).filter((e): e is Element => e !== null).map(box);
+      for (const chip of c.querySelectorAll('[data-part="burn-label"]')) {
+        const b = box(chip);
+        expect(b.x0).toBeGreaterThanOrEqual(0);
+        expect(b.x1).toBeLessThanOrEqual(560);
+        for (const t of tagBoxes) expect(b.x1 <= t.x0 || t.x1 <= b.x0 || b.y1 <= t.y0 || t.y1 <= b.y0).toBe(true);
+      }
+      cleanup();
+    }
+    // The placement itself slides clear of an obstacle.
+    const spot = placeBox(100, 80, 20, [200], [{ x0: 90, x1: 150, y0: 190, y1: 230 }], 0, 400);
+    expect(spot.x >= 150 || spot.x + 80 <= 90).toBe(true);
+  });
+
+  it("the third tag rides beside the lane's head: the supply and its change, from listing on", () => {
+    expect(part(stage(1.5), "tag-supply")).toBeNull();
     cleanup();
-    const c = render(<SupplyRow m={m} frame={storyFrame(m, 8)} />).container;
-    const row = part(c, "supply")!;
-    expect(row.hasAttribute("data-shown")).toBe(true);
-    expect(row.textContent).toContain(TILE_SUPPLY);
-    expect(part(c, "supply-value")!.textContent).toBe("69.7%");
-    expect(part(c, "supply-pct")!.textContent).toBe(`${formatPctChange(supplyAt(m, storyFrame(m, 8))!.pct)} ${SINCE_LISTING}`);
-    expect(part(c, "supply-pct")!.textContent).toMatch(/^−30%/);
-    expect(parseFloat((part(c, "supply-burned") as HTMLElement).style.width)).toBeCloseTo(30.3, 0);
-    expect(row.textContent).toMatch(/burned/);
+    const listed = stage(2.5);
+    expect(part(listed, "tag-supply")!.textContent).toContain(TILE_SUPPLY);
+    expect(part(listed, "tile-supply")!.textContent).toBe("100%");
+    expect(part(listed, "pct-supply")!.textContent).toBe(`0% ${SINCE_LISTING}`);
     cleanup();
-    // The live page carries one supply row in the stage.
+    const end = stage(8);
+    expect(part(end, "tile-supply")!.textContent).toBe("69.7%");
+    expect(part(end, "pct-supply")!.textContent).toBe(`${formatPctChange(supplyAt(m, storyFrame(m, 8))!.pct)} ${SINCE_LISTING}`);
+    expect(part(end, "pct-supply")!.textContent).toMatch(/^−30%/);
+    expect(part(end, "pct-supply")!.getAttribute("data-tone")).toBe("supply");
+    expect(supplyPctText(-0.4)).toBe("−0.4%");
+    // Three tags, stacked without overlap, inside the card.
+    const ys = stackTags([{ y: 200, h: 74 }, { y: 205, h: 74 }, { y: 480, h: 74 }], 44, 486, 6);
+    expect(ys[1]! - ys[0]!).toBeGreaterThanOrEqual(80 - 1e-9);
+    expect(ys[2]! - ys[1]!).toBeGreaterThanOrEqual(80 - 1e-9);
+    expect(ys[2]! + 37).toBeLessThanOrEqual(486 + 1e-9);
+    const squeezed = stackTags([{ y: 470, h: 52 }, { y: 470, h: 52 }, { y: 470, h: 52 }], 34, 350, 6);
+    expect(squeezed[2]! + 26).toBeLessThanOrEqual(350 + 1e-9);
+    expect(squeezed[1]! - squeezed[0]!).toBeGreaterThanOrEqual(58 - 1e-9);
+  });
+
+  it("the separate supply block is gone: the supply shows only on the chart", () => {
     const { container } = render(<Variant m={m} />);
-    expect(container.querySelectorAll('[data-part="supply-slot"] [data-part="supply"]')).toHaveLength(1);
+    expect(part(container, "supply-slot")).toBeNull();
+    expect(part(container, "supply")).toBeNull();
+    // The live chart carries the supply once: its tag.
+    expect(container.querySelectorAll('[data-part="tile-supply"]')).toHaveLength(1);
   });
 
   it("the redeem step keeps the price tag fully readable", () => {

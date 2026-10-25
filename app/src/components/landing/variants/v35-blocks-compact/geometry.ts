@@ -26,27 +26,44 @@ export interface Plot {
   ball: number;
   /** Compact (phone) metrics. */
   compact: boolean;
+  /** v35: the token-supply lane under the plot (its 100% line and its 0% base). */
+  laneTop: number;
+  laneBot: number;
 }
 
 /** Height of the beat-section strip along the top of the drawing (under the card's chip row). */
 export const stripHeight = (compact: boolean): number => (compact ? 28 : 38);
+
+/**
+ * v35: the supply lane at the foot of the card, like a volume pane: its height, the gap above it
+ * (room for the plot's lowest tick label) and the margin below it. The plot gives up this much.
+ */
+export const LANE = {
+  compact: { h: 30, gap: 16, pad: 10 },
+  wide: { h: 44, gap: 20, pad: 12 },
+} as const;
 
 export function plotFor({ w, h }: Size): Plot {
   const compact = w < 480;
   const strip = stripHeight(compact);
   // Shallow on purpose: the front top edge is the true floor, and a deep top face reads as "higher".
   const depth = Math.min(20, Math.max(10, Math.min(w, h) * 0.03));
+  const lane = compact ? LANE.compact : LANE.wide;
+  const laneBot = h - lane.pad;
+  const laneTop = laneBot - lane.h;
   // The chart card already insets the plot under its chips; these margins only hold the tick labels.
   return {
     // The drawing runs edge to edge in the card (for the section strip), so the plot keeps the card's inset.
     l: compact ? 52 : 70,
     r: w - (compact ? 12 : 22),
     t: strip + (compact ? 22 : 30),
-    b: h - (compact ? 12 : 18),
+    b: laneTop - lane.gap,
     dx: -depth,
     dy: -depth * 0.58,
     ball: compact ? 7 : 9,
     compact,
+    laneTop,
+    laneBot,
   };
 }
 
@@ -179,4 +196,25 @@ export function layoutTags(
   }
   a = Math.max(lo, a);
   return priceAbove ? { price: a, floor: b } : { price: b, floor: a };
+}
+
+/**
+ * Vertical centres for tags stacked in a fixed order (top to bottom), each as close to its own
+ * wanted centre as the others allow, never overlapping (gap `gap`) and kept inside [top, bottom].
+ * v35 uses it for its three tags (price and floor, in v27's order, then the supply tag lowest).
+ */
+export function stackTags(items: ReadonlyArray<{ y: number; h: number }>, top: number, bottom: number, gap = 6): number[] {
+  const n = items.length;
+  const ys = items.map((it) => it.y);
+  // Downward pass: each tag at least below the one above it (and below the top edge).
+  for (let i = 0; i < n; i++) {
+    const min = i === 0 ? top + items[0]!.h / 2 : ys[i - 1]! + (items[i - 1]!.h + items[i]!.h) / 2 + gap;
+    ys[i] = Math.max(ys[i]!, min);
+  }
+  // Upward pass: each tag at least above the one below it (and above the bottom edge).
+  for (let i = n - 1; i >= 0; i--) {
+    const max = i === n - 1 ? bottom - items[i]!.h / 2 : ys[i + 1]! - (items[i]!.h + items[i + 1]!.h) / 2 - gap;
+    ys[i] = Math.min(ys[i]!, max);
+  }
+  return ys;
 }

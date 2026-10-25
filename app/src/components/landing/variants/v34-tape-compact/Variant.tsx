@@ -1,7 +1,6 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { SupplyIcon } from "@/components/ui/icons";
 import type { LaunchMath } from "@/lib/landing/sim/launch";
 import { quantize } from "@/lib/landing/sim/scroll";
 import type { ChapterProgress } from "@/components/landing/scroll/progress";
@@ -13,18 +12,14 @@ import {
   STORY_FOOTNOTE,
   STORY_HONESTY,
   STORY_TITLE,
-  SINCE_LISTING,
-  TILE_SUPPLY,
   StoryRoot,
   StoryStage,
   StorySteps,
   StoryStills,
   StoryTrack,
   floorSharePct,
-  formatPctChange,
   railLabel,
   railStatus,
-  supplyAt,
   useActiveBeat,
   useJumpToBeat,
   useStoryFrame,
@@ -37,7 +32,6 @@ import {
 } from "../shared";
 import { showsIllustration } from "./tapeGeometry";
 import { CHIP_ROW, CompactTape } from "./CompactTape";
-import { supplyView } from "./supply";
 import s from "./tapeCompact.module.css";
 
 /*
@@ -45,11 +39,12 @@ import s from "./tapeCompact.module.css";
  * right, the line-segment step bar on top) brought to variant 20's size: the brand container
  * (1120px), a stage of min(640px, 82svh) centred on the reading line, 6fr / 4fr columns with a 48px
  * gap. The stage stacks the title row, the step bar and the chart card; the card comes out at 20's
- * size (about 590 x 520 at 1440 x 900). Under the caption, in the right column, sits 18's token-supply
- * row: icon, label, the share of the listing supply still outstanding, its change since listing, a
- * bar that shrinks with the burned part hatched, and one line on why it matters. It lights up when
- * supply drops (the bounce's arbitrage redeem, the holders' exits). The two values still ride the
- * playhead as tags. Reduced motion: eight static tape frames.
+ * size (about 590 x 520 at 1440 x 900). The token supply lives on the tape (CompactTape): a flame
+ * on the floor line at each redemption that burns tokens, labelled with the supply drop and the small
+ * floor step it causes; a thin supply lane along the tape's foot (its own 0–100% scale, stepping down
+ * under the flames); and a third tag riding the playhead ("Token supply 69.7%, −30% since listing")
+ * under "Your $100 now" and "Floor pays back". No separate supply block, so no number shows twice.
+ * Reduced motion: eight static tape frames.
  */
 
 /**
@@ -161,61 +156,6 @@ function Rail() {
   );
 }
 
-/* ---------- token supply (18's ledger row) ---------- */
-
-/** Why supply matters, in one line. */
-export const SUPPLY_WHY = "Redeemed tokens are burned, so the same vault backs fewer tokens.";
-/**
- * The supply row: the share of the listing supply left and its change since listing; the bar's burned
- * part is hatched. `data-lit` while a redemption has just burned tokens. Before listing there is no
- * supply to compare with: the row keeps its place (the stage does not jump) but stays hidden, and
- * fades in when trading opens.
- */
-export function SupplyRow({ m, frame }: { m: LaunchMath; frame: StoryFrame }) {
-  const v = supplyView(m, frame);
-  return (
-    <div
-      className={s.supply}
-      data-part="supply"
-      data-lit={v.lit > 0 ? "" : undefined}
-      data-listed={v.listed ? "" : undefined}
-      style={{ "--lit": v.lit.toFixed(3) } as CSSProperties}
-    >
-      <div className={s.supplyHead}>
-        <span className={s.supplyIcon} aria-hidden>
-          <SupplyIcon size={18} />
-        </span>
-        <span className={s.supplyLabel}>{TILE_SUPPLY}</span>
-        <b className={`${s.supplyValue} tnum`} data-part="supply-value">
-          {v.value}
-        </b>
-      </div>
-      <p className={`${s.supplyChange} tnum`} data-part="supply-change">
-        {v.pct !== null ? (
-          <>
-            <b data-flat={formatPctChange(v.pct) === "0.0%" ? "" : undefined}>{formatPctChange(v.pct)}</b> {SINCE_LISTING}
-          </>
-        ) : (
-          "—"
-        )}
-      </p>
-      <div className={s.supplyBar} aria-hidden>
-        <span className={s.supplyLeft} style={{ width: `${(v.share * 100).toFixed(2)}%` }} />
-        <span className={s.supplyBurned} data-part="supply-burned" style={{ width: `${((1 - v.share) * 100).toFixed(2)}%` }} />
-      </div>
-      <p className={s.supplyWhy}>
-        {SUPPLY_WHY} <span className={`${s.supplyEq} tnum`}>floor = vault ÷ supply</span>
-      </p>
-    </div>
-  );
-}
-
-function LiveSupply() {
-  const m = useStoryLaunch();
-  const frame = useStoryFrame();
-  return <SupplyRow m={m} frame={frame} />;
-}
-
 /* ---------- the caption ribbon (21, as in 28) ---------- */
 
 /** One beat's caption: a sticky block in the right column; the runway scrolls it past natively. */
@@ -253,9 +193,7 @@ export default function Variant({ m }: VariantProps) {
               <LiveTape />
             </div>
             <div className={s.side} aria-hidden />
-            <div className={s.supplySlot} aria-hidden data-part="supply-slot">
-              <LiveSupply />
-            </div>
+            <div className={s.capCover} aria-hidden />
           </div>
         </StoryStage>
         <StorySteps heights={HEIGHTS} renderStep={renderStep} className={s.steps} stepClassName={s.step} />
@@ -266,7 +204,6 @@ export default function Variant({ m }: VariantProps) {
           renderStill={(frame) => (
             <div className={s.still}>
               <TapeCard m={m} frame={frame} still />
-              {supplyAt(m, frame) ? <SupplyRow m={m} frame={frame} /> : null}
             </div>
           )}
         />

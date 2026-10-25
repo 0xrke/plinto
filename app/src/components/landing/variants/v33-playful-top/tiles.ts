@@ -24,9 +24,9 @@ export interface TopTilesModel {
     /** "69.7%", or "—" before listing. */
     value: string;
     change: TileChange | null;
-    /** Share still outstanding, 0..1 (1 before listing). */
+    /** Share still outstanding, 0..1 (1 before listing); the lane on the chart draws its history. */
     share: number;
-    /** False before listing: the bar shows an empty track, matching the "—". */
+    /** False before listing, when the value reads "—" and no change shows. */
     listed: boolean;
     /** 1 right after a burn, easing to 0 as story time moves on. */
     fresh: number;

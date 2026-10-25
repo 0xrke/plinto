@@ -19,10 +19,10 @@ import {
   formatPctChange,
   sinceListing,
   supplyAt,
+  supplyBurns,
 } from "../shared";
 import { cameraAt, cameraShots, pathMax } from "./camera";
-import { supplyView } from "./supply";
-import { SUPPLY_WHY, SupplyRow } from "./SupplyRow";
+import { LISTING_T, burnMarks, floorStepText, supplyLane, supplyTag } from "./supply";
 import { Scene } from "./FilmScene";
 import { filmGeometry, layoutTags, stripLayout } from "./sections";
 import Variant from "./Variant";
@@ -250,56 +250,149 @@ describe("v36 film, compact", () => {
     expect(figures[BEAT_KEYS.indexOf("bounce")]!.querySelector('[data-part="scale"]')?.textContent).toBe(REAL_SCALE_LABEL);
   });
 
-  it("shows the token supply in the content on top: 100% and no change before listing, then it shrinks", () => {
+  it("token supply sits on the chart only: no supply block above it, no exits chip", () => {
     const { container } = render(<Variant m={m} />);
-    const supply = container.querySelector('[data-part="supply"]')!;
     const card = container.querySelector("[data-brand-chart]")!;
-    // Above the chart, not in or under it.
-    expect(card.contains(supply)).toBe(false);
-    expect(supply.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(supply.textContent).toContain(TILE_SUPPLY);
-    expect(supply.textContent).toContain(SUPPLY_WHY);
-    // First paint is the finished story: ~70% left, "−30% since listing".
+    // The header's supply row is gone; every supply number lives in the card.
+    expect(container.querySelector('[data-part="supply"]')).toBeNull();
+    for (const el of container.querySelectorAll("[data-part]")) {
+      if (/supply|burn/.test(el.getAttribute("data-part")!)) expect(card.contains(el), el.getAttribute("data-part")!).toBe(true);
+    }
+    // First paint is the finished story: the third tooltip reads ~70% and "−30% since listing".
     const end = supplyAt(m, storyFrame(m, 8))!;
-    expect(supply.querySelector('[data-part="supply-value"]')?.textContent).toBe(`${(end.share * 100).toFixed(1)}%`);
-    expect(supply.querySelector('[data-part="supply-change"]')?.textContent).toBe(`${formatPctChange(end.pct)} ${SINCE_LISTING}`);
-    expect(end.pct).toBeLessThan(-25);
-
-    // Before listing: 100% with a dash; after listing and before any burn: still 100%, a dash.
-    for (const pos of [0.5, 1.5, 2.5, 4.5]) {
-      const v = supplyView(m, storyFrame(m, pos));
-      expect(v.value, `pos ${pos}`).toBe("100%");
-      expect(v.change).toBe("—");
-      expect(v.glow).toBe(0);
-    }
-    expect(supplyView(m, storyFrame(m, 1.5)).listed).toBe(false);
-    // It only ever falls, and lights up right after each burn (the bounce's arbitrage redeem, the exits).
-    let prev = 1;
-    let lit = 0;
-    for (let pos = 0; pos <= 8.0001; pos += 0.02) {
-      const v = supplyView(m, storyFrame(m, pos));
-      expect(v.share).toBeLessThanOrEqual(prev + 1e-12);
-      if (v.share < prev - 1e-9) {
-        expect(v.glow, `pos ${pos.toFixed(2)}`).toBeGreaterThan(0.8);
-        lit++;
-      }
-      expect(v.glow).toBeGreaterThanOrEqual(0);
-      expect(v.glow).toBeLessThanOrEqual(1);
-      prev = v.share;
-    }
-    expect(lit).toBeGreaterThanOrEqual(2);
-    expect(supplyView(m, storyFrame(m, 6)).value).toBe("99.6%");
+    expect(card.querySelector('[data-part="tile-supply"]')?.textContent).toBe(`${(end.share * 100).toFixed(1)}%`);
+    expect(card.querySelector('[data-part="pct-supply"]')?.textContent).toBe(`${formatPctChange(end.pct)} ${SINCE_LISTING}`);
+    expect(card.querySelector('[data-part="tag-supply"]')?.textContent).toContain(TILE_SUPPLY);
+    expect(container.querySelectorAll('[data-part="tile-supply"]')).toHaveLength(1);
+    // The exits' "+0.9% from exits" chip is replaced by the burn label beside its cause.
+    expect(container.querySelector('[data-part="exits-chip"]')).toBeNull();
   });
 
-  it("the burned part of the supply bar is as wide as what burned", () => {
-    for (const pos of [1, 6, 8]) {
+  it("nothing of the supply before listing: no lane, no markers, no supply tooltip", () => {
+    for (const pos of [0, 0.5, 1.2, 1.95]) {
       const f = storyFrame(m, pos);
-      const s = supplyAt(m, f);
-      const burned = s ? -s.pct : 0;
-      const { container, unmount } = render(<SupplyRow m={m} frame={f} />);
-      const w = parseFloat((container.querySelector('[data-part="supply-burned"]') as HTMLElement).style.width);
-      expect(w, `pos ${pos}`).toBeCloseTo(burned, 6);
+      expect(supplyLane(m, f), `pos ${pos}`).toBeNull();
+      expect(burnMarks(m, f)).toEqual([]);
+      expect(supplyTag(m, f)).toBeNull();
+      const { container, unmount } = scene(pos);
+      for (const part of ["supply-lane", "burn-mark", "burn-label", "tag-supply", "tile-supply"])
+        expect(container.querySelector(`[data-part="${part}"]`), `${part} pos ${pos}`).toBeNull();
       unmount();
+    }
+    // From listing on: the lane and the third tooltip, at 100% until the first burn.
+    const { container } = scene(2.5);
+    expect(container.querySelector('[data-part="supply-lane"]')).not.toBeNull();
+    expect(container.querySelector('[data-part="tile-supply"]')?.textContent).toBe("100%");
+    expect(container.querySelector('[data-part="supply-name"]')?.textContent).toBe("Supply");
+    expect(container.querySelector('[data-part="supply-tick"]')?.textContent).toBe("100%");
+    expect(container.querySelector('[data-part="burn-mark"]')).toBeNull();
+  });
+
+  it("burn markers appear only once each burn has happened, and stay (scrolling back removes them)", () => {
+    const burns = supplyBurns(m);
+    expect(burns.map((b) => b.t)).toEqual([6.8, 8.2]);
+    const atT = (t: number) => {
+      // The first scroll position whose story time reaches t.
+      for (let pos = 0; pos <= 8; pos += 0.005) if (storyFrame(m, pos).t >= t) return pos;
+      return 8;
+    };
+    for (const [i, b] of burns.entries()) {
+      const p = atT(b.t);
+      const before = storyFrame(m, p - 0.01);
+      expect(before.t).toBeLessThan(b.t);
+      expect(burnMarks(m, before)).toHaveLength(i);
+      const after = storyFrame(m, p + 0.03);
+      expect(burnMarks(m, after)).toHaveLength(i + 1);
+      const r = scene(p + 0.03);
+      expect(r.container.querySelectorAll('[data-part="burn-mark"]'), `burn ${b.t}`).toHaveLength(i + 1);
+      r.unmount();
+    }
+    // Each marker sits on the floor right after its burn; the 0.4% burn is the small one.
+    const done = burnMarks(m, storyFrame(m, 8));
+    expect(done.map((b) => b.small)).toEqual([true, false]);
+    for (const b of done) {
+      const e = storyFrame(m, 8).events.find((x) => x.kind === "redeem" && x.t === b.t)!;
+      expect(b.floor).toBe(e.kind === "redeem" ? e.to : NaN);
+    }
+    const r = scene(8);
+    expect(r.container.querySelectorAll('[data-part="burn-mark"]')).toHaveLength(2);
+    expect(r.container.querySelectorAll('[data-part="burn-mark"][data-small]')).toHaveLength(1);
+  });
+
+  it("burn labels pair the supply drop with its small floor step, never the drop alone", () => {
+    const [small, big] = burnMarks(m, storyFrame(m, 8));
+    expect(big!.supplyText).toBe("−30% supply");
+    expect(big!.floorText).toBe("floor +0.9%");
+    expect(small!.supplyText).toBe("−0.4% supply");
+    expect(small!.floorText).toBe("floor +0.01%");
+    expect(floorStepText(0.857)).toBe("+0.9%");
+    // The burn lifts the floor by under 1%: the label never claims more.
+    for (const b of supplyBurns(m)) expect(b.floorPct).toBeLessThan(1);
+    // Wide: one line, supply then floor; phones: two lines.
+    for (const g of [WIDE, PHONE]) {
+      const { container, unmount } = scene(8, g);
+      const labels = [...container.querySelectorAll('[data-part="burn-label"]')];
+      // Only the big burn's label is left at the end (the small one hands over to it).
+      expect(labels, `${g.W}`).toHaveLength(1);
+      expect(labels[0]!.textContent!.replace(/\s+/g, " ")).toMatch(/^−30% supply( → )?\s?floor \+0\.9%$/);
+      unmount();
+    }
+    // While the small burn is the latest, its label shows.
+    const mid = scene(6);
+    expect(mid.container.querySelector('[data-part="burn-label"]')?.textContent).toContain("−0.4% supply");
+  });
+
+  it("the supply lane steps at the burn times, exactly under the markers", () => {
+    const f = storyFrame(m, 8);
+    const lane = supplyLane(m, f)!;
+    expect(lane[0]).toEqual([LISTING_T, 1]);
+    const burns = supplyBurns(m);
+    // Corners: listing at 100%, a vertical drop at each burn time, then flat to the head.
+    expect(lane.map(([t]) => t)).toEqual([LISTING_T, 6.8, 6.8, 8.2, 8.2, f.t]);
+    expect(lane[2]![1]).toBeCloseTo(burns[0]!.supplyAfter, 9);
+    expect(lane[4]![1]).toBeCloseTo(burns[1]!.supplyAfter, 9);
+    expect(lane[5]![1]).toBeCloseTo(supplyAt(m, f)!.share, 9);
+    // Between the burns only the first step is drawn.
+    const between = supplyLane(m, storyFrame(m, 6))!;
+    expect(between.map(([t]) => t)).toEqual([LISTING_T, 6.8, 6.8, storyFrame(m, 6).t]);
+    // Rendered: the lane's step line has its risers at the markers' x.
+    const { container } = scene(8);
+    const d = container.querySelector('[data-part="supply-line"]')!.getAttribute("d")!;
+    const xs = [...d.matchAll(/[ML](-?[\d.]+) /g)].map((x) => Number(x[1]));
+    const marks = [...container.querySelectorAll('[data-part="burn-mark"] circle')].map((c) => Number(c.getAttribute("cx")));
+    expect(xs[1]).toBeCloseTo(xs[2]!, 6);
+    expect(xs[3]).toBeCloseTo(xs[4]!, 6);
+    expect(marks[0]).toBeCloseTo(xs[1]!, 6);
+    expect(marks[1]).toBeCloseTo(xs[3]!, 6);
+  });
+
+  it("the three tooltips stack in the column without overlapping, inside the card, the supply one lowest", () => {
+    for (const g of [WIDE, PHONE]) {
+      for (let pos = 2.05; pos <= 8; pos += 0.1) {
+        const { container, unmount } = scene(pos, g);
+        const boxes = ["tag-price", "tag-floor", "tag-supply"]
+          .map((p) => container.querySelector(`[data-part="${p}"] rect`))
+          .filter((r): r is Element => r !== null)
+          .map((r) => ({ y: Number(r.getAttribute("y")), h: Number(r.getAttribute("height")) }));
+        expect(boxes.length, `pos ${pos.toFixed(1)}`).toBe(3);
+        for (const b of boxes) {
+          expect(b.y, `${g.W} pos ${pos.toFixed(1)}`).toBeGreaterThanOrEqual(g.chip + g.strip);
+          expect(b.y + b.h).toBeLessThanOrEqual(g.H - 4);
+        }
+        const [p, fl, s] = boxes;
+        const apart = (a: typeof p, b: typeof p) => a!.y + a!.h <= b!.y + 0.01 || b!.y + b!.h <= a!.y + 0.01;
+        expect(apart(p, fl) && apart(p, s) && apart(fl, s), `${g.W} pos ${pos.toFixed(1)}`).toBe(true);
+        expect(s!.y).toBeGreaterThanOrEqual(Math.max(p!.y, fl!.y));
+        unmount();
+      }
+    }
+  });
+
+  it("the plot gives the lane its room: the card does not grow, the plot ends above the lane", () => {
+    for (const g of [WIDE, PHONE]) {
+      expect(g.laneTop + g.laneH).toBeLessThanOrEqual(g.H - 6);
+      expect(g.H - g.pb).toBeLessThan(g.laneTop - 8);
+      expect(g.laneH).toBeLessThanOrEqual(g.compact ? 32 : 56);
     }
   });
 
@@ -345,27 +438,6 @@ describe("v36 film, compact", () => {
     expect(done.container.querySelector('[data-part="tag-price"]')!.hasAttribute("data-muted")).toBe(true);
     expect(done.container.querySelector('[data-part="tile-now"]')?.textContent).toBe(TILE_REDEEMED);
     done.unmount();
-  });
-
-  it("the exits chip rides in the tooltips' column under the floor tooltip, never over the price line", () => {
-    for (const g of [WIDE, PHONE]) {
-      const { container, unmount } = scene(7, g);
-      const chip = container.querySelector('[data-part="exits-chip"]');
-      expect(chip, `${g.W}`).not.toBeNull();
-      expect(chip!.textContent).toMatch(/from exits/);
-      const box = chip!.querySelector("rect")!;
-      const floorRect = container.querySelector('[data-part="tag-floor"] rect')!;
-      // Same column as the tooltips (right of the head), under the floor tooltip, inside the card.
-      expect(Number(box.getAttribute("x"))).toBe(Number(floorRect.getAttribute("x")));
-      const floorBottom = Number(floorRect.getAttribute("y")) + Number(floorRect.getAttribute("height"));
-      const y = Number(box.getAttribute("y"));
-      expect(y).toBeGreaterThanOrEqual(floorBottom);
-      expect(y + Number(box.getAttribute("height"))).toBeLessThanOrEqual(g.H);
-      unmount();
-    }
-    // Not before the exits.
-    const before = scene(6);
-    expect(before.container.querySelector('[data-part="exits-chip"]')).toBeNull();
   });
 
   it("strip numbers pushed out to the left are gone before they reach the card's edge (never cut off)", () => {

@@ -3,7 +3,7 @@
  * express (sticky caption bubbles, the bubble tail, chip anchors, the step rail, the three tiles on
  * top). Colours are site tokens only. Native scroll only: no scroll-snap, no scroll-behavior. The
  * only transitions are on discrete changes (the active caption, the rail's current segment) and they
- * are off under reduced motion; scrubbed values (the rail fill, the supply bar, the burn highlight)
+ * are off under reduced motion; scrubbed values (the rail fill, the supply lane, the burn highlight)
  * change inline from the frame.
  */
 
@@ -49,6 +49,22 @@
   inset: 0;
   display: block;
   overflow: visible;
+}
+
+/* The supply lane's name and its 100% tick. */
+.laneText {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* The flame in a burn label. */
+.flame {
+  display: inline-block;
+  width: 9px;
+  height: 12px;
+  margin: -2px 4px 0 0;
+  vertical-align: middle;
 }
 
 .tickText {
@@ -214,7 +230,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 6px 8px 9px;
+  padding: 6px 8px 7px;
   border-radius: 10px;
   background: var(--color-cloud);
   isolation: isolate;
@@ -301,33 +317,6 @@
 
 .tileChange[data-tone="burn"] {
   color: var(--color-violet-strong);
-}
-
-/* 18's supply bar: what is still outstanding in iris, the burned part hatched. */
-.supplyBar {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 4px;
-  display: flex;
-  height: 3px;
-  border-radius: 999px;
-  background: var(--color-track);
-  overflow: hidden;
-}
-
-.supplyBar > span {
-  flex: none;
-  height: 100%;
-}
-
-.segSupply {
-  background: var(--color-iris);
-}
-
-.segBurned {
-  background-color: var(--color-violet-soft);
-  background-image: repeating-linear-gradient(135deg, var(--color-iris) 0 1.5px, transparent 1.5px 5px);
 }
 
 /* ---------- caption bubbles ---------- */
@@ -482,7 +471,7 @@
   }
 
   .tile {
-    padding: 7px 14px 10px;
+    padding: 7px 14px 9px;
     border-radius: 14px;
   }
 
@@ -505,12 +494,6 @@
 
   .since {
     display: inline;
-  }
-
-  .supplyBar {
-    left: 14px;
-    right: 14px;
-    bottom: 4px;
   }
 
   .badge {

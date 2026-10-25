@@ -30,7 +30,6 @@ import {
   T_LISTING,
   T_SELLOFF_END,
   beatDividers,
-  clearOfBall,
   dollarTicks,
   headSlope,
   netPath,
@@ -45,6 +44,7 @@ import {
   xMaxFor,
   type Plot,
 } from "./scene";
+import { SUPPLY_LANE_LABEL, SUPPLY_LANE_TOP, burnLabel, burnsSoFar, floorAfter, isTinyBurn, laneSteps } from "./supplyLane";
 import { topTiles, type TileChange } from "./tiles";
 import styles from "./playfulTop.module.css";
 
@@ -55,8 +55,9 @@ import styles from "./playfulTop.module.css";
  * under it as a dashed rose staircase whose current tread is the trampoline. Top to bottom: the
  * line-segment step rail with the beat names (as in 29), then three equal light tiles near the eye
  * line ("Your $100 now", "Floor pays back", each with its change since listing, and 18's token
- * supply with its shrinking bar), then the midnight chart card at 20's size. Nothing is magnified:
- * the close-up carries the "real scale" chip.
+ * supply), then the midnight chart card at 20's size. Under the platforms a thin supply lane steps
+ * down at each burn, and each burn has a marker on the floor with the supply drop and the (small)
+ * floor step it causes. Nothing is magnified: the close-up carries the "real scale" chip.
  */
 
 const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
@@ -166,13 +167,11 @@ function Change({ change }: { change: TileChange | null }) {
 
 /**
  * "Your $100 now", "Floor pays back" and the token supply, three equal light tiles over the card.
- * The supply tile (18's ledger row) has a bar that shrinks with the burned part hatched, and lights
- * up for a moment after each burn.
+ * The supply tile (18's ledger row) is the current value only (the lane on the chart draws its
+ * history) and lights up for a moment after each burn.
  */
 function TopTiles({ m, f }: { m: LaunchMath; f: StoryFrame }) {
   const t = topTiles(m, f);
-  const kept = t.supply.listed ? t.supply.share : 0;
-  const burned = t.supply.listed ? 1 - t.supply.share : 0;
   return (
     <div className={styles.tiles} aria-hidden data-part="tiles">
       <div className={styles.tile} data-tile="now">
@@ -205,16 +204,24 @@ function TopTiles({ m, f }: { m: LaunchMath; f: StoryFrame }) {
           {t.supply.value}
         </b>
         <Change change={t.supply.change} />
-        <span className={styles.supplyBar} data-part="supply-bar">
-          <span className={styles.segSupply} style={{ width: `${(kept * 100).toFixed(2)}%` }} />
-          <span className={styles.segBurned} style={{ width: `${(burned * 100).toFixed(2)}%` }} />
-        </span>
       </div>
     </div>
   );
 }
 
 /* ---------- The scene ---------- */
+
+/** The split bar's opacity: it fades out just after listing (and the supply lane fades in as it goes). */
+const splitShowFor = (f: StoryFrame) => 1 - ramp(f.pos, 2.05, 2.4);
+
+/** Token supply on midnight: a light violet, apart from the iris market share and the mint floor. */
+const SUPPLY = "color-mix(in srgb, var(--color-iris) 70%, var(--color-white))";
+
+/** A chip's rough height on the card (pill-sm), for the collision checks. */
+const LABEL_H = 22;
+
+/** A small flame (the burn) for the burn label, its base at (0, 0), about 10 × 13 px. */
+const FLAME_D = "M0,-13 C2.5,-9.5 5.2,-7 5.2,-3.6 C5.2,-0.7 2.9,1 0,1 C-2.9,1 -5.2,-0.7 -5.2,-3.6 C-5.2,-6.2 -3.2,-7.2 -2.2,-9.6 C-1.2,-7.6 -0.2,-7.2 0.4,-6.6 C0.9,-8.6 0.6,-10.8 0,-13 Z";
 
 function Scene({ m, f, p }: { m: LaunchMath; f: StoryFrame; p: Plot }) {
   const s = scalesFor(p, f);
@@ -225,10 +232,10 @@ function Scene({ m, f, p }: { m: LaunchMath; f: StoryFrame; p: Plot }) {
 
   // Floor: rises out of the ground during the split (floorReveal), then holds its real staircase.
   const steps = f.floorSteps;
-  const floorShift = (1 - f.floorReveal) * Math.max(0, p.h + 40 - (steps.length ? s.y(steps[0]![1]) : p.h));
+  const floorShift = (1 - f.floorReveal) * Math.max(0, p.ground + 40 - (steps.length ? s.y(steps[0]![1]) : p.h));
   const runs = treads(steps);
   const stairD = steps.length ? polyline(steps, s) : "";
-  const slabBottom = p.h + 4;
+  const slabBottom = p.ground;
   const fillD = steps.length
     ? `${stairD} L${s.x(steps[steps.length - 1]![0]).toFixed(1)},${slabBottom} L${s.x(steps[0]![0]).toFixed(1)},${slabBottom} Z`
     : "";
@@ -262,20 +269,50 @@ function Scene({ m, f, p }: { m: LaunchMath; f: StoryFrame; p: Plot }) {
   const ledgeEnd = Math.min(xHead, s.x(T_LISTING));
 
   const harvests = f.events.filter((e) => e.kind === "harvest");
-  const exitsEvent = f.events.find((e) => e.kind === "redeem" && e.beat === "exits");
-  // The exits chip sits over the tread the ball climbs back onto: it fades while the ball passes
-  // under it (a rough box for "+0.9% from exits", centred on the event, bottom 26px above the tread).
-  const exitsChipClear = exitsEvent
-    ? clearOfBall(
-        { left: s.x(exitsEvent.t) - 62, right: s.x(exitsEvent.t) + 62, top: s.y(exitsEvent.to) - 50, bottom: s.y(exitsEvent.to) - 26 },
-        xHead,
-        yHead,
-        p.r,
-      )
-    : 1;
+  // Token supply: the lane's step line, and a marker on the floor at each burn so far.
+  const supplySteps = laneSteps(m, f);
+  const laneOn = supplySteps ? 1 - splitShowFor(f) : 0;
+  const ly = (share: number) => p.lane.y0 - share * (p.lane.y0 - p.lane.y100);
+  const laneD = supplySteps ? supplySteps.map(([t, v], i) => `${i ? "L" : "M"}${s.x(t).toFixed(1)},${ly(v).toFixed(1)}`).join("") : "";
+  const laneFillD = supplySteps
+    ? `${laneD} L${s.x(supplySteps[supplySteps.length - 1]![0]).toFixed(1)},${p.lane.y0} L${s.x(supplySteps[0]![0]).toFixed(1)},${p.lane.y0} Z`
+    : "";
+  const burnMarks = burnsSoFar(m, f).flatMap((b) => {
+    const v = floorAfter(steps, b.t);
+    if (v === null) return [];
+    const tiny = isTinyBurn(b);
+    const label = burnLabel(b);
+    const half = (label.length * 6.1 + 34) / 2;
+    const x = s.x(b.t);
+    const appear = ramp(f.t, b.t, b.t + 0.15);
+    return [
+      {
+        t: b.t,
+        tiny,
+        x,
+        y: s.y(v),
+        yLane: ly(b.supplyAfter),
+        label,
+        half,
+        labelX: Math.min(p.w - 10 - half, Math.max(10 + half, x)),
+        // The tiny arbitrage burn is labelled only on its own beat, so two labels never crowd.
+        labelOn: appear * (tiny ? (f.beat === "bounce" ? 1 : 0) : 1),
+      },
+    ];
+  });
+  // On narrow cards a burn label can reach the "Arbitrage line" chip under the line's left end: the
+  // chip then moves up into the rose strip above its line, so the two never touch.
+  const arbChip = arbSteps.length
+    ? { left: s.x(arbSteps[0]![0]) + 4, right: s.x(arbSteps[0]![0]) + 4 + CHART_COPY.arbLine.length * 6.2 + 22, top: s.y(arbSteps[0]![1]) + 8 }
+    : null;
+  const arbFlip =
+    arbChip !== null &&
+    burnMarks.some(
+      (b) => b.labelOn > 0.01 && b.labelX - b.half < arbChip.right + 6 && p.ground - 8 - LABEL_H < arbChip.top + LABEL_H + 6,
+    );
   const lastTread = runs[runs.length - 1];
   const redeemOn = f.redeemProgress;
-  const splitShow = 1 - ramp(f.pos, 2.05, 2.4);
+  const splitShow = splitShowFor(f);
   const dividers = beatDividers(xMaxFor(f));
   // The bounce mark stays where the ball turned, once it has left the dip.
   const dipMark = f.dip && (f.beat === "bounce" || f.beat === "exits") && f.t > f.dip.t + 0.02 ? f.dip : null;
@@ -287,7 +324,7 @@ function Scene({ m, f, p }: { m: LaunchMath; f: StoryFrame; p: Plot }) {
       <svg className={styles.svg} width={p.w} height={p.h} viewBox={`0 0 ${p.w} ${p.h}`}>
         <defs>
           <clipPath id={clipId}>
-            <rect x={-40} y={-400} width={p.w + 80} height={p.h + 400} />
+            <rect x={-40} y={-400} width={p.w + 80} height={p.ground + 400} />
           </clipPath>
         </defs>
 
@@ -339,6 +376,49 @@ function Scene({ m, f, p }: { m: LaunchMath; f: StoryFrame; p: Plot }) {
           </g>
         ) : null}
 
+        {/* The supply lane: its own 0–100% scale under the platforms, on the chart's x axis. */}
+        {/* The ground under the main chart (the lane's top edge), there from the start so the rising
+            floor slab stands on it; the lane's data shows only from listing. */}
+        <line x1={0} x2={p.w} y1={p.lane.top} y2={p.lane.top} style={{ stroke: CHART.grid }} strokeWidth={STROKE.grid} />
+        {laneOn > 0.01 ? (
+          <g data-part="supply-lane" opacity={laneOn}>
+            <line
+              x1={s.x(supplySteps![0]![0])}
+              x2={p.right}
+              y1={p.lane.y100}
+              y2={p.lane.y100}
+              style={{ stroke: CHART.axis }}
+              strokeOpacity={0.35}
+              strokeWidth={STROKE.ref}
+              strokeDasharray={DASH.ref}
+            />
+            <text x={p.left} y={p.lane.y100 - 3} className={styles.laneText} style={{ fill: SUPPLY }}>
+              {SUPPLY_LANE_LABEL}
+            </text>
+            <text x={p.right} y={p.lane.y100 - 3} textAnchor="end" className={styles.laneText} style={{ fill: CHART.axis }}>
+              {SUPPLY_LANE_TOP}
+            </text>
+            <path d={laneFillD} style={{ fill: SUPPLY }} fillOpacity={0.16} />
+            <path data-part="supply-line" d={laneD} fill="none" style={{ stroke: SUPPLY }} strokeWidth={2} strokeLinejoin="miter" />
+          </g>
+        ) : null}
+
+        {/* Each burn's lead: a dotted line from its marker on the floor down to the lane's step. */}
+        {burnMarks.map((b) => (
+          <line
+            key={b.t}
+            x1={b.x}
+            x2={b.x}
+            y1={b.y}
+            y2={b.yLane}
+            style={{ stroke: SUPPLY }}
+            strokeOpacity={0.55}
+            strokeWidth={1.25}
+            strokeDasharray="1.5 3"
+            strokeLinecap="round"
+          />
+        ))}
+
         {/* The floor: real staircase, flat mint slab below, rounded platforms on the treads. */}
         {steps.length ? (
           <g clipPath={`url(#${clipId})`}>
@@ -359,6 +439,22 @@ function Scene({ m, f, p }: { m: LaunchMath; f: StoryFrame; p: Plot }) {
             </g>
           </g>
         ) : null}
+
+        {/* Burn markers: a violet dot on the floor line where a redemption burned tokens (smaller when
+            tiny), under the price, so the trail always passes in front of it. */}
+        {burnMarks.map((b) => (
+          <circle
+            key={b.t}
+            data-part="burn"
+            data-t={b.t}
+            data-tiny={b.tiny ? "" : undefined}
+            cx={b.x}
+            cy={b.y}
+            r={b.tiny ? 3.5 : 5}
+            style={{ fill: SUPPLY, stroke: CHART.bg }}
+            strokeWidth={2}
+          />
+        ))}
 
         {/* Trail: a midnight halo under the white line, so it reads over the floor slab. */}
         <g clipPath={`url(#${clipId})`} fill="none" strokeLinecap="round" strokeLinejoin="round">
@@ -463,7 +559,13 @@ function Scene({ m, f, p }: { m: LaunchMath; f: StoryFrame; p: Plot }) {
         ) : null}
 
         {arbSteps.length ? (
-          <Chip x={s.x(arbSteps[0]![0]) + 4} y={s.y(arbSteps[0]![1]) + 8} anchor="left-top" tone="net" opacity={arbOpacity}>
+          <Chip
+            x={s.x(arbSteps[0]![0]) + 4}
+            y={s.y(arbSteps[0]![1]) + (arbFlip ? -6 : 8)}
+            anchor={arbFlip ? "left-bottom" : "left-top"}
+            tone="net"
+            opacity={arbOpacity}
+          >
             {CHART_COPY.arbLine}
           </Chip>
         ) : null}
@@ -474,17 +576,16 @@ function Scene({ m, f, p }: { m: LaunchMath; f: StoryFrame; p: Plot }) {
           </Chip>
         ) : null}
 
-        {exitsEvent && f.exitsPct !== null ? (
-          <Chip
-            x={s.x(exitsEvent.t)}
-            y={s.y(exitsEvent.to) - 26}
-            anchor="bottom"
-            tone="floor"
-            opacity={(1 - ramp(redeemOn, 0, 0.15)) * exitsChipClear}
-          >
-            {CHART_COPY.fromExits(f.exitsPct)}
-          </Chip>
-        ) : null}
+        {burnMarks.map((b) =>
+          b.labelOn > 0.01 ? (
+            <Chip key={b.t} x={b.labelX} y={p.ground - 8} anchor="bottom" tone="burn" opacity={b.labelOn} part="burn-label">
+              <svg className={styles.flame} viewBox="-6 -14 12 16" aria-hidden>
+                <path d={FLAME_D} fill="currentColor" />
+              </svg>
+              {b.label}
+            </Chip>
+          ) : null,
+        )}
 
         {/* Hidden while the split bar covers the rising floor (presale, split). */}
         {steps.length && f.floorReveal > 0.5 && f.beatIndex >= 2 && f.beat !== "redeem" ? (
@@ -510,7 +611,7 @@ function Scene({ m, f, p }: { m: LaunchMath; f: StoryFrame; p: Plot }) {
 }
 
 type Anchor = "bottom" | "top" | "left-top" | "left-bottom" | "right-top" | "bottom-right";
-type Tone = "axis" | "raised" | "floor" | "net" | "redeem";
+type Tone = "axis" | "raised" | "floor" | "net" | "redeem" | "burn";
 
 const TONE_CLASS: Record<Tone, string> = {
   axis: "text-[10.5px] font-semibold",
@@ -518,6 +619,7 @@ const TONE_CLASS: Record<Tone, string> = {
   floor: "pill pill-sm",
   net: "pill pill-sm",
   redeem: "pill bg-mint text-midnight",
+  burn: "pill pill-sm",
 };
 
 /** An opaque tint on the midnight card, so a chip stays legible over the trail. */
@@ -529,15 +631,33 @@ const TONE_STYLE: Record<Tone, CSSProperties> = {
   floor: { color: CHART.floor, background: onCard(CHART.floor, 0.16) },
   net: { color: CHART.arb, background: onCard(CHART.arb, 0.16) },
   redeem: {},
+  burn: { color: SUPPLY, background: onCard(SUPPLY, 0.16) },
 };
 
-function Chip({ x, y, anchor, tone, opacity = 1, children }: { x: number; y: number; anchor: Anchor; tone: Tone; opacity?: number; children: ReactNode }) {
+function Chip({
+  x,
+  y,
+  anchor,
+  tone,
+  opacity = 1,
+  part,
+  children,
+}: {
+  x: number;
+  y: number;
+  anchor: Anchor;
+  tone: Tone;
+  opacity?: number;
+  part?: string;
+  children: ReactNode;
+}) {
   if (opacity <= 0.01) return null;
   return (
     <span
       className={`tnum ${styles.chip} ${TONE_CLASS[tone]}`}
       data-anchor={anchor}
       data-tone={tone}
+      data-part={part}
       style={{ ...TONE_STYLE[tone], left: x, top: y, opacity }}
     >
       {children}

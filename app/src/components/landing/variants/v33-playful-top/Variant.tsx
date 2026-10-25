@@ -19,8 +19,10 @@ import styles from "./playfulTop.module.css";
  * compact size, the ball, the platforms, the trampoline, the speech-bubble captions with level
  * numbers), with three changes: the line-segment step rail with the beat names replaces the dotted
  * level rail; "Your $100 now" and "Floor pays back" move from under the chart to the top, each with
- * its change since listing; and a third tile shows the token supply shrinking as redemptions burn
- * tokens (18's ledger row). On the beats where supply drops, the bubble says why that matters.
+ * its change since listing; and a third tile shows the token supply left (18's ledger row). Round 5
+ * puts supply on the chart: a thin supply lane under the platforms steps down at each burn, and each
+ * burn has a marker on the floor labelled with the supply drop and the small floor step it causes.
+ * On the beats where supply drops, the bubble says why that matters.
  */
 
 /** One short line on why the burn matters, under the caption of the beats where supply drops. */

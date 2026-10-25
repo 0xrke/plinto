@@ -1,8 +1,8 @@
 /*
- * Variant 36: Film, compact (v32's styles at variant 20's size, plus v18's token supply). On desktop the
- * stage is min(640px, 82svh), centred in the 100svh sticky slot, inside the 1120px brand container;
- * read top-down: the header (title and step progress), the caption row (caption heading and the
- * token-supply readout), then the screen (the midnight chart card) filling the rest. Phones keep v32's
+ * Variant 36: Film, compact (v32's styles at variant 20's size, with the token supply on the chart). On
+ * desktop the stage is min(640px, 82svh), centred in the 100svh sticky slot, inside the 1120px brand
+ * container; read top-down: the header (title and step progress), the caption heading, then the screen
+ * (the midnight chart card, with its supply lane at the bottom) filling the rest. Phones keep v32's
  * full-height stage. Nothing sits under the screen. Caption fades read the driver's --qN variables
  * (set on the [data-rail] caption layer). Only transform and opacity move; nothing animates on a
  * timer. Colours are var(--color-…) tokens.
@@ -24,16 +24,15 @@
   background: var(--color-surface);
 }
 
-/* The stage grid, top-down: header, caption, supply, screen. The screen takes all the height left. */
+/* The stage grid, top-down: header, caption, screen. The screen takes all the height left. */
 .frame {
   height: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-areas:
     "head"
     "subs"
-    "supply"
     "screen";
   row-gap: var(--row-gap);
   padding-top: var(--pad-y);
@@ -44,134 +43,6 @@
   grid-area: screen;
   min-height: 0;
   position: relative;
-}
-
-.supplySlot {
-  grid-area: supply;
-}
-
-/* Reduced motion: the supply readout above each still card. */
-.stillStack {
-  display: grid;
-  gap: 8px;
-}
-
-/* ---------- token supply (v18's ledger row, compact) ---------- */
-
-.supply {
-  position: relative;
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  grid-template-areas:
-    "icon label value"
-    "icon bar change"
-    ". why why";
-  align-items: center;
-  column-gap: 8px;
-  row-gap: 2px;
-  min-width: 0;
-  padding: 7px 10px 7px 8px;
-  border-radius: 14px;
-  background: var(--color-cloud);
-}
-
-/* The burn lights the row up: a violet wash and a ring on the icon, fading with --glow. */
-.supply::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: var(--color-violet-soft);
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-iris) 55%, transparent);
-  opacity: var(--glow, 0);
-  pointer-events: none;
-}
-
-.supply > * {
-  position: relative;
-}
-
-.supplyIcon {
-  grid-area: icon;
-  align-self: start;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 8px;
-  background: var(--color-violet-soft);
-  color: var(--color-violet-strong);
-  box-shadow: 0 0 0 calc(var(--glow, 0) * 3px) color-mix(in srgb, var(--color-iris) 45%, transparent);
-}
-
-.supplyLabel {
-  grid-area: label;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--color-ink-2);
-  white-space: nowrap;
-}
-
-.supplyValue {
-  grid-area: value;
-  justify-self: end;
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.2;
-  color: var(--color-ink);
-}
-
-.supply[data-listed="false"] .supplyValue {
-  color: var(--color-ink-3);
-}
-
-/* FloorMeter look: a short soft track; what's left in iris, the burned part hatched on violet-soft. */
-.supplyBar {
-  grid-area: bar;
-  display: flex;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--color-track);
-  overflow: hidden;
-}
-
-.supplyBar > span {
-  flex: none;
-  height: 100%;
-}
-
-.supplyLeft {
-  background: var(--color-iris);
-}
-
-.supplyBurned {
-  background-color: var(--color-violet-soft);
-  background-image: repeating-linear-gradient(135deg, var(--color-iris) 0 1.5px, transparent 1.5px 5px);
-}
-
-.supplyChange {
-  grid-area: change;
-  justify-self: end;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-ink-3);
-  white-space: nowrap;
-}
-
-.supplyChange b {
-  font-weight: 800;
-  color: var(--color-violet-strong);
-}
-
-.supplyWhy {
-  grid-area: why;
-  font-size: 11px;
-  line-height: 1.35;
-  color: var(--color-ink-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* Reduced-motion still: a taller card than BrandChartFrame's 180px, so the strip and tooltips read. */
@@ -563,13 +434,6 @@
   .frame {
     height: var(--stage-h);
     margin-block: auto;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: auto auto minmax(0, 1fr);
-    grid-template-areas:
-      "head head"
-      "subs supply"
-      "screen screen";
-    column-gap: 32px;
   }
 
   .header {
@@ -578,31 +442,6 @@
 
   .subs {
     align-self: center;
-  }
-
-  .supply {
-    width: 320px;
-    padding: 8px 12px 8px 10px;
-    grid-template-columns: 28px minmax(0, 1fr) auto;
-    column-gap: 10px;
-  }
-
-  .supplyIcon {
-    width: 28px;
-    height: 28px;
-    border-radius: 10px;
-  }
-
-  .supplyLabel {
-    font-size: 12.5px;
-  }
-
-  .supplyValue {
-    font-size: 18px;
-  }
-
-  .supplyChange {
-    font-size: 11.5px;
   }
 
   .header {
@@ -615,7 +454,7 @@
     font-size: 26px;
   }
 
-  /* One line of large Outfit heading, right above the frame, beside the supply readout. */
+  /* One line of large Outfit heading, right above the frame. */
   .caption {
     font-size: 28px;
     line-height: 1.2;
@@ -765,10 +604,36 @@
 .tagMuted .pctDown { fill: var(--color-risk-on-dark); }
 .tagMuted .pctUp { fill: var(--color-mint); }
 
-/* The exits' "+0.9% from exits" chip, under the floor tooltip. */
-.exitsChip { fill: var(--color-midnight-chip); stroke: color-mix(in srgb, var(--color-mint) 35%, transparent); stroke-width: 1; }
-.exitsText { font-size: 10px; font-weight: 700; fill: var(--color-mint); font-variant-numeric: tabular-nums; }
-.wide .exitsText { font-size: 12.5px; }
+/* Token supply on the chart: iris (the gauge colour on midnight; the split's market share, iris too,
+   is gone by the time trading opens). The lane is a thin volume-style pane, 0–100% of listing supply. */
+.laneRef { stroke: color-mix(in srgb, var(--color-iris) 35%, transparent); stroke-width: 1; stroke-dasharray: 2 4; }
+.laneArea { fill: color-mix(in srgb, var(--color-iris) 18%, transparent); }
+.laneLine { fill: none; stroke: var(--color-iris); stroke-width: 1.75; stroke-linejoin: miter; }
+.laneDot { fill: var(--color-iris); stroke: var(--color-midnight); stroke-width: 1.5; }
+.laneName { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; fill: var(--color-on-dark-3); }
+.connIris { stroke: color-mix(in srgb, var(--color-iris) 60%, transparent); stroke-width: 1; fill: none; }
+.burnLeader { stroke: color-mix(in srgb, var(--color-iris) 45%, transparent); stroke-width: 1; stroke-dasharray: 2 3; }
+.burnRing { fill: var(--color-midnight-chip); stroke: var(--color-iris); stroke-width: 1.5; }
+.burnFlame { fill: var(--color-iris); }
+.burnText {
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--color-midnight);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.burnSupply { fill: color-mix(in srgb, var(--color-iris) 55%, var(--color-white)); }
+.burnArrow { fill: var(--color-on-dark-3); font-weight: 600; }
+.burnFloor { fill: var(--color-mint); }
+/* The supply tooltip: iris with ink text (5:1). */
+.tagSupply { fill: var(--color-iris); }
+.tagSupplyTone .tagLabel,
+.tagSupplyTone .tagPctSuffix { fill: var(--color-ink); }
+.pctSupply { fill: var(--color-ink); font-weight: 800; }
+.wide .laneName { font-size: 10.5px; }
+.wide .burnText { font-size: 12px; }
 
 /* Wide cards (≥ 640px): strip and tooltip type a step up, as on v27's wide tape. */
 .wide .sectionLabel { font-size: 16px; }

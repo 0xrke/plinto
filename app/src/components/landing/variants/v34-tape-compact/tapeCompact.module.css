@@ -1,6 +1,7 @@
 /*
  * Variant 34, "Tape chart, compact": variant 29 (27's tape left, 21's caption ribbon right, the
- * line-segment step rail on top) at variant 20's size, with 18's token-supply row under the caption.
+ * line-segment step rail on top) at variant 20's size, with the token supply drawn on the tape: burn
+ * markers on the floor line, a thin supply lane along the tape's foot and a third riding tag.
  * Colours are site tokens only (var(--color-…)); radii and type follow shared/BRAND.md. Native
  * scrolling only: no scroll-snap, no scroll-behavior. Scrubbed values change inline from the frame,
  * never through transitions.
@@ -10,9 +11,9 @@
  * columns, 48px gap. White space above and below the stage is intended.
  *
  * How the ribbon works (from 29): the stage (z 2) is sticky over the runway (StorySteps, z 1). On
- * wide screens the stage is opaque above the main row (title and rail) and from the supply row down;
+ * wide screens the stage is opaque above the main row (title and rail) and from the caption room down;
  * the right column between them is a transparent window, so the runway's captions show through. Each
- * caption rises from behind the supply row, sticks level with the chart card's top while its beat
+ * caption rises from behind the cover under that room, sticks level with the chart card's top while its beat
  * plays, and is pushed up under the title row by the next one; the one already read fades out first.
  */
 
@@ -28,7 +29,7 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
-/* ---------- stage: phones (title, rail, chart, supply; captions below) ---------- */
+/* ---------- stage: phones (title, rail, chart; captions below) ---------- */
 
 .stage {
   grid-area: 1 / 1;
@@ -57,11 +58,10 @@
   height: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
     "top"
-    "chart"
-    "supply";
+    "chart";
   row-gap: 6px;
 }
 
@@ -114,9 +114,8 @@
   display: none;
 }
 
-.supplySlot {
-  grid-area: supply;
-  min-width: 0;
+.capCover {
+  display: none;
 }
 
 /* The tape sits under the card's chip row (Illustration / real scale), edge to edge like a tape. */
@@ -132,157 +131,6 @@
   height: 100%;
   display: block;
   font-family: var(--font-sans);
-}
-
-/* ---------- token supply (18's ledger row) ---------- */
-
-/*
- * Phones: one compact line (icon, label, change, value) over the bar. Wide: a cloud tile with the
- * value large, the change under it, the bar and the reason. Lit (--lit 1 → 0) in the redemption's
- * violet while a burn is fresh, as 18's rows are.
- */
-.supply {
-  --lit: 0;
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas:
-    "head change"
-    "bar bar";
-  align-items: center;
-  column-gap: 8px;
-  row-gap: 5px;
-  padding: 7px 10px 8px;
-  border-radius: 14px;
-  background: var(--color-cloud);
-  color: var(--color-ink);
-}
-
-.supply::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: var(--color-violet-soft);
-  box-shadow: inset 0 0 0 1.5px var(--color-iris);
-  opacity: var(--lit);
-  pointer-events: none;
-}
-
-.supply > * {
-  position: relative;
-}
-
-.supplyHead {
-  grid-area: head;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.supplyIcon {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 8px;
-  background: var(--color-violet-soft);
-  color: var(--color-violet-strong);
-  box-shadow: 0 0 0 calc(var(--lit) * 3px) var(--color-iris);
-}
-
-.supplyIcon svg {
-  width: 15px;
-  height: 15px;
-}
-
-.supplyLabel {
-  min-width: 0;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  color: var(--color-ink-2);
-}
-
-.supplyValue {
-  margin-left: auto;
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1;
-  white-space: nowrap;
-  color: var(--color-ink);
-}
-
-.supplyChange {
-  grid-area: change;
-  font-size: 11.5px;
-  font-weight: 600;
-  white-space: nowrap;
-  color: var(--color-ink-3);
-}
-
-.supplyChange b {
-  font-weight: 800;
-  color: var(--color-violet-strong);
-}
-
-/* No change yet (pump to steps): the zero reads as a fact, not as news. */
-.supplyChange b[data-flat] {
-  color: var(--color-ink-3);
-}
-
-/* Before listing there is no supply to compare with: the row holds its place, hidden. */
-.supply {
-  transition: opacity 0.25s ease, visibility 0s;
-}
-
-.supply:not([data-listed]) {
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.25s ease, visibility 0s 0.25s;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .supply,
-  .supply:not([data-listed]) {
-    transition: none;
-  }
-}
-
-/* FloorMeter look: soft track, the supply left in iris, the burned part hatched (18's segBurned). */
-.supplyBar {
-  grid-area: bar;
-  display: flex;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--color-track);
-  overflow: hidden;
-}
-
-.supplyBar > span {
-  flex: none;
-  height: 100%;
-}
-
-.supplyLeft {
-  background: var(--color-iris);
-}
-
-.supplyBurned {
-  background-color: var(--color-violet-soft);
-  background-image: repeating-linear-gradient(135deg, var(--color-iris) 0 1.5px, transparent 1.5px 5px);
-}
-
-.supplyWhy {
-  display: none;
-}
-
-.supplyEq {
-  white-space: nowrap;
-  color: var(--color-ink-3);
 }
 
 /* ---------- rail (the landing's segments, as in 28) ---------- */
@@ -469,7 +317,7 @@
 }
 
 
-/* ---------- wide: title and rail on top, the tape left, the ribbon and supply right ---------- */
+/* ---------- wide: title and rail on top, the tape left, the ribbon right ---------- */
 
 @media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
   .root {
@@ -481,7 +329,7 @@
     --st-top-gap: 14px;
     --st-top-h: calc(var(--st-head-h) + var(--st-top-gap) + var(--st-rail-h));
     --st-row-gap: 22px;
-    /* Room for the caption above the supply row: the tallest caption (199px at 1440) plus a gap. */
+    /* Room for the caption above the cover: the tallest caption (199px at 1440) plus a gap. */
     --st-cap-room: 228px;
     --st-main-top: calc(var(--st-off) + var(--st-top-h) + var(--st-row-gap));
     /* 20's columns and the brand container (1120px with 48px side padding: 1024px of content). */
@@ -518,12 +366,12 @@
     margin: var(--st-off) auto 0;
     padding: 0;
     grid-template-columns: var(--st-cols);
-    /* The caption room shrinks first on short screens; the supply row keeps its height. */
-    grid-template-rows: var(--st-top-h) minmax(0, var(--st-cap-room)) auto minmax(0, 1fr);
+    /* The caption room shrinks first on short screens. */
+    grid-template-rows: var(--st-top-h) minmax(0, var(--st-cap-room)) 0 minmax(0, 1fr);
     grid-template-areas:
       "top top"
       "chart side"
-      "chart supply"
+      "chart cover"
       "chart rest";
     column-gap: var(--st-col-gap);
     row-gap: var(--st-row-gap);
@@ -589,7 +437,7 @@
     display: none;
   }
 
-  /* The right column is a transparent window for the ribbon, down to the supply row. */
+  /* The right column is a transparent window for the ribbon, down to the cover. */
   .side {
     display: block;
     grid-area: side;
@@ -597,90 +445,33 @@
   }
 
   /*
-   * The supply row sits in the right column right under the caption, at eye level. It is opaque, and
-   * so is everything under it down to the viewport's foot: the captions to come rise from behind it,
-   * through a short fade.
+   * Under the caption room the right column is opaque down to the viewport's foot: the captions to
+   * come rise from behind it, through a short fade. (The token supply lives on the tape now.)
    */
-  .supplySlot {
-    grid-area: supply;
+  .capCover {
+    display: block;
+    grid-area: cover;
     position: relative;
-    background: var(--color-surface);
   }
 
-  .supplySlot::before {
+  .capCover::before {
     content: "";
     position: absolute;
     inset-inline: -8px;
-    bottom: 100%;
+    bottom: 0;
     height: 56px;
     background: linear-gradient(transparent, var(--color-surface));
     pointer-events: none;
   }
 
-  .supplySlot::after {
+  .capCover::after {
     content: "";
     position: absolute;
     inset-inline: -8px;
-    top: 100%;
+    top: 0;
     height: 100svh;
     background: var(--color-surface);
     pointer-events: none;
-  }
-
-  .supply {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "head"
-      "change"
-      "bar"
-      "why";
-    row-gap: 0;
-    padding: 16px 18px 16px;
-    border-radius: 20px;
-  }
-
-  .supplyHead {
-    gap: 10px;
-  }
-
-  .supplyIcon {
-    width: 32px;
-    height: 32px;
-    border-radius: 11px;
-  }
-
-  .supplyIcon svg {
-    width: 18px;
-    height: 18px;
-  }
-
-  .supplyLabel {
-    font-size: 13.5px;
-  }
-
-  .supplyValue {
-    font-size: 28px;
-    letter-spacing: -0.01em;
-  }
-
-  .supplyChange {
-    justify-self: end;
-    margin-top: 4px;
-    font-size: 13px;
-  }
-
-  .supplyBar {
-    height: 8px;
-    margin-top: 12px;
-  }
-
-  .supplyWhy {
-    grid-area: why;
-    display: block;
-    margin-top: 10px;
-    font-size: 13px;
-    line-height: 1.45;
-    color: var(--color-ink-2);
   }
 
   /* The runway: the same width and columns as the frame; every step sits in the right column. */
@@ -738,12 +529,14 @@
   .kicker { display: none; }
   .sentence { margin-top: 0; font-size: 18px; }
   .deck { display: none; }
-  .supply { padding: 8px 10px; }
-  .supplyValue { font-size: 18px; }
-  .supplyWhy { display: none; }
 }
 
 /* ---------- SVG parts (midnight card) ---------- */
+
+/* The token supply's colour on midnight: a light violet, apart from the iris market share. */
+.svg {
+  --supply: color-mix(in srgb, var(--color-iris) 55%, var(--color-white));
+}
 
 .boundary { stroke: var(--color-midnight-line); stroke-width: 1; }
 .boundaryZoom { stroke: color-mix(in srgb, var(--color-mint) 40%, transparent); stroke-width: 1; stroke-dasharray: 2 4; }
@@ -796,7 +589,7 @@
 .chipText { font-size: 11.5px; font-weight: 700; fill: var(--color-white); font-variant-numeric: tabular-nums; }
 
 /* A knock-out in the card colour keeps labels readable where the price line crosses them. */
-.noteMint, .noteMintBold, .noteRisk, .noteRiskBold, .tick, .tickHundred, .splitLabel, .raisedLabel {
+.noteMint, .noteMintBold, .noteRisk, .noteRiskBold, .tick, .tickHundred, .splitLabel, .raisedLabel, .burnLabel, .laneName {
   paint-order: stroke;
   stroke: var(--color-midnight);
   stroke-width: 4px;
@@ -833,6 +626,26 @@
 .wide .tagLabel { font-size: 12px; }
 .wide .tagValue { font-size: 20px; }
 .wide .tagPct { font-size: 13px; }
+.wide .burnLabel { font-size: 13px; }
+.wide .laneName { font-size: 12px; }
+.wide .tagSupplyValue { font-size: 18px; }
+
+/* Token supply on the tape: the lane, its scale, the burn flames and labels, the third tag. */
+.lane100 { stroke: color-mix(in srgb, var(--supply) 35%, transparent); stroke-width: 1; }
+.laneArea { fill: color-mix(in srgb, var(--supply) 22%, transparent); }
+.laneLine { fill: none; stroke: var(--supply); stroke-width: 2; stroke-linejoin: miter; }
+.laneDot { fill: var(--supply); stroke: var(--color-midnight); stroke-width: 2; }
+.laneName { font-size: 10.5px; font-weight: 700; fill: var(--supply); }
+.burnLeader { stroke: color-mix(in srgb, var(--supply) 75%, transparent); stroke-width: 1.25; stroke-dasharray: 2 3; }
+.flame { fill: var(--supply); stroke: var(--color-midnight); stroke-width: 1.5; stroke-linejoin: round; }
+.burnLabel { font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.burnSupply { fill: var(--supply); }
+.burnFloor { fill: var(--color-mint); }
+.connSupply { stroke: color-mix(in srgb, var(--supply) 60%, transparent); stroke-width: 1; fill: none; }
+.tagSupply { fill: var(--color-violet-soft); }
+.tagSupplyValue { font-family: var(--font-display); font-size: 14px; font-weight: 700; fill: var(--color-ink); font-variant-numeric: tabular-nums; }
+.pctSupply { fill: var(--color-violet-strong); font-weight: 800; }
+.pctFlat { fill: var(--color-ink-3); font-weight: 800; }
 
 /* ---------- stills (reduced motion) and footer ---------- */
 
@@ -879,7 +692,7 @@
   color: var(--color-ink);
 }
 
-/* A still: the tape frame with the supply row under it. */
+/* A still: the tape frame. */
 .still {
   display: grid;
   gap: 8px;

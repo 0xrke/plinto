@@ -35,13 +35,25 @@ export interface Plot {
   top: number;
   bottom: number;
   r: number;
+  /** Where the main chart's ground ends (the floor slab's bottom): the supply lane's top edge. */
+  ground: number;
+  /** The supply lane under the main chart: its 100% and 0% levels (y, px). */
+  lane: { top: number; y100: number; y0: number };
 }
 
-/** Plot box inside the midnight card: the top keeps the corner chips (Illustration, scale) clear. */
+/** Supply lane height: a thin pane at the card's bottom, like a trading chart's volume pane. */
+export const laneHeight = (w: number) => (w < 480 ? 40 : 56);
+
+/**
+ * Plot box inside the midnight card: the top keeps the corner chips (Illustration, scale) clear, the
+ * bottom leaves the supply lane, so the main chart shrinks a little and the card keeps its size.
+ */
 export function plotFor(w: number, h: number, foot = 14): Plot {
   const small = w < 480;
   const r = small ? 10 : 13;
-  return { w, h, left: 16, right: w - (small ? 20 : 28), top: r * 2 + (small ? 40 : 46), bottom: h - foot, r };
+  const ground = h - laneHeight(w);
+  const lane = { top: ground, y100: ground + (small ? 13 : 16), y0: h - (small ? 5 : 7) };
+  return { w, h, left: 16, right: w - (small ? 20 : 28), top: r * 2 + (small ? 40 : 46), bottom: ground - foot, r, ground, lane };
 }
 
 /** Beat start times inside (0, xMax): the card's vertical dividers, which slide with the camera. */

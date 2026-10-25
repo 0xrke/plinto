@@ -3,10 +3,10 @@ import { BEAT_KEYS, BEAT_LABELS, type BeatKey } from "../shared";
 
 /*
  * Pure geometry for variant 36's film frame (from v32), in card pixels: where the plot box sits inside the
- * midnight card (under the chip row and the section strip, short of the right edge so the value
- * tooltips can ride the price head), the section strip's labels (v27's ruler logic, following the
- * camera instead of a fixed playhead), and the placement of the two tooltips (v27's layoutTags). No
- * React, no DOM.
+ * midnight card (under the chip row and the section strip, above the supply lane at the bottom, short
+ * of the right edge so the value tooltips can ride the price head), the section strip's labels (v27's
+ * ruler logic, following the camera instead of a fixed playhead), and the placement of the tooltips
+ * (v27's layoutTags). No React, no DOM.
  */
 
 /** Below this card width the frame uses its phone layout (smaller strip type, narrower tooltips). */
@@ -31,6 +31,9 @@ export interface FilmGeometry {
   tagGap: number;
   tagH0: number;
   tagH1: number;
+  /** The supply lane at the card's bottom (a volume pane): its top and height, card px. */
+  laneTop: number;
+  laneH: number;
 }
 
 export function filmGeometry(W: number, H: number): FilmGeometry {
@@ -40,6 +43,10 @@ export function filmGeometry(W: number, H: number): FilmGeometry {
   // (smaller type, tighter padding), so the plot keeps more of the width.
   const tagW = compact ? 104 : 168;
   const tagGap = compact ? 8 : 16;
+  // The supply lane: thin, at the bottom of the card, under the plot (the card does not grow; the plot
+  // gives up the lane's height and a little air).
+  const laneH = compact ? 28 : 42;
+  const laneTop = H - (compact ? 8 : 10) - laneH;
   return {
     W,
     H,
@@ -49,12 +56,14 @@ export function filmGeometry(W: number, H: number): FilmGeometry {
     pt: CHIP_ROW + strip + Math.round(H * (compact ? 0.05 : 0.06)),
     // The plot ends where the tooltips need it to: head + gap + tooltip + a margin fits in the card.
     pr: tagGap + tagW + (compact ? 4 : 10),
-    pb: Math.round(H * (compact ? 0.06 : 0.07)),
+    pb: H - laneTop + (compact ? 16 : 20),
     pl: Math.round(W * (compact ? 0.05 : 0.04)),
     tagW,
     tagGap,
     tagH0: compact ? 30 : 48,
     tagH1: compact ? 42 : 68,
+    laneTop,
+    laneH,
   };
 }
 

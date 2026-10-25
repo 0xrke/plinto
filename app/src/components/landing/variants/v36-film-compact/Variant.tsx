@@ -19,24 +19,23 @@ import {
 import { cameraAt } from "./camera";
 import { Scene } from "./FilmScene";
 import { filmGeometry } from "./sections";
-import { SupplyRow } from "./SupplyRow";
 import styles from "./filmCompact.module.css";
 
 /*
  * Variant 36: Film, compact (round 4, layout B: one big chart with the content on top). Variant 32
  * (v24's film frame with the camera, v27's beat sections and riding tooltips) brought to variant 20's
- * size, plus v18's token supply.
+ * size, with the token supply on the chart.
  *
  * Size: 20's frame. The stage is the harness's wide default, min(640px, 82svh) for everything in it
  * (header, caption row, chart), centred on the reading line inside the brand container (1120px, 48px
  * gutters); the chart spans the container's width. White space around the stage is intended. Phones
  * and tablets keep v32's full-height stage (captions on top, the chart filling the rest).
  *
- * Read top-down: the header (title and the line-segment step bar), then the caption row (the beat
- * caption as a large heading, with the token-supply readout beside it on desktop, under it on
- * phones), then the midnight film frame. Nothing sits under the frame. The supply readout is v18's
- * ledger row made compact: icon, label, value, "−30% since listing", a short bar with the burned part
- * hatched, and one line on why it matters; it lights up when a redemption burns tokens.
+ * Read top-down: the header (title and the line-segment step bar), then the caption (a large
+ * heading), then the midnight film frame. Nothing sits under the frame. The token supply lives on the
+ * chart (FilmScene.tsx): a thin supply lane at the card's bottom that steps down at each burn, burn
+ * markers on the floor line paired with the small floor step each causes, and a third tooltip at the
+ * head ("Token supply 69.7%, −30% since listing"); no supply numbers repeat above the chart.
  *
  * Also fixed from round 3: compact tooltips on phones, a full-contrast price tooltip in the redeem
  * step, and close-ups fitted to the price drawn (no empty band above the action; see camera.ts).
@@ -172,16 +171,10 @@ export default function Variant({ m }: VariantProps) {
       stage={(frame) => (
         <div className={`${BRAND_CLASS.container} ${styles.frame}`}>
           <CaptionLayer m={m} />
-          <SupplyRow m={m} frame={frame} className={styles.supplySlot} />
           <Screen m={m} frame={frame} />
         </div>
       )}
-      still={(frame) => (
-        <div className={styles.stillStack}>
-          <SupplyRow m={m} frame={frame} />
-          <Still m={m} frame={frame} />
-        </div>
-      )}
+      still={(frame) => <Still m={m} frame={frame} />}
       renderStep={(slot) => <Step {...slot} />}
       footer={
         <div className={`${BRAND_CLASS.container} ${styles.credits}`}>

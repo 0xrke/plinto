@@ -29,7 +29,6 @@ import {
   type VariantProps,
 } from "../shared";
 import { CompactStage } from "./CompactStage";
-import { SupplyRow } from "./Supply";
 import styles from "./blocksCompact.module.css";
 
 /*
@@ -38,9 +37,11 @@ import styles from "./blocksCompact.module.css";
  * and plain scrolling captions on the right) brought to variant 20's size: the brand's 1120px
  * container and the harness's stage, min(640px, 82svh), centred on the reading line, holding the
  * title, the step bar and the chart; chart and captions split 6fr / 4fr with a 48px gap. New in 35:
- * the token supply (18's ledger row) in the right column under the caption, from listing on. It
- * stays put while the captions scroll past above it, and lights up when redemptions burn tokens.
- * Reduced motion: eight static chart frames, each with its supply row. Native scrolling only.
+ * the token supply, on the chart itself (round 5): a thin supply lane at the card's foot on its own
+ * 0–100% scale, a burn marker on the floor line at each redemption that burns tokens (labelled with
+ * the supply drop and the small floor step it causes), and a third riding tag, "Token supply", beside
+ * the lane's head. No separate supply block, so no number shows twice.
+ * Reduced motion: eight static chart frames. Native scrolling only.
  */
 
 /**
@@ -109,13 +110,6 @@ function LiveChart() {
   return <CompactStage m={m} frame={frame} />;
 }
 
-/** The supply row: it re-renders with the frame, like the chart. */
-function LiveSupply() {
-  const m = useStoryLaunch();
-  const frame = useStoryFrame();
-  return <SupplyRow m={m} frame={frame} />;
-}
-
 /* ---------- captions: plain text that scrolls past ---------- */
 
 /** One beat's caption: a sticky block in the right column; the runway scrolls it past natively. */
@@ -149,20 +143,13 @@ export default function Variant({ m }: VariantProps) {
             <div className={styles.chartSlot} aria-hidden data-part="chart-slot">
               <LiveChart />
             </div>
-            <div className={styles.supplySlot} data-part="supply-slot">
-              <LiveSupply />
-            </div>
+            <div className={styles.capFoot} aria-hidden />
           </div>
         </StoryStage>
         <StorySteps heights={HEIGHTS} renderStep={renderStep} className={styles.steps} stepClassName={styles.step} />
       </StoryTrack>
       <div className={`${BRAND_CLASS.container} ${styles.stillsWrap}`}>
-        <StoryStills className={styles.stills} renderStill={(frame) => (
-            <div className={styles.stillCol}>
-              <CompactStage m={m} frame={frame} still />
-              {frame.beatIndex >= 2 ? <SupplyRow m={m} frame={frame} /> : null}
-            </div>
-          )} />
+        <StoryStills className={styles.stills} renderStill={(frame) => <CompactStage m={m} frame={frame} still />} />
       </div>
       <footer className={`${BRAND_CLASS.container} ${styles.footer}`}>
         <p className={styles.footnote}>{STORY_FOOTNOTE}</p>

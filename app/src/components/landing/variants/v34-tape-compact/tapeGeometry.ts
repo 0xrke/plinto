@@ -1,4 +1,4 @@
-import { BEAT_KEYS, storyFrame, type StoryFrame, type VariantProps } from "../shared";
+import { BEAT_KEYS, formatPctChange, storyFrame, type StoryFrame, type VariantProps } from "../shared";
 
 /*
  * Pure geometry for the fixed tape (copied unchanged from v27-tape-fixed, which took it from v19):
@@ -112,3 +112,35 @@ const PUMP_I = BEAT_KEYS.indexOf("pump");
  * (steps and redeem included) carries the Illustration label, not only the engine's illustrative ones.
  */
 export const showsIllustration = (frame: StoryFrame): boolean => frame.illustrative || frame.beatIndex >= PUMP_I;
+
+/**
+ * Vertical centres for a column of tags (top to bottom, in this order), each as close to its wanted
+ * centre as it can be, `gap` apart and kept inside [top, bottom]. Pushes down first, then back up
+ * from the bottom edge, then down again from the top edge (the top wins if the column cannot fit).
+ */
+export function stackTags(items: ReadonlyArray<{ want: number; h: number }>, top: number, bottom: number, gap = 6): number[] {
+  const c = items.map((it) => it.want);
+  const n = c.length;
+  for (let i = 0; i < n; i++) {
+    const min = i === 0 ? top + items[0]!.h / 2 : c[i - 1]! + items[i - 1]!.h / 2 + gap + items[i]!.h / 2;
+    c[i] = Math.max(c[i]!, min);
+  }
+  for (let i = n - 1; i >= 0; i--) {
+    const max = i === n - 1 ? bottom - items[i]!.h / 2 : c[i + 1]! - items[i + 1]!.h / 2 - gap - items[i]!.h / 2;
+    c[i] = Math.min(c[i]!, max);
+  }
+  for (let i = 0; i < n; i++) {
+    const min = i === 0 ? top + items[0]!.h / 2 : c[i - 1]! + items[i - 1]!.h / 2 + gap + items[i]!.h / 2;
+    c[i] = Math.max(c[i]!, min);
+  }
+  return c;
+}
+
+/**
+ * A burn's floor step for its label: formatPctChange, but with two decimals below 0.1% so the bounce's
+ * tiny step reads "+0.01%", not "0.0%" (it is real, and small).
+ */
+export function burnFloorText(pct: number): string {
+  if (pct > 0 && pct < 0.1) return `+${Math.max(0.01, Math.round(pct * 100) / 100).toFixed(2)}%`;
+  return formatPctChange(pct);
+}

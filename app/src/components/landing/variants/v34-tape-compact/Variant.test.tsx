@@ -4,10 +4,10 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { launchMath } from "@/lib/landing/sim/launch";
 import { simConstantsFromSdk } from "@/lib/landing/sim/fromSdk";
-import { BEAT_KEYS, BEAT_LABELS, ILLUSTRATION, REAL_SCALE_LABEL, SINCE_LISTING, TILE_FLOOR, TILE_NOW, TILE_SUPPLY, beatCaption, formatPctChange, sinceListing, storyFrame, supplyAt } from "../shared";
+import { BEAT_KEYS, BEAT_LABELS, ILLUSTRATION, REAL_SCALE_LABEL, SINCE_LISTING, TILE_FLOOR, TILE_NOW, TILE_SUPPLY, beatCaption, formatPctChange, sinceListing, storyFrame, supplyAt, supplyBurns } from "../shared";
 import { SPLIT_DIVIDE, SPLIT_SETTLE, CompactTape, splitPhase } from "./CompactTape";
-import Variant, { SUPPLY_WHY, SupplyRow } from "./Variant";
-import { supplyView } from "./supply";
+import Variant from "./Variant";
+import { burnFloorText, stackTags } from "./tapeGeometry";
 
 const m = launchMath(simConstantsFromSdk(), 50);
 let reduceMotion = false;
@@ -234,53 +234,150 @@ describe("v34 tape compact", () => {
     expect(css).toMatch(/--st-col-gap: 48px/);
   });
 
-  it("the supply row: hidden before listing, then the share left, its change since listing and the hatched burn", () => {
-    const before = render(<SupplyRow m={m} frame={storyFrame(m, 1.5)} />).container;
-    // Before listing the row holds its place but is not listed (CSS hides it) and has no change yet.
-    expect(before.querySelector('[data-part="supply"]')!.hasAttribute("data-listed")).toBe(false);
-    expect(before.querySelector('[data-part="supply-change"]')!.textContent).toBe("—");
-    expect(before.querySelector("[data-lit]")).toBeNull();
-    expect(css).toMatch(/\.supply:not\(\[data-listed\]\) \{\s*opacity: 0;\s*visibility: hidden;/);
-    cleanup();
-    const listed = render(<SupplyRow m={m} frame={storyFrame(m, 2.5)} />).container;
-    expect(listed.querySelector('[data-part="supply"]')!.hasAttribute("data-listed")).toBe(true);
-    expect(listed.textContent).toContain(TILE_SUPPLY);
-    expect(listed.textContent).toContain(SUPPLY_WHY);
-    expect(listed.querySelector('[data-part="supply-value"]')!.textContent).toBe("100.0%");
-    cleanup();
-    const end = storyFrame(m, 8);
-    const want = supplyAt(m, end)!;
-    const after = render(<SupplyRow m={m} frame={end} />).container;
-    expect(after.querySelector('[data-part="supply-value"]')!.textContent).toBe(`${(want.share * 100).toFixed(1)}%`);
-    expect(after.querySelector('[data-part="supply-change"]')!.textContent).toBe(`${formatPctChange(want.pct)} ${SINCE_LISTING}`);
-    expect(formatPctChange(want.pct)).toBe("−30%");
-    const burned = (after.querySelector('[data-part="supply-burned"]') as HTMLElement).style.width;
-    expect(parseFloat(burned)).toBeCloseTo((1 - want.share) * 100, 1);
-  });
-
-  it("the supply row lights up right after a burn and calms down as the story moves on", () => {
-    // Lit somewhere in the exits beat (the holders redeem), dark through the pump and steps.
-    for (const pos of [2.5, 3.5, 4.5]) expect(supplyView(m, storyFrame(m, pos)).lit).toBe(0);
-    const exits = Array.from({ length: 20 }, (_, k) => supplyView(m, storyFrame(m, 6 + k / 20)).lit);
-    expect(Math.max(...exits)).toBeGreaterThan(0.5);
-    // Supply only ever falls.
-    let prev = 1;
-    for (let pos = 0; pos <= 8; pos += 0.05) {
-      const v = supplyView(m, storyFrame(m, pos)).share;
-      expect(v).toBeLessThanOrEqual(prev + 1e-9);
-      prev = v;
+  /** Story pos at which the tape's time reaches t (the frame's t is monotone in pos). */
+  const posAt = (t: number) => {
+    let lo = 0;
+    let hi = 8;
+    for (let k = 0; k < 40; k++) {
+      const mid = (lo + hi) / 2;
+      if (storyFrame(m, mid).t < t) lo = mid;
+      else hi = mid;
     }
+    return hi;
+  };
+  const burns = supplyBurns(m);
+
+  it("burn markers: one flame per burn, appearing only once the tape passes it, labelled with the supply drop and its small floor step", () => {
+    expect(burns.map((b) => b.t)).toEqual([6.8, 8.2]);
+    for (const [w, h] of SIZES) {
+      for (const pos of [0.5, 1.5, 2.5, 4.5, 5.2]) {
+        const { container } = render(<CompactTape m={m} frame={storyFrame(m, pos)} w={w} h={h} />);
+        expect(container.querySelectorAll('[data-part="burn"]'), `pos ${pos}`).toHaveLength(0);
+        cleanup();
+      }
+      // Just before and just after each burn.
+      burns.forEach((b, i) => {
+        const p = posAt(b.t);
+        const before = render(<CompactTape m={m} frame={storyFrame(m, p - 0.01)} w={w} h={h} />).container;
+        expect(before.querySelectorAll('[data-part="burn"]')).toHaveLength(i);
+        cleanup();
+        const after = render(<CompactTape m={m} frame={storyFrame(m, p + 0.01)} w={w} h={h} />).container;
+        expect(after.querySelectorAll('[data-part="burn"]')).toHaveLength(i + 1);
+        cleanup();
+      });
+      // The end: both flames stay; the big one is labelled, pairing the supply drop with the floor step.
+      const end = render(<CompactTape m={m} frame={storyFrame(m, 8)} w={w} h={h} />).container;
+      expect(end.querySelectorAll('[data-part="burn"]')).toHaveLength(2);
+      const big = end.querySelector('[data-burn="big"] [data-part="burn-label"]')!;
+      expect(big.textContent).toBe("−30% supply→ floor +0.9%");
+      // The old "+x% from exits" label is gone: the burn label says it.
+      expect(end.textContent).not.toContain("from exits");
+      expect(end.querySelector('[data-burn="big"] [data-part="burn-leader"]')).toBeTruthy();
+      // The tiny burn names itself only during its own beat.
+      expect(end.querySelector('[data-burn="small"] [data-part="burn-label"]')).toBeNull();
+      cleanup();
+      const bounce = render(<CompactTape m={m} frame={storyFrame(m, 5.75)} w={w} h={h} />).container;
+      expect(bounce.querySelector('[data-burn="small"] [data-part="burn-label"]')!.textContent).toBe("−0.4% supply→ floor +0.01%");
+      cleanup();
+    }
+    expect(burnFloorText(burns[0]!.floorPct)).toBe("+0.01%");
+    expect(burnFloorText(burns[1]!.floorPct)).toBe("+0.9%");
+    // Honesty: a 30% burn lifts the floor by under 1%.
+    expect(burns[1]!.floorPct).toBeLessThan(1);
   });
 
-  it("the supply row shows in the live stage and in every still from listing on", () => {
+  it("the supply lane: nothing before listing, then 100% stepping down at the burn times, under the flames", () => {
+    for (const pos of [0.5, 1.5, 1.99]) {
+      const { container } = render(<CompactTape m={m} frame={storyFrame(m, pos)} w={586} h={484} />);
+      expect(container.querySelector('[data-part="supply-lane"]')).toBeNull();
+      expect(container.querySelector('[data-part="supply-scale"]')).toBeNull();
+      expect(container.querySelector('[data-part="tag-supply"]')).toBeNull();
+      cleanup();
+    }
+    const listed = render(<CompactTape m={m} frame={storyFrame(m, 2.5)} w={586} h={484} />).container;
+    expect(listed.querySelector('[data-part="supply-scale"]')!.textContent).toBe("100%Supply");
+    const flat = vertices(listed.querySelector('[data-part="supply-line"]')!.getAttribute("d")!);
+    expect(new Set(flat.map(([, y]) => y)).size).toBe(1);
+    cleanup();
+    const end = render(<CompactTape m={m} frame={storyFrame(m, 8)} w={586} h={484} />).container;
+    const pts = vertices(end.querySelector('[data-part="supply-line"]')!.getAttribute("d")!);
+    // Listing, then a vertical drop at each burn, then on to the playhead.
+    expect(pts).toHaveLength(6);
+    const drops = pts.filter((p, i) => i > 0 && Math.abs(p[0] - pts[i - 1]![0]) < 1e-6);
+    expect(drops).toHaveLength(2);
+    const flames = [...end.querySelectorAll('[data-part="burn"] path')].map((p) => vertices(p.getAttribute("d")!)[0]![0]);
+    drops.forEach(([x], i) => expect(Math.abs(x - flames[i]!)).toBeLessThan(0.2));
+    // Each drop is the burn's share: 100 → 99.6 → 69.7 on the lane's own scale.
+    const [y100, yA, yB] = [pts[0]![1], pts[2]![1], pts[4]![1]];
+    // (the 0.4% drop is a fraction of a pixel on a 33px scale; the 30% one is about a third of it).
+    expect(yA).toBeGreaterThanOrEqual(y100);
+    expect(yA - y100).toBeLessThan(0.5);
+    expect(yB - y100).toBeGreaterThan(8);
+    // The playhead ends the line.
+    expect(Math.abs(pts[5]![0] - 293)).toBeLessThan(0.2);
+    // The lane lies under the main plot: below every floor vertex.
+    const floorYs = vertices(end.querySelector('[data-part="floor-steps"]')!.getAttribute("d")!).map(([, y]) => y);
+    expect(Math.min(...pts.map(([, y]) => y))).toBeGreaterThan(Math.max(...floorYs));
+  });
+
+  it("the third riding tag shows the token supply and its change since listing, from listing on", () => {
+    for (const [w, h] of SIZES) {
+      for (const pos of [2.5, 6.5, 7.5, 8]) {
+        const frame = storyFrame(m, pos);
+        const want = supplyAt(m, frame)!;
+        const { container } = render(<CompactTape m={m} frame={frame} w={w} h={h} />);
+        const tag = container.querySelector('[data-part="tag-supply"]')!;
+        expect(tag.textContent).toContain(TILE_SUPPLY);
+        expect(tag.querySelector('[data-part="supply-value"]')!.textContent).toBe(`${(want.share * 100).toFixed(1)}%`);
+        expect(tag.querySelector('[data-part="pct-supply"]')!.textContent).toBe(`${formatPctChange(want.pct)} ${SINCE_LISTING}`);
+        // Three tags, none overlapping, none on the head dot.
+        const boxes = [...container.querySelectorAll('[data-part^="tag-"] > rect, [data-part="tag-price"] > rect')].map((r) => {
+          const y = Number(r.getAttribute("y"));
+          const x = Number(r.getAttribute("x"));
+          return { x, y, r: x + Number(r.getAttribute("width")), b: y + Number(r.getAttribute("height")) };
+        });
+        expect(boxes.length).toBe(3);
+        for (let i = 0; i < boxes.length; i++)
+          for (let j = i + 1; j < boxes.length; j++) expect(boxes[i]!.b <= boxes[j]!.y || boxes[j]!.b <= boxes[i]!.y).toBe(true);
+        for (const bx of boxes) expect(bx.x).toBeGreaterThan(w / 2 + 6);
+        cleanup();
+      }
+    }
+    const end = render(<CompactTape m={m} frame={storyFrame(m, 8)} w={586} h={484} />).container;
+    expect(end.querySelector('[data-part="tag-supply"]')!.textContent).toContain("69.7%");
+    expect(end.querySelector('[data-part="pct-supply"]')!.textContent).toBe(`−30% ${SINCE_LISTING}`);
+  });
+
+  it("stackTags keeps a column of tags in order, apart and inside its bounds", () => {
+    const at = stackTags(
+      [
+        { want: 100, h: 40 },
+        { want: 105, h: 40 },
+        { want: 300, h: 30 },
+      ],
+      0,
+      290,
+      6,
+    );
+    expect(at[1]! - at[0]!).toBeGreaterThanOrEqual(46 - 1e-9);
+    expect(at[2]! + 15).toBeLessThanOrEqual(290);
+    expect(at[0]).toBe(100);
+  });
+
+  it("the separate supply block is gone: no supply row in the stage or the stills, no repeated numbers", () => {
     const { container } = render(<Variant m={m} />);
-    expect(container.querySelectorAll('[data-part="supply-slot"] [data-part="supply"]')).toHaveLength(1);
+    expect(container.querySelector('[data-part="supply-slot"]')).toBeNull();
+    expect(container.querySelector('[data-part="supply"]')).toBeNull();
+    expect(container.querySelectorAll('[data-part="tag-supply"]')).toHaveLength(1);
     cleanup();
     reduceMotion = true;
     render(<Variant m={m} />);
     const figures = screen.getByTestId("story-stills").querySelectorAll("figure");
     expect(figures).toHaveLength(8);
-    figures.forEach((f, i) => expect(!!f.querySelector('[data-part="supply"]'), `still ${i}`).toBe(i >= 2));
+    figures.forEach((f, i) => {
+      expect(f.querySelector('[data-part="supply"]')).toBeNull();
+      expect(!!f.querySelector('[data-part="tag-supply"]'), `still ${i}`).toBe(i >= 2);
+    });
   });
 
   it("redeem: the price tag stays at full strength (only its dot dims with the price line)", () => {

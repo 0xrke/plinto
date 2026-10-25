@@ -3,9 +3,11 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { launchMath } from "@/lib/landing/sim/launch";
 import { simConstantsFromSdk } from "@/lib/landing/sim/fromSdk";
 import { storyFrame } from "@/lib/landing/sim/story";
-import { BEAT_KEYS, ILLUSTRATION, REAL_SCALE_LABEL, SINCE_LISTING, TILE_FLOOR, TILE_NOW, TILE_SUPPLY, beatCaption } from "../shared";
+import { BEAT_KEYS, ILLUSTRATION, REAL_SCALE_LABEL, SINCE_LISTING, TILE_FLOOR, TILE_NOW, TILE_SUPPLY, beatCaption, supplyBurns } from "../shared";
 import Variant, { SUPPLY_EQUATION, SUPPLY_NOTE } from "./Variant";
-import { clearOfBall, netPress, treads } from "./scene";
+import { TopStage } from "./TopStage";
+import { T_LISTING, clearOfBall, netPress, plotFor, treads } from "./scene";
+import { SUPPLY_LANE_LABEL, SUPPLY_LANE_TOP, burnFloorText, burnLabel, burnsSoFar, floorAfter, isTinyBurn, laneSteps } from "./supplyLane";
 import { supplyFresh, supplyText, topTiles } from "./tiles";
 
 const m = launchMath(simConstantsFromSdk(), 50);
@@ -59,6 +61,12 @@ describe("v33 playful, values on top", () => {
       expect(card.compareDocumentPosition(tile) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     }
     expect(container.textContent).toContain(TILE_SUPPLY);
+    // The tile keeps only the current value: its own shrinking bar is gone (the lane draws supply).
+    expect(container.querySelector('[data-part="supply-bar"]')).toBeNull();
+    expect(container.querySelector('[data-part="supply-lane"]')).toBeTruthy();
+    // The old "+0.9% from exits" chip is replaced by the burn label on the chart.
+    expect(container.textContent).not.toContain("from exits");
+    expect(container.textContent).toContain("−30% supply → floor +0.9%");
     // Finished frame: supply 69.7%, −30% since listing, the floor up since listing; your $100 redeemed (no %).
     expect(container.querySelector('[data-part="tile-supply"]')!.textContent).toBe("69.7%");
     const supplyTile = container.querySelector('[data-tile="supply"]')!;
@@ -153,5 +161,97 @@ describe("v33 playful, values on top", () => {
     expect(clearOfBall(box, 160, 30, 10)).toBe(1);
     // Half the margin away: half faded.
     expect(clearOfBall(box, 236, 80, 10)).toBeCloseTo(0.5);
+  });
+
+  it("labels each burn with its supply drop and the small floor step it causes", () => {
+    const [tiny, big] = supplyBurns(m);
+    expect(isTinyBurn(tiny!)).toBe(true);
+    expect(isTinyBurn(big!)).toBe(false);
+    expect(burnLabel(big!)).toBe("−30% supply → floor +0.9%");
+    expect(burnLabel(tiny!)).toBe("−0.4% supply → floor +0.01%");
+    expect(burnFloorText(0.008)).toBe("+0.01%");
+    expect(burnFloorText(0.0004)).toBe("0.0%");
+    // Honesty: the 30% burn lifts the floor by under 1%.
+    expect(big!.floorPct).toBeGreaterThan(0);
+    expect(big!.floorPct).toBeLessThan(1);
+  });
+
+  it("adds burns only once the frame passes them, and none before listing", () => {
+    const [tiny, big] = supplyBurns(m);
+    const at = (t: number, beatIndex = 7) => ({ ...storyFrame(m, 8), t, beatIndex });
+    expect(burnsSoFar(m, storyFrame(m, 1.5))).toEqual([]);
+    expect(laneSteps(m, storyFrame(m, 1.5))).toBeNull();
+    expect(burnsSoFar(m, at(tiny!.t - 0.01))).toEqual([]);
+    expect(burnsSoFar(m, at(tiny!.t))).toEqual([tiny]);
+    expect(burnsSoFar(m, at(big!.t - 0.01))).toEqual([tiny]);
+    expect(burnsSoFar(m, at(big!.t + 0.01))).toEqual([tiny, big]);
+  });
+
+  it("steps the supply lane down exactly at the burn times", () => {
+    const [tiny, big] = supplyBurns(m);
+    const flat = laneSteps(m, storyFrame(m, 4.5))!;
+    expect(flat[0]).toEqual([T_LISTING, 1]);
+    expect(flat.every(([, v]) => v === 1)).toBe(true);
+    const end = laneSteps(m, storyFrame(m, 8))!;
+    expect(end.map(([t]) => t)).toEqual([T_LISTING, tiny!.t, tiny!.t, big!.t, big!.t, storyFrame(m, 8).t]);
+    expect(end[2]![1]).toBeCloseTo(0.996, 9);
+    expect(end[4]![1]).toBeCloseTo(0.6972, 4);
+    expect(end[5]![1]).toBeCloseTo(big!.supplyAfter, 9);
+    // Each marker sits on the floor step its burn causes.
+    const steps = storyFrame(m, 8).floorSteps;
+    const before = floorAfter(steps, big!.t - 1e-6)!;
+    expect(floorAfter(steps, big!.t)! / before - 1).toBeCloseTo(big!.floorPct / 100, 6);
+  });
+
+  it("draws the lane and the burn markers from the frame, scrolling back included", () => {
+    const [tiny, big] = supplyBurns(m);
+    const draw = (pos: number) => {
+      cleanup();
+      return render(<TopStage m={m} frame={storyFrame(m, pos)} still />).container;
+    };
+    const burnsAt = (c: HTMLElement) => [...c.querySelectorAll('[data-part="burn"]')].map((g) => Number(g.getAttribute("data-t")));
+    // Before listing: no lane, no markers.
+    let c = draw(1.5);
+    expect(c.querySelector('[data-part="supply-lane"]')).toBeNull();
+    expect(burnsAt(c)).toEqual([]);
+    // Selloff: the lane is flat at 100% with its name and tick; no burns yet.
+    c = draw(4.5);
+    const lane = c.querySelector('[data-part="supply-lane"]')!;
+    expect(lane.textContent).toContain(SUPPLY_LANE_LABEL);
+    expect(lane.textContent).toContain(SUPPLY_LANE_TOP);
+    expect(burnsAt(c)).toEqual([]);
+    // The end: both markers (the tiny one smaller), the 30% label, the tiny label off its beat.
+    c = draw(8);
+    expect(burnsAt(c)).toEqual([tiny!.t, big!.t]);
+    expect(c.querySelector(`[data-part="burn"][data-t="${tiny!.t}"]`)!.hasAttribute("data-tiny")).toBe(true);
+    const labels = [...c.querySelectorAll('[data-part="burn-label"]')].map((e) => e.textContent);
+    expect(labels).toEqual([burnLabel(big!)]);
+    // Scrolling back before the exits drops the 30% marker again.
+    c = draw(5.6);
+    expect(burnsAt(c).every((t) => t < big!.t)).toBe(true);
+    // The lane stays under the main chart, inside the card.
+    const p = plotFor(640, 420);
+    expect(p.bottom).toBeLessThan(p.ground);
+    expect(p.lane.top).toBe(p.ground);
+    expect(p.lane.y100).toBeGreaterThan(p.lane.top);
+    expect(p.lane.y0).toBeLessThan(420);
+    expect(p.ground).toBeGreaterThanOrEqual(420 - 56);
+  });
+
+  it("shows the tiny burn's label only on its own beat", () => {
+    const [tiny] = supplyBurns(m);
+    let shown = false;
+    for (let pos = 5; pos < 6; pos += 0.02) {
+      const f = storyFrame(m, pos);
+      cleanup();
+      const c = render(<TopStage m={m} frame={f} still />).container;
+      const has = [...c.querySelectorAll('[data-part="burn-label"]')].some((e) => e.textContent === burnLabel(tiny!));
+      if (has) {
+        shown = true;
+        expect(f.beat).toBe("bounce");
+        expect(f.t).toBeGreaterThanOrEqual(tiny!.t);
+      }
+    }
+    expect(shown).toBe(true);
   });
 });
