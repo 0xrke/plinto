@@ -683,3 +683,6 @@ Format: **decision** · alternatives · why. These supersede the matching bullet
   unused `butter` tone is gone.
 - The tile is a CSS gradient on a wrapper, not an SVG `<linearGradient>`: one shared id across the
   page broke in Chrome when the first mark was hidden (the app's mobile header on desktop).
+- Same day, founder's call: on the site the mark drops the tile (`tone="plain"`, the default): the
+  glyph alone beside the wordmark. The pastel tile stays where the mark is an icon: the favicon (a dark
+  browser tab would hide the midnight line otherwise), the OG image and the X avatar.

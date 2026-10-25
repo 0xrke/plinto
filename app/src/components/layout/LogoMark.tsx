@@ -2,17 +2,18 @@
 const WASH = ["#fbdde8", "#e8defb", "#d9ebfb"] as const;
 
 /**
- * The mark: a rising price line over a floor that thickens to the right. `tone="wash"` (default) is
- * the X avatar: the pastel wash, a green floor and a midnight line. `tone="midnight"` is the dark
- * tile (mint floor, white line, butter dot at the latest price) for dark grounds.
+ * The mark: a rising price line over a floor that thickens to the right. `tone="plain"` (default,
+ * the site) is the glyph alone: green floor, midnight line, no tile. `tone="wash"` puts it on the X
+ * avatar's pastel tile (icon contexts: favicon, avatar). `tone="midnight"` is the dark tile (mint
+ * floor, white line, butter dot at the latest price) for dark grounds.
  */
-export function LogoMark({ className, tone = "wash" }: { className?: string; tone?: "wash" | "midnight" }) {
-  const wash = tone === "wash";
-  const floor = wash ? "var(--color-floor)" : "var(--color-mint)";
-  const line = wash ? "var(--color-midnight)" : "#ffffff";
+export function LogoMark({ className, tone = "plain" }: { className?: string; tone?: "plain" | "wash" | "midnight" }) {
+  const dark = tone === "midnight";
+  const floor = dark ? "var(--color-mint)" : "var(--color-floor)";
+  const line = dark ? "#ffffff" : "var(--color-midnight)";
   // The tile is a CSS background, not an SVG gradient: a gradient id is shared by every mark on the
   // page, and Chrome drops it when the first defining mark is hidden (display: none).
-  const tile = wash ? `linear-gradient(135deg, ${WASH[0]}, ${WASH[1]}, ${WASH[2]})` : "var(--color-tile)";
+  const tile = tone === "wash" ? `linear-gradient(135deg, ${WASH[0]}, ${WASH[1]}, ${WASH[2]})` : dark ? "var(--color-tile)" : undefined;
   return (
     <span aria-hidden className={`inline-block overflow-hidden ${className ?? ""}`} style={{ background: tile, borderRadius: "28.125%" }}>
       <svg viewBox="0 0 64 64" className="block h-full w-full" focusable="false">
@@ -25,7 +26,7 @@ export function LogoMark({ className, tone = "wash" }: { className?: string; ton
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        {wash ? null : <circle cx="50.3" cy="17.1" r="4.2" fill="var(--color-butter)" />}
+        {dark ? <circle cx="50.3" cy="17.1" r="4.2" fill="var(--color-butter)" /> : null}
       </svg>
     </span>
   );
