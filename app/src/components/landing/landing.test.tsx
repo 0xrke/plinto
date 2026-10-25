@@ -7,7 +7,7 @@ import { launchFloorUsd, quoteRawToUsd } from "@/lib/metrics";
 import { launchStatus } from "@/components/launch/status";
 import { FIRST_VAULT_URL } from "@/lib/landing/routes";
 import { ClosingCta } from "./ClosingCta";
-import { Hero } from "./Hero";
+import { HERO_NAV_ID, Hero } from "./Hero";
 import { Landing } from "./Landing";
 import { LiveFloorsView } from "./LiveFloors";
 import { loadLiveFloors, pickLiveFloors } from "./liveFloorsData";
@@ -143,12 +143,22 @@ describe("<LiveFloorsView />", () => {
 });
 
 describe("landing sections", () => {
-  it("hero: one claim, links to the app and to create", () => {
-    render(<Hero />);
+  it("hero: the waitlist layout with one claim, links to the app and to create", () => {
+    const { container } = render(<Hero />);
+    const section = container.querySelector("section[aria-labelledby='hero-title']")!;
+    // White page: no window card around the first screen.
+    expect(section.querySelector(".window")).toBeNull();
+    expect(screen.getByRole("heading", { level: 1 }).id).toBe("hero-title");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Token launches with a floor");
-    expect(screen.getByRole("link", { name: "Open app" }).getAttribute("href")).toBe("/app");
+    // The window's own nav: the pinned header watches it.
+    expect(screen.getByRole("navigation", { name: "Site" }).id).toBe(HERO_NAV_ID);
+    for (const a of screen.getAllByRole("link", { name: "Open app" })) expect(a.getAttribute("href")).toBe("/app");
     expect(screen.getByRole("link", { name: "Launch a token" }).getAttribute("href")).toBe("/app/create");
-    expect(screen.getByText("The floor protects from zero, not from loss.")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "How a launch runs" })).toBeTruthy();
+    expect(screen.getByText("Protects from zero, not from loss. Not for US persons. Unaudited.")).toBeTruthy();
+    expect(screen.getByText("Example figures: 50% floor share.")).toBeTruthy();
+    // No email form: the app is live.
+    expect(screen.queryByRole("textbox")).toBeNull();
   });
 
   it("top bar: logo to the landing, button to the app", () => {
@@ -188,13 +198,13 @@ describe("landing sections", () => {
       texts.push(...storyChartStrings(m));
     }
     texts.push(ILLUSTRATION, STORY_FOOTNOTE, ...BEAT_KEYS.map((_, i) => railLabel(i)));
-    for (const t of texts) expect(t.replace("The floor protects from zero, not from loss.", "")).not.toMatch(OVERCLAIM);
+    for (const t of texts) expect(t).not.toMatch(OVERCLAIM);
   });
 
-  it("keeps the copy short: at most 220 visible words with the lab rendered", async () => {
+  it("keeps the copy short: at most 210 visible words with the lab rendered", async () => {
     const { container } = render(await Landing({ source: new MockDataSource(0) }));
     const words = visibleWords(container.querySelector("main")!);
-    expect(words).toBeLessThanOrEqual(220);
+    expect(words).toBeLessThanOrEqual(210);
   });
 });
 
@@ -207,14 +217,25 @@ describe("<Landing />", () => {
     const sections = main!.querySelectorAll("section");
     expect(sections).toHaveLength(4);
     expect([...main!.querySelectorAll("h2")].map((h) => h.textContent)).toEqual([
+      "How a launch runs",
       "Follow your $100",
       "Live on Solana mainnet",
       "See your max loss before you buy.",
+    ]);
+    expect([...sections].map((s) => s.getAttribute("aria-labelledby"))).toEqual([
+      "hero-title",
+      "story-title",
+      "live-title",
+      "cta-title",
     ]);
     for (const s of sections) {
       const id = s.getAttribute("aria-labelledby");
       expect(id && container.querySelector(`#${id}`)).toBeTruthy();
     }
+    // The pinned header starts hidden: the hero's nav is on screen (and stays hidden without JS).
+    const header = container.querySelector("header")!;
+    expect(header.getAttribute("aria-hidden")).toBe("true");
+    expect(header.hasAttribute("inert")).toBe(true);
     // Mock data is never shown as live: the fallback card renders instead.
     expect(screen.getByText(/See the first vault/)).toBeTruthy();
     expect(screen.queryAllByRole("article")).toHaveLength(0);

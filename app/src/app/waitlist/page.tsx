@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { PhaseChart } from "@/components/waitlist/PhaseChart";
+import { ChainPill } from "@/components/waitlist/ChainPill";
+import { LaunchRunsCard } from "@/components/waitlist/LaunchRunsCard";
 import { WaitlistForm } from "@/components/waitlist/WaitlistForm";
 import { FloorWord } from "@/components/ui/FloorWord";
 import { LogoMark } from "@/components/layout/LogoMark";
@@ -10,46 +11,6 @@ export const metadata: Metadata = {
   description:
     "Token launches with a floor: part of every raise is locked in tokenized stocks and any holder can redeem against it.",
 };
-
-const PHASES = [
-  {
-    n: "01",
-    title: "Presale.",
-    body: "Everyone pays about the same; sell back any time.",
-    value: "SPYx",
-    chip: "bg-presale-soft text-presale",
-    valueTone: "text-ink",
-  },
-  {
-    n: "02",
-    title: "Market opens.",
-    body: "Half the raise becomes the floor, 40% locked liquidity.",
-    value: "50%",
-    chip: "bg-graduating-soft text-graduating",
-    valueTone: "text-floor",
-  },
-  {
-    n: "03",
-    title: "Trading.",
-    body: "Fees and the 2% exit fee push the floor up.",
-    value: "2%",
-    chip: "bg-floor-soft text-floor",
-    valueTone: "text-ink",
-  },
-];
-
-function NetworkPill({ className = "" }: { className?: string }) {
-  return (
-    <span
-      className={`items-center gap-[9px] rounded-[16px] bg-midnight font-semibold text-white ${className}`}
-    >
-      <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-mint" />
-      <span>
-        Solana<span className="hidden min-[360px]:inline"> · Meteora DBC</span>
-      </span>
-    </span>
-  );
-}
 
 export default function WaitlistPage() {
   return (
@@ -64,7 +25,7 @@ export default function WaitlistPage() {
                 plinto
               </span>
             </span>
-            <NetworkPill className="flex h-9 px-3.5 text-[12px] lg:hidden" />
+            <ChainPill className="flex h-9 px-3.5 text-[12px] lg:hidden" />
           </nav>
 
           <main id="main" className="flex flex-col py-10 sm:py-14 lg:my-auto lg:py-12">
@@ -88,47 +49,10 @@ export default function WaitlistPage() {
         {/* Right: lavender column with the phase card */}
         <div className="flex flex-col bg-cloud px-3 py-3 sm:px-8 sm:py-8 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:px-10 lg:pb-[30px] lg:pt-[34px] xl:px-14">
           <div className="hidden min-h-12 items-center justify-end lg:flex">
-            <NetworkPill className="flex h-11 px-[18px] text-[13px]" />
+            <ChainPill className="flex h-11 px-[18px] text-[13px]" />
           </div>
 
-          <aside
-            aria-labelledby="launch-runs"
-            className="overflow-hidden rounded-[24px] bg-surface shadow-card sm:rounded-card lg:my-auto"
-          >
-            <div className="px-5 pb-4 pt-5 sm:px-6 sm:pt-6">
-              <h2
-                id="launch-runs"
-                className="font-display text-[22px] font-bold tracking-[-0.015em] text-ink sm:text-[25px]"
-              >
-                How a launch runs
-              </h2>
-            </div>
-
-            <div className="mx-5 sm:mx-4">
-              <PhaseChart />
-            </div>
-
-            <ol className="flex flex-col gap-1.5 px-5 pb-5 pt-3 sm:p-3">
-              {PHASES.map((phase) => (
-                <li
-                  key={phase.n}
-                  className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-start gap-3 rounded-btn bg-cloud p-3"
-                >
-                  <span
-                    className={`tnum flex h-[26px] items-center justify-center rounded-[9px] text-[12px] font-extrabold ${phase.chip}`}
-                  >
-                    {phase.n}
-                  </span>
-                  <span className="text-[13.5px] leading-[1.5] text-ink-2">
-                    <b className="font-bold text-ink">{phase.title}</b> {phase.body}
-                  </span>
-                  <span className={`tnum pt-0.5 text-[14px] font-extrabold ${phase.valueTone}`}>
-                    {phase.value}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          </aside>
+          <LaunchRunsCard className="lg:my-auto" />
         </div>
 
         <footer className="bg-cloud px-5 pb-6 pt-2 text-[12.5px] leading-[1.6] text-ink-3 sm:px-10 sm:pb-8 lg:col-start-1 lg:bg-transparent lg:row-start-2 lg:px-12 lg:pb-[30px] lg:pt-0 xl:px-[72px]">

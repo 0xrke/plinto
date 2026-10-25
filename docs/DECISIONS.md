@@ -686,3 +686,25 @@ Format: **decision** · alternatives · why. These supersede the matching bullet
 - Same day, founder's call: on the site the mark drops the tile (`tone="plain"`, the default): the
   glyph alone beside the wordmark. The pastel tile stays where the mark is an icon: the favicon (a dark
   browser tab would hide the midnight line otherwise), the OG image and the X avatar.
+
+## 2026-10-25 — Landing opens on the waitlist layout; buttons are smaller pills
+- The landing's first screen takes `/waitlist`'s layout and copy (founder's call: "layout + content",
+  not the pastel look), all on white: no window card, no pastel body, no lavender column. Left: the
+  Wordmark nav, the h1 (`#hero-title`), the landing's subtitle, "Open app" + "Launch a token" in
+  place of the email form, the "Protects from zero, not from loss. Not for US persons. Unaudited."
+  line, and "Example figures: 50% floor share." at the bottom. Right: the network pill and a small
+  "Open app" on the nav row, the "How a launch runs" card centred below it with a hairline border so
+  it reads on white. On lg+ the hero fills the viewport (`100svh` minus its padding, no 880px floor)
+  and grows rather than clips; phones stack it as `/waitlist` does. Everything after the hero stays
+  in the 1120px container.
+- "How a launch runs" (phase data, chart, rows) is one component, `components/waitlist/LaunchRunsCard`,
+  used by `/waitlist` and the landing; the network pill is `components/waitlist/ChainPill`.
+- The pinned header stays but is hidden (slid up, `inert`, `aria-hidden`) while the hero's nav is on
+  screen; `PinnedHeader` reveals it once that nav scrolls out above the viewport. It is `position:
+  fixed`, so no layout shift; `--sticky-top` still equals its height so the story pins below it.
+  Landscape phones (max-height 500px) never show it (`--sticky-top: 0`). Without JS it stays hidden.
+- Buttons app-wide are pills and smaller: `.btn` 44px, `.btn-lg` 48px, `.btn-sm` 36px, each with a
+  1px border (transparent unless coloured) so filled and outlined variants match. `.segmented` and
+  its tabs are pills (tabs 40px). The waitlist submit, wallet and faucet chips follow. `--radius-btn`
+  keeps its meaning for non-button soft rows.
+- Word budget: the landing measures 203 visible words with the lab rendered; the cap is 210.
