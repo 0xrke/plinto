@@ -47,10 +47,10 @@ import s from "./tapeCompact.module.css";
  */
 
 /**
- * Runway per beat (svh), as in 27: the presale (the raise filling its bar) and the split (the bar
- * dividing, held labelled, then the floor settling) get the longest; the long tape beats get more.
+ * Runway per beat (svh): an even 100 for every beat, so the scroll keeps one rhythm, except the
+ * split, which plays three phases (the raise held, dividing with its labels, the floor settling).
  */
-const HEIGHTS: StepHeights = { presale: 120, split: 150, pump: 120, selloff: 100, steps: 90, bounce: 120, exits: 100, redeem: 120 };
+const HEIGHTS: StepHeights = { presale: 100, split: 140, pump: 100, selloff: 100, steps: 100, bounce: 100, exits: 100, redeem: 100 };
 
 /** Why the burn matters (33's note), shown on the exits beat in place of its long detail. */
 export const SUPPLY_NOTE = "Redeemed tokens are burned, so the same vault backs fewer tokens:";
