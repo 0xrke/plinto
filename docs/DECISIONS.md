@@ -675,3 +675,11 @@ Format: **decision** · alternatives · why. These supersede the matching bullet
   landing's "S&P 500" note on the SPYx floor went with the sandbox.
 - Landing order: Hero → Follow your $100 → Live on Solana mainnet → closing CTA. Word budget back
   to 220.
+
+## 2026-10-25 — Site mark matches the X avatar (pastel wash)
+- `LogoMark` defaults to `tone="wash"`: the X avatar's pastel gradient tile, green floor, midnight
+  line, no dot (`docs/brand/social/pastel/avatar-pastel-wash.svg`). The favicon (`app/icon.svg`) and the
+  OG image use the same mark. `tone="midnight"` (dark tile, butter dot) stays for dark grounds; the
+  unused `butter` tone is gone.
+- The tile is a CSS gradient on a wrapper, not an SVG `<linearGradient>`: one shared id across the
+  page broke in Chrome when the first mark was hidden (the app's mobile header on desktop).

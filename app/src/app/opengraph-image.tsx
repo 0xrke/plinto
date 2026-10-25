@@ -25,9 +25,19 @@ export default function OpengraphImage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          <div style={{ width: 64, height: 64, borderRadius: 16, background: "#1c1c3d", display: "flex", alignItems: "flex-end", padding: 10 }}>
-            <div style={{ width: 44, height: 8, borderRadius: 3, background: "#7fe0bf" }} />
-          </div>
+          {/* The site mark (LogoMark, tone "wash"), the same as the X avatar. */}
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <defs>
+              <linearGradient id="w" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stopColor="#fbdde8" />
+                <stop offset="0.5" stopColor="#e8defb" />
+                <stop offset="1" stopColor="#d9ebfb" />
+              </linearGradient>
+            </defs>
+            <rect width="64" height="64" rx="18" fill="url(#w)" />
+            <path d="M14 50.5h36v-8l-36 4.5z" fill="#16735c" stroke="#16735c" strokeWidth="4" strokeLinejoin="round" />
+            <path d="M13.7 37.7L25.1 27.4l8 5.7L50.3 17.1" fill="none" stroke="#0b0b24" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
           <div style={{ fontSize: 40, fontWeight: 600, letterSpacing: -0.5 }}>Plinto</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
