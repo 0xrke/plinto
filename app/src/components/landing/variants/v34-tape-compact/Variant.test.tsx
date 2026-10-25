@@ -138,8 +138,11 @@ describe("v34 tape compact", () => {
     // Scrubbed, never transitioned (only the bubble inside rises in with MOTION.settle).
     expect(drift).not.toMatch(/transition/);
     expect(code).toMatch(/\.bubble \{[^}]*transition:[^}]*transform 240ms cubic-bezier\(0\.2, 0\.7, 0\.2, 1\)/);
-    // The incoming bubble waits 12px low (within MOTION.maxTravel); the last one never moves down onto it.
+    // The next bubbles stay hidden and a little low (within MOTION.maxTravel) until their step is
+    // current, so each appears at the moment it takes over; the last one never moves down onto it.
     expect(code).toMatch(/\.step\[data-active="true"\] ~ \.step \.bubble \{[^}]*translateY\(12px\)/);
+    expect(code).toMatch(/\.step\[data-active="true"\] ~ \.step \.bubble \{\s*opacity: 0;\s*transform: translateY\(16px\);/);
+    expect(code).not.toMatch(/opacity: 0\.6/);
     expect(code).not.toMatch(/\.step\[data-active="false"\] \.bubble \{[^}]*transform/);
     // Reduced motion: no drift.
     const reduce = /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/.exec(code)![1]!;

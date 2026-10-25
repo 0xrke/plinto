@@ -421,10 +421,13 @@
     background: transparent;
   }
 
-  /* The incoming bubble, muted and a little low while it pushes the current one out. */
+  /*
+   * The next bubbles stay hidden until their step becomes current, then rise and fade in at that
+   * moment (the transition on .bubble), instead of scrolling in early under the current one.
+   */
   .step[data-active="true"] ~ .step .bubble {
-    opacity: 0.6;
-    transform: translateY(12px);
+    opacity: 0;
+    transform: translateY(16px);
   }
 
   .step[data-active="false"] .bubble::before {
