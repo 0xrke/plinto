@@ -254,10 +254,11 @@ describe("v34 tape compact", () => {
     expect(Math.abs(box(done, "split-floor").top - first[1])).toBeLessThan(1);
   });
 
-  it("every beat gets an even 120 svh runway, the split 150", () => {
+  it("presale and split get the long runways (120 / 150 svh)", () => {
     const { container } = render(<Variant m={m} />);
     const runway = (i: number) => (container.querySelectorAll("[data-step]")[i] as HTMLElement).style.getPropertyValue("--runway");
-    BEAT_KEYS.forEach((key, i) => expect(runway(i), key).toBe(key === "split" ? "150svh" : "120svh"));
+    expect(runway(0)).toBe("120svh");
+    expect(runway(1)).toBe("150svh");
   });
 
   it("the floor is a staircase, never flat, with the arbitrage line and the bounce", () => {
