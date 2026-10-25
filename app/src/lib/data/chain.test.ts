@@ -31,7 +31,7 @@ import {
   encodeMint,
   launchState,
 } from "../../test/chainFixtures";
-import { ChainDataSource, detectPreset, toLaunchSummary, toUiPhase } from "./chain";
+import { ChainDataSource, IMAGE_RETRY_MS, detectPreset, toLaunchSummary, toUiPhase } from "./chain";
 import { launchToJson } from "./serialize";
 
 const prices = new StaticPriceProvider({ [SPYX.mint]: SPYX_PRICE, [USDC_MINT]: 1, [WSOL_MINT]: 210 }, "jupiter");
@@ -299,6 +299,42 @@ describe("ChainDataSource", () => {
     expect(urls.sort()).toEqual(["https://x.test/broken.json", "https://x.test/tide.json"]);
     await source.listLaunches();
     expect(urls.length).toBe(2); // metadata is immutable: cached with its resolved image
+  });
+
+  it("reads a metadata JSON again after IMAGE_RETRY_MS when the first read failed (slow gateway), not before", async () => {
+    const state = launchState({ input: { name: "Crumb", symbol: "CRUMB" } }).state;
+    const reader = new FakeReader();
+    reader.set(metadataAddress(state.launch.baseMint), account(encodeMetadata(state.launch.baseMint, "Crumb", "CRUMB", "https://x.test/crumb.json"), PublicKey.default));
+    let reads = 0;
+    let gatewayUp = false;
+    const fetchImpl = (async () => {
+      reads++;
+      if (!gatewayUp) throw new Error("timeout");
+      return { ok: true, json: async () => ({ image: "https://x.test/crumb.png" }) } as Response;
+    }) as unknown as typeof fetch;
+    let clock = 1_000_000;
+    const source = new ChainDataSource({
+      reader,
+      prices,
+      fetchImpl,
+      now: () => clock,
+      sdk: {
+        listLaunches: (async () => [{ address: state.address, launch: state.launch }]) as never,
+        fetchLaunchState: (async () => state) as never,
+      },
+    });
+
+    expect((await source.listLaunches())[0]!.imageUrl).toBeNull();
+    gatewayUp = true;
+    clock += IMAGE_RETRY_MS - 1;
+    expect((await source.listLaunches())[0]!.imageUrl).toBeNull();
+    expect(reads).toBe(1);
+    clock += 1;
+    expect((await source.listLaunches())[0]!.imageUrl).toBe("https://x.test/crumb.png");
+    expect(reads).toBe(2);
+    clock += 10 * IMAGE_RETRY_MS;
+    await source.listLaunches();
+    expect(reads).toBe(2); // found: cached for good
   });
 
   it("keeps the other launches when one state read fails, and throws when every read fails", async () => {

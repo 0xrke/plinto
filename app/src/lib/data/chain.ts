@@ -26,7 +26,7 @@ import {
   type CurvePreset,
   type LaunchState,
 } from "@stockfloor/sdk";
-import { decodeMetaplexMetadata, imageUrlFromUri, metadataAddress, resolveTokenImageUrl, type TokenMetadata } from "../chain/metadata";
+import { decodeMetaplexMetadata, imageUrlFromUri, isJsonMetadataUri, metadataAddress, resolveTokenImageUrl, type TokenMetadata } from "../chain/metadata";
 import type { PriceProvider, UsdPrice } from "../chain/prices";
 import { readUpgradeStatus, type UpgradeStatus } from "../chain/upgradeAuthority";
 import { isListable } from "./impersonation";
@@ -44,7 +44,16 @@ export interface ChainDataSourceDeps {
   sdk?: Partial<ChainReadFns>;
   /** Used to read token metadata JSON documents (injectable for tests). */
   fetchImpl?: typeof fetch;
+  /** Clock in ms for the image retry (injectable for tests). */
+  now?: () => number;
 }
+
+/**
+ * How long a token whose metadata JSON could not be read waits before the next read, ms. A fresh
+ * upload on a public IPFS gateway can take longer than the fetch timeout, so a miss is retried
+ * rather than cached for the life of the server process.
+ */
+export const IMAGE_RETRY_MS = 60_000;
 
 /** SDK phase → UI phase: the SDK's "graduated" (fee not yet harvested) and "redeemable" are both graduated. */
 export function toUiPhase(phase: LaunchState["phase"]): LaunchPhase {
@@ -192,6 +201,7 @@ export class ChainDataSource implements LaunchDataSource {
   private readonly prices: PriceProvider;
   private readonly sdk: ChainReadFns;
   private readonly fetchImpl?: typeof fetch;
+  private readonly now: () => number;
   /**
    * base mint → Launch address. Only launches that own the mint's DBC pool are cached: anyone can
    * create a pool-less Launch account that commits someone else's base mint.
@@ -199,6 +209,8 @@ export class ChainDataSource implements LaunchDataSource {
   private readonly launchByMint = new Map<string, PublicKey>();
   /** Metadata is immutable (token update authority Immutable), so it is cached per mint. */
   private readonly metadata = new Map<string, TokenMetadata | null>();
+  /** mint → when to read its metadata JSON again (the last read found no image). */
+  private readonly imageRetryAt = new Map<string, number>();
   /** mint → token program. */
   private readonly tokenPrograms = new Map<string, PublicKey>();
 
@@ -207,9 +219,11 @@ export class ChainDataSource implements LaunchDataSource {
     this.prices = deps.prices;
     this.sdk = { listLaunches, fetchLaunchState, ...deps.sdk };
     this.fetchImpl = deps.fetchImpl;
+    this.now = deps.now ?? Date.now;
   }
 
   private async loadMetadata(mints: PublicKey[]): Promise<void> {
+    await this.retryImages(mints);
     const missing = mints.filter((m) => !this.metadata.has(m.toBase58()));
     if (missing.length === 0) return;
     const accounts = await this.reader.getMultipleAccountsInfo(missing.map(metadataAddress));
@@ -230,6 +244,30 @@ export class ChainDataSource implements LaunchDataSource {
         const imageUrl = await resolveTokenImageUrl(meta.uri, { fetchImpl: this.fetchImpl });
         // Only cache hits: the metadata account appears with the pool transaction.
         this.metadata.set(mint.toBase58(), { ...meta, imageUrl });
+        this.scheduleImageRetry(mint.toBase58(), meta.uri, imageUrl);
+      }),
+    );
+  }
+
+  /** A metadata JSON that gave no image (timeout, gateway error) is read again after IMAGE_RETRY_MS. */
+  private scheduleImageRetry(key: string, uri: string, imageUrl: string | null): void {
+    if (imageUrl === null && isJsonMetadataUri(uri)) this.imageRetryAt.set(key, this.now() + IMAGE_RETRY_MS);
+    else this.imageRetryAt.delete(key);
+  }
+
+  /** Re-reads the metadata JSON of cached tokens whose retry is due; the metadata account itself is immutable. */
+  private async retryImages(mints: PublicKey[]): Promise<void> {
+    const now = this.now();
+    const due = mints.map((m) => m.toBase58()).filter((key) => (this.imageRetryAt.get(key) ?? Infinity) <= now);
+    await Promise.all(
+      due.map(async (key) => {
+        const meta = this.metadata.get(key);
+        if (!meta) return;
+        // Push the next retry out first, so concurrent requests do not read the same document.
+        this.imageRetryAt.set(key, now + IMAGE_RETRY_MS);
+        const imageUrl = await resolveTokenImageUrl(meta.uri, { fetchImpl: this.fetchImpl });
+        this.metadata.set(key, { ...meta, imageUrl });
+        this.scheduleImageRetry(key, meta.uri, imageUrl);
       }),
     );
   }
