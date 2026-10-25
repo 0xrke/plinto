@@ -84,7 +84,6 @@ describe("v34 tape compact", () => {
       expect(drift.dataset.part).toBe("bubble-drift");
       expect(drift.firstElementChild).toBe(bubble);
       expect(drift.style.getPropertyValue("--bq")).toBe(`var(--q${i}, 1)`);
-      expect(drift.style.getPropertyValue("--pq")).toBe(i > 0 ? `var(--q${i - 1}, 1)` : "1");
       // Badge with the step number, caps label, caption, one muted detail.
       expect(bubble.firstElementChild!.textContent).toBe(String(i + 1));
       expect(within(bubble).getByText(BEAT_LABELS[key]).className).toMatch(/caps/);
@@ -118,39 +117,44 @@ describe("v34 tape compact", () => {
     expect(css).toMatch(/\.drift \{[^}]*position: sticky/);
     expect(css).not.toMatch(/\.bubble \{[^}]*position: sticky/);
     expect(css).toMatch(/\.bubble::before \{[^}]*rotate\(45deg\)/);
-    expect(css).toMatch(/\.step\[data-active="false"\] \.badge \{/);
+    expect(css).toMatch(/\.step\[data-active="false"\] \.badge,\s*\.layerBubble\[data-active="false"\] \.badge \{/);
     const code = css.replace(/\/\*[\s\S]*?\*\//g, "");
     for (const gone of ["cap", "capCover", "kicker", "deck", "rule", "side", "sentence"]) expect(code, gone).not.toMatch(new RegExp(`\\.${gone}\\b`));
     expect(css.replace(/\/\*[\s\S]*?\*\//g, "")).not.toMatch(/scroll-snap|scroll-behavior/);
   });
 
-  it("the current bubble drifts: up by --drift over its step, eased on its own progress, rising in when it becomes current", () => {
+  it("phones: the runway bubble drifts up by --drift over its step, eased on its own progress, rising in when current", () => {
     const code = css.replace(/\/\*[\s\S]*?\*\//g, "");
     const drift = /\.drift \{([^}]*)\}/.exec(code)![1]!;
     // Smoothstep of the step's progress (var(--qN, 1)): 0 before the step, all of it after, so it reverses.
     expect(drift).toMatch(/--e: calc\(var\(--bq, 1\) \* var\(--bq, 1\) \* \(3 - 2 \* var\(--bq, 1\)\)\)/);
     expect(drift).toMatch(/transform: translateY\(calc\(var\(--drift-lead\) - var\(--e\) \* var\(--drift\)\)\)/);
-    // It sits --drift-lead lower via the transform, so on phones (lead = drift) it never rises under the
-    // stage, and `top` stays the plain stick line, so the next step's push starts where it always did.
+    // It sits --drift-lead lower via the transform (lead = drift), so it never rises under the stage.
     expect(drift).toMatch(/top: calc\(var\(--stage-h\) \+ var\(--gap\)\);/);
     expect(code).not.toMatch(/top:[^;]*--drift-lead/);
     expect(code).toMatch(/\.root \{[^}]*--drift: 60px;[^}]*--drift-lead: 60px;/);
-    expect(code).toMatch(/--drift: 140px;\s*--drift-lead: 70px;/);
     // Scrubbed, never transitioned (only the bubble inside rises in with MOTION.settle).
     expect(drift).not.toMatch(/transition/);
     expect(code).toMatch(/\.bubble \{[^}]*transition:[^}]*transform 240ms cubic-bezier\(0\.2, 0\.7, 0\.2, 1\)/);
-    // The next bubbles stay hidden and a little low (within MOTION.maxTravel) until their step is
-    // current, so each appears at the moment it takes over; the last one never moves down onto it.
     expect(code).toMatch(/\.step\[data-active="true"\] ~ \.step \.bubble \{[^}]*translateY\(12px\)/);
-    expect(code).toMatch(/\.step\[data-active="true"\] ~ \.step \.bubble \{\s*opacity: 0;\s*transform: translateY\(16px\);/);
-    expect(code).not.toMatch(/opacity: 0\.6/);
-    // ...except the very next one, which fades in over the end of the current step to push it out.
-    expect(code).toMatch(/\.step\[data-active="true"\] \+ \.step \.bubble \{\s*opacity: clamp\(0, calc\(\(var\(--pq, 1\) - 0\.9\) \* 16\), 0\.75\);/);
     expect(code).not.toMatch(/\.step\[data-active="false"\] \.bubble \{[^}]*transform/);
     // Reduced motion: no drift.
     const reduce = /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/.exec(code)![1]!;
     expect(reduce).toMatch(/--drift: 0px;/);
     expect(reduce).toMatch(/\.drift \{\s*transform: none;/);
+  });
+
+  it("desktop: a viewport-tall bubble layer beside the stage replaces the runway bubbles (kept for AT)", () => {
+    const code = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(code).toMatch(/\.layer \{\s*display: none;/);
+    const desk = /@media \(min-width: 1024px\) \{([\s\S]*?)\n\}/.exec(code)![1]!;
+    expect(desk).toMatch(/\.drift \{\s*opacity: 0;/);
+    expect(desk).toMatch(/\.layer \{[^}]*display: block;[^}]*left: calc\(100% \+ 48px\);[^}]*width: calc\(100% \* 2 \/ 3\);[^}]*height: 100svh;/);
+    expect(desk).not.toMatch(/transition/);
+    const { container } = render(<Variant m={m} />);
+    const layer = container.querySelector('[data-part="bubble-layer"]')!;
+    expect(layer.getAttribute("aria-hidden")).toBe("true");
+    expect(layer.querySelectorAll('[data-part="bubble"]')).toHaveLength(BEAT_KEYS.length);
   });
 
   it("the section strip names every beat over the story, and marks the current one in full", () => {

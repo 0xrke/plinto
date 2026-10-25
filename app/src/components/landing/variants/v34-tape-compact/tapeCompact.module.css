@@ -287,9 +287,15 @@
     color 120ms ease;
 }
 
-.step[data-active="false"] .badge {
+.step[data-active="false"] .badge,
+.layerBubble[data-active="false"] .badge {
   background: var(--color-lilac);
   color: var(--color-ink-2);
+}
+
+/* The desktop bubble layer (BubbleLayer, placed by bubbleLayout.ts); phones use the runway's bubbles. */
+.layer {
+  display: none;
 }
 
 /* Phone: only the active bubble shows, so the next one never peeks in under it; the next one rises
@@ -309,8 +315,6 @@
 @media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
   .root {
     --stage-h: min(640px, 82svh);
-    --drift: 140px;
-    --drift-lead: 70px;
   }
 
   .root .stage {
@@ -417,36 +421,55 @@
     line-height: 1.45;
   }
 
-  .step[data-active="false"] .bubble {
-    background: transparent;
-  }
-
-  /*
-   * The bubbles after the next stay hidden. The next one stays hidden too until the current step is
-   * nearly done (--pq, the current step's progress, past 0.9): it fades in just as it reaches the
-   * current bubble and pushes it out, muted and a little low, then rises in fully when its own step
-   * becomes current (the transition on .bubble).
-   */
+  /* Landscape phones (runway bubbles): the bubbles after the current one stay hidden. */
   .step[data-active="true"] ~ .step .bubble {
     opacity: 0;
     transform: translateY(16px);
   }
 
-  .step[data-active="true"] + .step .bubble {
-    opacity: clamp(0, calc((var(--pq, 1) - 0.9) * 16), 0.75);
-    transform: translateY(12px);
-  }
-
-  .step[data-active="false"] .bubble::before {
+  .step[data-active="false"] .bubble::before,
+  .layerBubble[data-active="false"] .bubble::before {
     opacity: 0;
   }
 
-  .step[data-active="false"] .bubbleCaption {
+  .step[data-active="false"] .bubbleCaption,
+  .layerBubble[data-active="false"] .bubbleCaption {
     color: var(--color-ink-2);
   }
 
-  .step[data-active="false"] .bubbleDetail {
+  .step[data-active="false"] .bubbleDetail,
+  .layerBubble[data-active="false"] .bubbleDetail {
     color: var(--color-ink-3);
+  }
+}
+
+/*
+ * Desktop: the runway's bubbles give way to the layer, one viewport tall beside the stage (the 4fr
+ * column right of the 48px gap, from the top of the viewport). Its bubbles are placed by
+ * bubbleLayout.ts as a pure function of the scroll, scrubbed (no transition), and keep their cloud
+ * frame while they arrive or leave (muted ink, no tail). The runway's bubbles stay for assistive tech.
+ */
+@media (min-width: 1024px) {
+  .drift {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .layer {
+    display: block;
+    position: absolute;
+    left: calc(100% + 48px);
+    width: calc(100% * 2 / 3);
+    top: calc(-1 * max(16px, calc(50svh - var(--stage-h) / 2)));
+    height: 100svh;
+    overflow: clip;
+    pointer-events: none;
+  }
+
+  .layerBubble {
+    position: absolute;
+    inset: 0 0 auto;
+    will-change: transform, opacity;
   }
 }
 
