@@ -18,8 +18,8 @@
   --gap: 12px;
   /* The current bubble's drift: it sits --drift-lead lower and rises --drift over its step. On
      phones the two match, so the drift ends where the bubble used to stick, never under the stage. */
-  --drift: 34px;
-  --drift-lead: 34px;
+  --drift: 60px;
+  --drift-lead: 60px;
 }
 
 /* ---------- stage ---------- */
@@ -309,8 +309,8 @@
 @media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
   .root {
     --stage-h: min(640px, 82svh);
-    --drift: 72px;
-    --drift-lead: 36px;
+    --drift: 140px;
+    --drift-lead: 70px;
   }
 
   .root .stage {
@@ -443,8 +443,8 @@
 /* Landscape phones: the same composition, packed into ~390px of height. */
 @media (orientation: landscape) and (max-height: 500px) {
   .root {
-    --drift: 20px;
-    --drift-lead: 20px;
+    --drift: 30px;
+    --drift-lead: 30px;
   }
 
   .drift {
