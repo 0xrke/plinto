@@ -58,7 +58,7 @@ export default function WaitlistPage() {
         {/* Left: brand, pitch, form */}
         <div className="flex flex-col px-5 pt-5 sm:px-10 sm:pt-8 lg:col-start-1 lg:row-start-1 lg:px-12 lg:pt-[34px] xl:px-[72px]">
           <nav aria-label="Site" className="flex min-h-12 items-center justify-between gap-3">
-            <span className="flex items-center gap-[11px] text-ink">
+            <span className="flex items-center gap-1 text-ink">
               <LogoMark className="h-[34px] w-[34px] shrink-0 sm:h-[38px] sm:w-[38px]" />
               <span className="font-display text-[24px] font-extrabold leading-none tracking-[-0.03em] sm:text-[28px]">
                 plinto

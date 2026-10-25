@@ -42,7 +42,7 @@ export function SiteHeader() {
         className="sticky top-0 z-30 border-b border-line bg-surface/85 px-4 py-2.5 backdrop-blur-md supports-[backdrop-filter]:bg-surface/70 sm:px-6 lg:hidden"
       >
         <div className="flex items-center justify-between gap-3">
-          <Link href="/" aria-label="Plinto home" className="flex min-h-11 items-center gap-[9px] text-ink">
+          <Link href="/" aria-label="Plinto home" className="flex min-h-11 items-center gap-1 text-ink">
             <LogoMark className="h-8 w-8 shrink-0" />
             <span className="font-display text-xl font-extrabold tracking-[-0.02em]">Plinto</span>
           </Link>

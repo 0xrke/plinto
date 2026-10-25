@@ -27,7 +27,7 @@ export function SiteSidebar() {
         <Link
           href="/"
           aria-label="Plinto home"
-          className="flex min-h-11 items-center gap-[11px] text-ink xl:px-2.5"
+          className="flex min-h-11 items-center gap-1 text-ink xl:px-2.5"
         >
           <LogoMark className="h-9 w-9 shrink-0" />
           <span className="hidden font-display text-[1.375rem] font-extrabold tracking-[-0.02em] xl:inline">

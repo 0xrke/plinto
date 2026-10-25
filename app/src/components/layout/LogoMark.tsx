@@ -37,7 +37,7 @@ export function Wordmark({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   const box = size === "lg" ? "h-10 w-10" : size === "sm" ? "h-8 w-8" : "h-9 w-9";
   const text = size === "lg" ? "text-[1.75rem]" : size === "sm" ? "text-xl" : "text-[1.375rem]";
   return (
-    <span className="inline-flex items-center gap-[11px] text-ink">
+    <span className="inline-flex items-center gap-1 text-ink">
       <LogoMark className={`${box} shrink-0`} />
       <span className={`font-display font-extrabold tracking-[-0.02em] ${text}`}>Plinto</span>
     </span>
