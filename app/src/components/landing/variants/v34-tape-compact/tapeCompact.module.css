@@ -1,20 +1,25 @@
 /*
  * Variant 34, "Tape chart, compact": 34's tape chart (27's tape at variant 20's size, with the token
- * supply on it) in variant 33's layout: the title row above the story, the sticky stage left (the
- * line-segment step bar over the chart card) and 33's speech bubbles right. Colours are site tokens
+ * supply on it) in variant 33's layout: the sticky stage left (the pinned title row, the
+ * line-segment step bar, the chart card) and 33's speech bubbles right. Colours are site tokens
  * only (var(--color-…)); radii and type follow shared/BRAND.md. Native scrolling only: no
- * scroll-snap, no scroll-behavior. The only transitions are on discrete changes (the active bubble,
- * its badge) and they are off under reduced motion; scrubbed values change inline from the frame.
+ * scroll-snap, no scroll-behavior. The only transitions are on discrete changes (the active bubble
+ * rising in, its badge) and they are off under reduced motion; scrubbed values change inline from
+ * the frame, and the bubble drift reads the driver's --qN variables (no React render on scroll).
  *
  * Size (20's, through the shared harness's split layout): the brand container, a stage of
  * min(640px, 82svh) centred on the reading line, 6fr / 4fr columns with a 48px gap. Without 33's
- * tiles the chart card takes all the stage height under the step bar.
+ * tiles the chart card takes all the stage height under the title and the step bar.
  */
 
 .root {
-  /* Phones: the stage on top (rail, card); the active bubble sticks just under it. */
+  /* Phones: the stage on top (title, rail, card); the active bubble sticks just under it. */
   --stage-h: min(60svh, 520px);
   --gap: 12px;
+  /* The current bubble's drift: it sits --drift-lead lower and rises --drift over its step. On
+     phones the two match, so the drift ends where the bubble used to stick, never under the stage. */
+  --drift: 22px;
+  --drift-lead: 22px;
 }
 
 /* ---------- stage ---------- */
@@ -58,6 +63,50 @@
   height: 100%;
   display: block;
   font-family: var(--font-sans);
+}
+
+/* ---------- the pinned title row ("Follow your $100", the floor-share chip) ---------- */
+
+/* Phones: one compact line, so the chart keeps the height. */
+.titleRow {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 2px;
+  white-space: nowrap;
+}
+
+.titleRow .title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 17px;
+  line-height: 24px;
+}
+
+.titleRow .titleChip {
+  flex: none;
+  height: 24px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+/* Reduced motion: no stage, so the title heads the stills, as the old title row did. */
+.titleStill {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 0 16px;
+}
+
+/* Rendered until the harness knows the reader wants motion; with motion the pinned title is the one. */
+@media (prefers-reduced-motion: no-preference) {
+  .titleStill {
+    display: none;
+  }
 }
 
 /* ---------- step rail (line segments; the beat names show from 1024px, as in 33) ---------- */
@@ -159,9 +208,23 @@
   position: relative;
 }
 
-.bubble {
+/*
+ * The sticky wrapper carries the drift: --bq is its own step's progress (var(--qN, 1), set inline),
+ * --e its smoothstep, and it moves up by --drift as the step plays (0 before it, all of it after),
+ * so scrolling back plays it backwards. The lead is a transform, not part of `top`, so the sticky
+ * push by the next step starts exactly where it did before the drift (an offset in `top` would start
+ * it --drift-lead earlier and slide the outgoing bubble under the phone stage before the hand-off).
+ * The drift only ever moves it up, away from the incoming one.
+ */
+.drift {
+  --e: calc(var(--bq, 1) * var(--bq, 1) * (3 - 2 * var(--bq, 1)));
   position: sticky;
   top: calc(var(--stage-h) + var(--gap));
+  transform: translateY(calc(var(--drift-lead) - var(--e) * var(--drift)));
+}
+
+/* The bubble itself rises in (MOTION.settle) when it becomes current. */
+.bubble {
   display: flex;
   align-items: flex-start;
   gap: 12px;
@@ -229,11 +292,15 @@
   color: var(--color-ink-2);
 }
 
-/* Phone: only the active bubble shows, so the next one never peeks in under it. */
+/* Phone: only the active bubble shows, so the next one never peeks in under it; the next one rises
+   in from 12px below, the last one fades where it is. */
 @media (max-width: 1023px) {
   .step[data-active="false"] .bubble {
     opacity: 0;
-    transform: translateY(8px);
+  }
+
+  .step[data-active="true"] ~ .step .bubble {
+    transform: translateY(12px);
   }
 }
 
@@ -242,11 +309,33 @@
 @media (min-width: 1024px), (orientation: landscape) and (max-height: 500px) {
   .root {
     --stage-h: min(640px, 82svh);
+    --drift: 40px;
+    --drift-lead: 20px;
   }
 
   .root .stage {
     background: none;
     padding: 0;
+  }
+
+  .stageCol {
+    gap: 10px;
+  }
+
+  .titleRow {
+    gap: 12px;
+    padding: 0;
+  }
+
+  .titleRow .title {
+    font-size: 28px;
+    line-height: 34px;
+  }
+
+  .titleRow .titleChip {
+    height: 30px;
+    padding: 0 12px;
+    font-size: 13px;
   }
 
   /* The rail: segments with the beat names under them (36px, so the card keeps the rest). */
@@ -295,8 +384,11 @@
 
   /* A cloud speech bubble beside the stage (cloud on the white page, no shadow), its tail
      pointing at the card. */
-  .bubble {
+  .drift {
     top: max(16px, calc(50svh - 64px));
+  }
+
+  .bubble {
     gap: 16px;
     padding: 22px 24px 24px 20px;
     background: var(--color-cloud);
@@ -327,7 +419,12 @@
 
   .step[data-active="false"] .bubble {
     background: transparent;
-    transform: translateY(8px);
+  }
+
+  /* The incoming bubble, muted and a little low while it pushes the current one out. */
+  .step[data-active="true"] ~ .step .bubble {
+    opacity: 0.6;
+    transform: translateY(12px);
   }
 
   .step[data-active="false"] .bubble::before {
@@ -345,8 +442,24 @@
 
 /* Landscape phones: the same composition, packed into ~390px of height. */
 @media (orientation: landscape) and (max-height: 500px) {
-  .bubble {
+  .root {
+    --drift: 12px;
+    --drift-lead: 12px;
+  }
+
+  .drift {
     top: 16px;
+  }
+
+  .titleRow .title {
+    font-size: 18px;
+    line-height: 24px;
+  }
+
+  .titleRow .titleChip {
+    height: 24px;
+    padding: 0 9px;
+    font-size: 12px;
   }
 
   .railLabel {
@@ -359,6 +472,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .root {
+    --drift: 0px;
+    --drift-lead: 0px;
+  }
+
+  .drift {
+    transform: none;
+  }
+
   .bubble,
   .badge {
     transition: none;

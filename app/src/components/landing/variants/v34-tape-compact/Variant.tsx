@@ -22,6 +22,7 @@ import {
   useActiveBeat,
   useJumpToBeat,
   useStoryProgress,
+  useStoryReducedMotion,
   type BeatKey,
   type StepHeights,
   type StepSlot,
@@ -35,13 +36,14 @@ import s from "./tapeCompact.module.css";
 /*
  * Variant 34: Tape chart, compact (round 5). The founder picked 34's chart and 33's layout. The
  * chart is 27's tape at variant 20's size (CompactTape: the section strip, the playhead, the riding
- * tags incl. the token supply, the burn flames and the supply lane). The layout is 33's: the title
- * row above the story (it scrolls away), then 20's split stage in the brand container, min(640px,
- * 82svh) centred on the reading line, 6fr / 4fr with a 48px gap. Left, the sticky stage: the
- * line-segment step bar with the beat names, then the chart card, which takes the rest of the height.
- * Right, 33's speech bubbles (number badge, beat label, caption, one short muted detail) scroll past
- * natively. Phones: the stage on top, the active bubble stuck under it. Reduced motion: eight
- * static tape frames.
+ * tags incl. the token supply, the burn flames and the supply lane). The layout is 33's: 20's split
+ * stage in the brand container, min(640px, 82svh) centred on the reading line, 6fr / 4fr with a 48px
+ * gap. Left, the sticky stage: the title row ("Follow your $100", the floor-share chip) pinned on
+ * top, the line-segment step bar with the beat names, then the chart card, which takes the rest of
+ * the height. Right, 33's speech bubbles (number badge, beat label, caption, one short muted detail)
+ * scroll past natively; the current one rises in and then drifts gently up with the scroll until the
+ * next one pushes it out. Phones: the stage on top (a compact one-line title), the active bubble
+ * stuck under it. Reduced motion: the title above eight static tape frames.
  */
 
 /**
@@ -157,9 +159,31 @@ function Rail() {
   );
 }
 
+/** "Follow your $100" and the floor-share chip: the section's single h2. */
+function TitleRow({ m, pinned }: { m: LaunchMath; pinned: boolean }) {
+  return (
+    <div className={pinned ? s.titleRow : s.titleStill} data-part="title">
+      <h2 className={`${BRAND_CLASS.title} ${s.title}`}>{STORY_TITLE}</h2>
+      <span className={`chip ${s.titleChip}`}>
+        Floor share <b className="tnum">{floorSharePct(m)}%</b>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Reduced motion has no stage: the title then heads the stills (still one visible h2 on the page).
+ * It also renders while the preference is unknown (first render), hidden by CSS unless reduce, so a
+ * reduced-motion reader never sees the stills without it nor a late layout shift.
+ */
+function StillsTitle({ m }: { m: LaunchMath }) {
+  return useStoryReducedMotion() !== false ? <TitleRow m={m} pinned={false} /> : null;
+}
+
 function TapeStage({ m, frame }: { m: LaunchMath; frame: StoryFrame }) {
   return (
     <div className={s.stageCol} data-part="stage-col">
+      <TitleRow m={m} pinned />
       <Rail />
       <div className={s.cardSlot} aria-hidden data-part="chart-slot">
         <TapeCard m={m} frame={frame} />
@@ -171,6 +195,12 @@ function TapeStage({ m, frame }: { m: LaunchMath; frame: StoryFrame }) {
 /* ---------- 33's speech bubbles ---------- */
 
 /**
+ * The drift: the bubble's sticky wrapper reads its own step's progress (the driver's --qN on the
+ * root, so no React render on scroll), eases it (smoothstep) and moves up by --drift over the step.
+ */
+const driftStyle = (i: number) => ({ "--bq": `var(--q${i}, 1)` }) as CSSProperties;
+
+/**
  * One beat's bubble: the number badge (filled while its beat plays), the caps beat label, the caption
  * and one short muted detail (the beat's plain-English sentence; on the exits beat, why the burn
  * matters instead). The detail doubles as the screen-reader sentence where it is that sentence.
@@ -179,32 +209,34 @@ function Bubble({ m, beat, i, label, caption, srText }: StepSlot & { m: LaunchMa
   const note = NOTE_BEATS.has(beat);
   const short = note ? null : bubbleDetail(m, beat);
   return (
-    <div className={s.bubble} data-part="bubble">
-      <span className={s.badge} aria-hidden>
-        {i + 1}
-      </span>
-      <div className={s.bubbleBody}>
-        <p className={`caps ${s.bubbleLabel}`}>{label}</p>
-        <p className={s.bubbleCaption}>{caption}</p>
-        {note ? (
-          <>
-            <p className={s.bubbleDetail} data-part="supply-note">
-              {SUPPLY_NOTE} <span className={s.equation}>{SUPPLY_EQUATION}</span>
+    <div className={s.drift} data-part="bubble-drift" style={driftStyle(i)}>
+      <div className={s.bubble} data-part="bubble">
+        <span className={s.badge} aria-hidden>
+          {i + 1}
+        </span>
+        <div className={s.bubbleBody}>
+          <p className={`caps ${s.bubbleLabel}`}>{label}</p>
+          <p className={s.bubbleCaption}>{caption}</p>
+          {note ? (
+            <>
+              <p className={s.bubbleDetail} data-part="supply-note">
+                {SUPPLY_NOTE} <span className={s.equation}>{SUPPLY_EQUATION}</span>
+              </p>
+              <p className="sr-only">{srText}</p>
+            </>
+          ) : short ? (
+            <>
+              <p className={s.bubbleDetail} data-part="detail" aria-hidden>
+                {short}
+              </p>
+              <p className="sr-only">{srText}</p>
+            </>
+          ) : (
+            <p className={s.bubbleDetail} data-part="detail">
+              {srText}
             </p>
-            <p className="sr-only">{srText}</p>
-          </>
-        ) : short ? (
-          <>
-            <p className={s.bubbleDetail} data-part="detail" aria-hidden>
-              {short}
-            </p>
-            <p className="sr-only">{srText}</p>
-          </>
-        ) : (
-          <p className={s.bubbleDetail} data-part="detail">
-            {srText}
-          </p>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -224,14 +256,7 @@ export default function Variant({ m }: VariantProps) {
         stageClassName={s.stage}
         stepClassName={s.step}
         heights={HEIGHTS}
-        header={
-          <header className="flex flex-wrap items-center gap-3 pb-4 pt-6 lg:pb-6 lg:pt-10" data-part="header">
-            <h2 className={BRAND_CLASS.title}>{STORY_TITLE}</h2>
-            <span className="chip">
-              Floor share <b className="tnum">{floorSharePct(m)}%</b>
-            </span>
-          </header>
-        }
+        header={<StillsTitle m={m} />}
         stage={(frame) => <TapeStage m={m} frame={frame} />}
         still={(frame) => (
           <div className={s.still}>

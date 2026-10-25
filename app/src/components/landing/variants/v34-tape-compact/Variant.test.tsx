@@ -4,7 +4,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { launchMath } from "@/lib/landing/sim/launch";
 import { simConstantsFromSdk } from "@/lib/landing/sim/fromSdk";
-import { BEAT_KEYS, BEAT_LABELS, ILLUSTRATION, REAL_SCALE_LABEL, SINCE_LISTING, TILE_FLOOR, TILE_NOW, TILE_SUPPLY, beatCaption, beatSrText, formatPctChange, sinceListing, storyFrame, supplyAt, supplyBurns } from "../shared";
+import { BEAT_KEYS, BEAT_LABELS, ILLUSTRATION, floorSharePct, REAL_SCALE_LABEL, SINCE_LISTING, TILE_FLOOR, TILE_NOW, TILE_SUPPLY, beatCaption, beatSrText, formatPctChange, sinceListing, storyFrame, supplyAt, supplyBurns } from "../shared";
 import { LANE_H, SPLIT_DIVIDE, SPLIT_SETTLE, CompactTape, burnedText, splitPhase } from "./CompactTape";
 import Variant, { SUPPLY_EQUATION, SUPPLY_NOTE, bubbleDetail } from "./Variant";
 import { burnFloorText, stackTags } from "./tapeGeometry";
@@ -48,16 +48,24 @@ const SIZES = [
 ] as const;
 
 describe("v34 tape compact", () => {
-  it("renders 33's layout: the title row above the story, the step rail over the tape card in the stage, the 8 captions as speech bubbles", () => {
+  it("renders 33's layout: the title row pinned in the stage over the step rail and the tape card, the 8 captions as speech bubbles", () => {
     const { container } = render(<Variant m={m} />);
     const heading = screen.getByRole("heading", { name: "Follow your $100" });
-    expect(container.textContent).toContain("Floor share");
-    // The title row sits above the story and scrolls away: it is not in the sticky stage.
+    expect(container.querySelectorAll("h2")).toHaveLength(1);
+    // The title row is pinned: in the sticky stage, first, above the rail; nothing sits above the track.
     const stage = container.querySelector("[data-stage]")!;
-    expect(stage.contains(heading)).toBe(false);
-    expect(heading.compareDocumentPosition(screen.getByTestId("story-track")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const title = stage.querySelector('[data-part="title"]')!;
+    expect(title.contains(heading)).toBe(true);
+    expect(title.textContent).toContain(`Floor share ${floorSharePct(m)}%`);
+    expect(stage.querySelector('[data-part="stage-col"]')!.firstElementChild).toBe(title);
+    // The bubble drift reads the driver's --qN on the root: no [data-rail] may take them away.
+    expect(container.querySelector("[data-rail]")).toBeNull();
+    const track = screen.getByTestId("story-track");
+    expect(track.previousElementSibling).toBeNull();
+    expect(container.querySelector('[data-part="header"]')).toBeNull();
     const rail = screen.getByRole("navigation", { name: "Story steps" });
     expect(stage.contains(rail)).toBe(true);
+    expect(title.compareDocumentPosition(rail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(rail).getAllByRole("button")).toHaveLength(8);
     expect(screen.getByRole("button", { name: /Step 8 of 8/ }).getAttribute("aria-current")).toBe("step");
     expect(screen.getByTestId("v34-level").textContent).toMatch(/^8\/8/);
@@ -71,6 +79,11 @@ describe("v34 tape compact", () => {
     BEAT_KEYS.forEach((key, i) => {
       const bubble = steps[i]!.querySelector('[data-part="bubble"]') as HTMLElement;
       expect(bubble).toBeTruthy();
+      // The sticky drift wrapper reads its own step's progress from the driver's --qN.
+      const drift = steps[i]!.firstElementChild as HTMLElement;
+      expect(drift.dataset.part).toBe("bubble-drift");
+      expect(drift.firstElementChild).toBe(bubble);
+      expect(drift.style.getPropertyValue("--bq")).toBe(`var(--q${i}, 1)`);
       // Badge with the step number, caps label, caption, one muted detail.
       expect(bubble.firstElementChild!.textContent).toBe(String(i + 1));
       expect(within(bubble).getByText(BEAT_LABELS[key]).className).toMatch(/caps/);
@@ -101,12 +114,37 @@ describe("v34 tape compact", () => {
   });
 
   it("styles the bubbles as 33's sticky speech bubbles, the ribbon's CSS is gone, no scroll-snap", () => {
-    expect(css).toMatch(/\.bubble \{[^}]*position: sticky/);
+    expect(css).toMatch(/\.drift \{[^}]*position: sticky/);
+    expect(css).not.toMatch(/\.bubble \{[^}]*position: sticky/);
     expect(css).toMatch(/\.bubble::before \{[^}]*rotate\(45deg\)/);
     expect(css).toMatch(/\.step\[data-active="false"\] \.badge \{/);
     const code = css.replace(/\/\*[\s\S]*?\*\//g, "");
     for (const gone of ["cap", "capCover", "kicker", "deck", "rule", "side", "sentence"]) expect(code, gone).not.toMatch(new RegExp(`\\.${gone}\\b`));
     expect(css.replace(/\/\*[\s\S]*?\*\//g, "")).not.toMatch(/scroll-snap|scroll-behavior/);
+  });
+
+  it("the current bubble drifts: up by --drift over its step, eased on its own progress, rising in when it becomes current", () => {
+    const code = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    const drift = /\.drift \{([^}]*)\}/.exec(code)![1]!;
+    // Smoothstep of the step's progress (var(--qN, 1)): 0 before the step, all of it after, so it reverses.
+    expect(drift).toMatch(/--e: calc\(var\(--bq, 1\) \* var\(--bq, 1\) \* \(3 - 2 \* var\(--bq, 1\)\)\)/);
+    expect(drift).toMatch(/transform: translateY\(calc\(var\(--drift-lead\) - var\(--e\) \* var\(--drift\)\)\)/);
+    // It sits --drift-lead lower via the transform, so on phones (lead = drift) it never rises under the
+    // stage, and `top` stays the plain stick line, so the next step's push starts where it always did.
+    expect(drift).toMatch(/top: calc\(var\(--stage-h\) \+ var\(--gap\)\);/);
+    expect(code).not.toMatch(/top:[^;]*--drift-lead/);
+    expect(code).toMatch(/\.root \{[^}]*--drift: 22px;[^}]*--drift-lead: 22px;/);
+    expect(code).toMatch(/--drift: 40px;\s*--drift-lead: 20px;/);
+    // Scrubbed, never transitioned (only the bubble inside rises in with MOTION.settle).
+    expect(drift).not.toMatch(/transition/);
+    expect(code).toMatch(/\.bubble \{[^}]*transition:[^}]*transform 240ms cubic-bezier\(0\.2, 0\.7, 0\.2, 1\)/);
+    // The incoming bubble waits 12px low (within MOTION.maxTravel); the last one never moves down onto it.
+    expect(code).toMatch(/\.step\[data-active="true"\] ~ \.step \.bubble \{[^}]*translateY\(12px\)/);
+    expect(code).not.toMatch(/\.step\[data-active="false"\] \.bubble \{[^}]*transform/);
+    // Reduced motion: no drift.
+    const reduce = /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/.exec(code)![1]!;
+    expect(reduce).toMatch(/--drift: 0px;/);
+    expect(reduce).toMatch(/\.drift \{\s*transform: none;/);
   });
 
   it("the section strip names every beat over the story, and marks the current one in full", () => {
@@ -240,6 +278,12 @@ describe("v34 tape compact", () => {
     reduceMotion = true;
     render(<Variant m={m} />);
     expect(screen.queryByTestId("story-track")).toBeNull();
+    // No stage, so the title heads the stills; still a single h2.
+    const heading = screen.getByRole("heading", { name: "Follow your $100" });
+    expect(document.querySelectorAll("h2")).toHaveLength(1);
+    // Before the preference is known it renders too, but CSS hides it unless the reader asks for reduce.
+    expect(css).toMatch(/@media \(prefers-reduced-motion: no-preference\) \{\s*\.titleStill \{\s*display: none;/);
+    expect(heading.compareDocumentPosition(screen.getByTestId("story-stills")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const figures = screen.getByTestId("story-stills").querySelectorAll("figure");
     expect(figures).toHaveLength(8);
     BEAT_KEYS.forEach((key, i) => {
