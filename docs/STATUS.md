@@ -11,8 +11,8 @@
 - Pre-deploy checks: Rust 71/71, SDK 477/477, fork suite 134/134 (audit PoCs excluded), app 498/498.
 - `main` pushed to `origin` (`36717a8..ccf96a6`) first; Vercel redeployed plinto.xyz with the new landing.
 - The Helius key in `.env` (`MAINNET_RPC_URL`) answers 403; the upgrade used the public endpoint.
-- **Open:** `PINATA_JWT` is not set on Vercel (`/api/upload` answers 501); the founder adds it, or logs in the
-  Vercel CLI so it can be added from here.
+- `PINATA_JWT` added on Vercel (Production, secret) by the founder and redeployed: `/api/upload` now validates
+  requests (415 for a non-multipart body) instead of 501. Not yet exercised with a real image upload.
 
 
 ## Landing story = lab variant 34 — 2026-10-25 (local)
