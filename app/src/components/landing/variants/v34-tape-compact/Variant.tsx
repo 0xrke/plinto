@@ -47,10 +47,11 @@ import s from "./tapeCompact.module.css";
  */
 
 /**
- * Runway per beat (svh): an even 100 for every beat, so the scroll keeps one rhythm, except the
- * split, which plays three phases (the raise held, dividing with its labels, the floor settling).
+ * Runway per beat (svh): an even 120 for every beat, so the scroll keeps one rhythm and the chart
+ * moves slowly enough to feel smooth, except the split, which plays three phases (the raise held,
+ * dividing with its labels, the floor settling).
  */
-const HEIGHTS: StepHeights = { presale: 100, split: 140, pump: 100, selloff: 100, steps: 100, bounce: 100, exits: 100, redeem: 100 };
+const HEIGHTS: StepHeights = { presale: 120, split: 150, pump: 120, selloff: 120, steps: 120, bounce: 120, exits: 120, redeem: 120 };
 
 /** Why the burn matters (33's note), shown on the exits beat in place of its long detail. */
 export const SUPPLY_NOTE = "Redeemed tokens are burned, so the same vault backs fewer tokens:";
