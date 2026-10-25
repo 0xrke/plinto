@@ -10,7 +10,6 @@ import {
   STROKE,
   TILE_FLOOR,
   TILE_NOW,
-  TILE_REDEEMED,
   TILE_SUPPLY,
   STORY_POS_END,
   storyFrame,
@@ -101,6 +100,18 @@ export function tapeSpan(compact: boolean, zoom: number): number {
   return wide + (full - wide) * Math.min(1, Math.max(0, zoom));
 }
 
+/** The supply lane's height: 88px on wide tapes, 56px on phones (the price plot gives up the room). */
+export const LANE_H = (compact: boolean): number => (compact ? 56 : 88);
+
+/** The burned share of the listing supply, for the hatched band: "30% burned". */
+export const burnedText = (share: number): string => `${Math.round((1 - share) * 100)}% burned`;
+
+/** A burn's own share, for its flame's label: "30% burned", "0.4% burned". */
+const burnShareText = (share: number): string => `${share >= 0.1 ? Math.round(share * 100) : (share * 100).toFixed(1)}% burned`;
+
+/** Story time over which a fresh burn's riser glows and its band is lit, then settles (the exits beat). */
+const FRESH: readonly [number, number] = [0.6, 1.1];
+
 /** Below this drawing width the tape uses its phone layout (own ruler row, smaller type). */
 export const COMPACT_W = 520;
 /** Ruler names fade over this many px at the card edges (27: 24px, too ghostly in the narrower card). */
@@ -140,25 +151,32 @@ export function CompactTape({ m, frame, w, h, className = "" }: TapeProps) {
   const resR = compact ? 10 : 14;
   const FOOT = compact ? 16 : 20;
   /*
-   * The supply lane: a thin pane along the tape's foot, like a volume pane under a trading chart. Its
-   * own 0–100% scale (100% of the listing supply at `lane100`, 0 at `laneBot`), the tape's x axis.
+   * The supply lane: a pane along the tape's foot, like a volume pane under a trading chart. Its own
+   * honest 0–100% scale (100% of the listing supply at `lane100`, 0 at `laneBot`), the tape's x axis.
+   * Tall enough that the holders' 30% burn is a step you see at a glance (about 20px wide, 11px on
+   * phones); the 0.4% burn stays a marker. A row over the 100% line holds the lane's name.
    */
-  const LANE = compact ? 36 : 54;
+  const LANE = LANE_H(compact);
   const laneTop = h - FOOT - LANE;
   const laneBot = h - FOOT - 3;
-  const lane100 = laneTop + (compact ? 13 : 16);
+  const lane100 = laneTop + (compact ? 16 : 18);
   const laneY = (share: number) => laneBot - Math.min(1, Math.max(0, share)) * (laneBot - lane100);
   const top = RULER + (compact ? 16 : 26);
-  // The main plot ends above the lane (the card keeps its size; the price chart gives up the lane).
-  const bot = laneTop - (compact ? 8 : 12);
+  /*
+   * The main plot ends above the lane (the card keeps its size; the price chart gives up the lane).
+   * Before listing there is no supply to show: the plot keeps the lane's room and hands it over
+   * over the pump's first stretch, as the lane fades in.
+   */
+  const laneIn = ease(ramp(frame.pos, PUMP_I, PUMP_I + 0.3));
+  const botFree = h - FOOT - (compact ? 10 : 14);
+  const bot = botFree - (botFree - (laneTop - (compact ? 8 : 12))) * laneIn;
   /* Value tags ride the playhead on the narrow strip of unwritten tape to its right. */
-  const tagW = compact ? 124 : 172;
+  const tagW = compact ? 130 : 172;
   // A tag is label + value, plus a third line with the change since listing once trading opens.
   const tagH0 = compact ? 36 : 50;
   const tagH1 = compact ? 52 : 74;
-  // The supply tag is smaller: on wide tapes label and value share a line, the change under them;
-  // on phones (too narrow for that) it stacks like the others, in smaller type.
-  const tagHS = 46;
+  // The supply tag is smaller: label and value share a line, the change under them.
+  const tagHS = compact ? 36 : 46;
   // Clear of the price head's 10px halo on phones too (29 used 8px there).
   const tagGap = compact ? 12 : 18;
   // The playhead (and so the current action) always sits in the middle of the card.
@@ -272,17 +290,24 @@ export function CompactTape({ m, frame, w, h, className = "" }: TapeProps) {
   const bounceLabelY = (dipY: number) => Math.min(bot - 2, dipY + 24);
   const feesAt = b.start[BOUNCE_I]!;
   const feesFloor = frame.feesPct !== null ? floorAtTime(steps, feesAt) : null;
-  const priceY = Math.min(bot, Math.max(top, Y(frame.valueOf100)));
-  const floorY = frame.floor100 !== null ? Math.min(bot, Math.max(top, Y(frame.floor100))) : null;
+  const clampY = (y: number) => Math.min(bot, Math.max(top, y));
+  const priceY = clampY(Y(frame.valueOf100));
+  /* The staircase (gross) at the playhead. */
+  const floorY = frame.floor100 !== null ? clampY(Y(frame.floor100)) : null;
+  /*
+   * The floor tag shows what redeem pays (net of the exit fee), so its dot sits there, on a short mint
+   * tick hanging from the step. Dots and numbers then agree: on the redeem beat the price ($36.92) is
+   * drawn above the payout ($36.87), as it is.
+   */
+  const floorNetY = frame.floorNet100 !== null ? clampY(Y(frame.floorNet100)) : null;
   const { now, floor } = tileValues(frame);
-  const showFloorTag = floor !== "—" && floorY !== null && reveal > 0.5;
+  const showFloorTag = floor !== "—" && floorNetY !== null && reveal > 0.5;
 
-  // Both tags numeric: the larger number takes the upper tag, whatever the lines' order.
-  const priceOnTop = now !== TILE_REDEEMED && frame.floorNet100 !== null ? frame.valueOf100 >= frame.floorNet100 : undefined;
+  /* The tags stack in the order of their dots (which is the order of their values): connectors never cross. */
   const change = sinceListing(m, frame);
   const priceH = change.now !== null ? tagH1 : tagH0;
   const floorH = change.floor !== null ? tagH1 : tagH0;
-  const pair = layoutTags(priceY, showFloorTag ? floorY : null, Math.max(priceH, showFloorTag ? floorH : 0), top - 8, bot, 6, priceOnTop);
+  const pair = layoutTags(priceY, showFloorTag ? floorNetY : null, Math.max(priceH, showFloorTag ? floorH : 0), top - 8, bot, 6);
   /* ---- token supply: the lane's step line, its tag, and the burns ---- */
   const supplyNow = supplyAt(m, frame);
   const listT = b.start[PUMP_I]!;
@@ -324,12 +349,14 @@ export function CompactTape({ m, frame, w, h, className = "" }: TapeProps) {
 
   /*
    * ---- burn markers: a flame on the floor line at each redemption that burns tokens ----
-   * Its label pairs the supply drop with the floor step it causes ("−30% supply" over "→ floor
-   * +0.9%"): the vault pays the redeemers out and keeps only the exit fee, so a big burn moves the
-   * floor by under 1%. The label sits left of the riser (right of it is blank tape while it is new)
-   * in the first spot the whole story's price path never crosses and no other label holds, so the
-   * choice is pan-invariant and never flips mid-scroll. The bounce's tiny burn keeps its flame but
-   * names itself only while its beat plays, and only where it has room.
+   * Its label pairs the burn with the floor step it causes ("30% burned" over "→ floor +0.9%"): the
+   * vault pays the redeemers out and keeps only the exit fee, so a big burn moves the floor by under
+   * 1%. The big burn's label sits at the foot of its dotted leader, just over the lane, right where
+   * the leader drops into the hatched band it names (left of the leader: right of it is blank tape
+   * while it is new). Otherwise the label takes the first spot the whole story's price path never
+   * crosses and no other label holds, so the choice is pan-invariant and never flips mid-scroll.
+   * The bounce's tiny burn keeps its flame but names itself only while its beat plays, and only where
+   * it has room.
    */
   const full = finalPath(m);
   const pathCrosses = (xa: number, xb: number, ya: number, yb: number) => {
@@ -371,7 +398,9 @@ export function CompactTape({ m, frame, w, h, className = "" }: TapeProps) {
     const e = frame.events.find((ev) => ev.kind === "redeem" && Math.abs(ev.t - bn.t) < 1e-6);
     const fv = e?.to ?? floorAtTime(steps, bn.t) ?? frame.floor100 ?? 0;
     const big = bn.share >= 0.1;
-    return { t: bn.t, x: X(bn.t), y: Y(fv), big, lines: [`${formatPctChange(bn.supplyPct)} supply`, `→ floor ${burnFloorText(bn.floorPct)}`], label: null };
+    // The big burn names the hatched band on the lane's 0–100% scale (its share of the listing supply).
+    const first = big ? burnedText(bn.supplyAfter) : burnShareText(bn.share);
+    return { t: bn.t, x: X(bn.t), y: Y(fv), big, lines: [first, `→ floor ${burnFloorText(bn.floorPct)}`], label: null };
   });
   for (const mk of burnMarks) {
     held.push([mk.x - FLAME / 2 - 3, mk.x + FLAME / 2 + 3, mk.y - FLAME - 8, mk.y + 5]);
@@ -388,6 +417,9 @@ export function CompactTape({ m, frame, w, h, className = "" }: TapeProps) {
     const options = rows
       .filter((y) => y - 13 >= top - 6 && y + LINE_H + 4 <= bot)
       .map((y) => ({ x: mk.x - 7, y, left: mk.x - 7 - lw }));
+    // The big burn: at its leader's foot, over the lane, first.
+    const foot = laneTop - (compact ? 6 : 9) - LINE_H;
+    if (mk.big && foot - 13 > mk.y + 8) options.unshift({ x: mk.x - 7, y: foot, left: mk.x - 7 - lw });
     const free = (o: { x: number; y: number; left: number }) => {
       const box: Box = [o.left - 2, o.x + 1, o.y - 13, o.y + LINE_H + 4];
       return !pathCrosses(box[0], box[1], box[2], box[3]) && held.every((q) => !hit(box, q));
@@ -414,6 +446,15 @@ export function CompactTape({ m, frame, w, h, className = "" }: TapeProps) {
     laneD = pts.map(([t, v], i) => `${i ? "L" : "M"}${X(t).toFixed(1)} ${laneY(v).toFixed(1)}`).join("");
     laneArea = `${laneD}L${X(frame.t).toFixed(1)} ${laneBot}L${X(listT).toFixed(1)} ${laneBot}Z`;
   }
+  /*
+   * After the big burn, the burned part (between the 100% line and the supply line, from the burn to
+   * the playhead) is hatched, as on 18's supply bar, over a violet tint, and its riser is drawn bold. The flame's label ("30% burned"), at the foot of the leader that drops into the
+   * riser, names it.
+   */
+  const bigBurn = burned.find((bn) => bn.share >= 0.1) ?? null;
+  const burnedBand = supplyNow && bigBurn ? { x0: X(bigBurn.t), x1: X(frame.t), y0: lane100, y1: laneY(supplyNow.share) } : null;
+  /* While the burn is fresh (the exits beat) its riser glows and its band is lit; then both settle. */
+  const fresh = bigBurn ? 1 - ramp(frame.t - bigBurn.t, FRESH[0], FRESH[1]) : 0;
   const plotH = h - RULER - FOOT;
   /** Ruler text line: the middle of its row. */
   const rulerMid = RULER / 2;
@@ -524,6 +565,9 @@ export function CompactTape({ m, frame, w, h, className = "" }: TapeProps) {
         <clipPath id={`plot${uid}`}>
           <rect x={0} y={RULER} width={w} height={plotH} />
         </clipPath>
+        <pattern id={`burnHatch${uid}`} width={6} height={6} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <line x1={0} y1={0} x2={0} y2={6} className={s.burnHatch} />
+        </pattern>
         <pattern id={`hatch${uid}`} width={8} height={8} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <line x1={0} y1={0} x2={0} y2={8} className={s.hatch} />
         </pattern>
@@ -709,7 +753,7 @@ export function CompactTape({ m, frame, w, h, className = "" }: TapeProps) {
         {burnMarks.map((mk) => (
           <g key={mk.t} data-part="burn" data-burn={mk.big ? "big" : "small"} opacity={edge(mk.x + 10)}>
             {/* A dotted leader ties a labelled flame to its step on the supply lane below. */}
-            {mk.label ? <line data-part="burn-leader" x1={mk.x} x2={mk.x} y1={mk.y + 5} y2={laneTop} className={s.burnLeader} /> : null}
+            {mk.big ? <line data-part="burn-leader" x1={mk.x} x2={mk.x} y1={mk.y + 5} y2={lane100} className={s.burnLeader} /> : null}
             <path d={flame(mk.x, mk.y - 6, mk.big ? FLAME : FLAME * 0.75)} className={s.flame} />
             {mk.label ? (
               <text data-part="burn-label" opacity={edge(mk.label.left)} x={mk.label.x} y={mk.label.y} textAnchor="end" className={s.burnLabel}>
@@ -724,11 +768,40 @@ export function CompactTape({ m, frame, w, h, className = "" }: TapeProps) {
 
         {/* The supply lane: its own 0–100% scale under the price chart. */}
         {supplyNow ? (
-          <g data-part="supply-lane">
+          <g data-part="supply-lane" data-lane-h={LANE} opacity={laneIn}>
             <line x1={0} x2={w} y1={laneTop + 0.5} y2={laneTop + 0.5} className={s.grid} />
             <line x1={0} x2={w} y1={lane100} y2={lane100} className={s.lane100} style={{ strokeDasharray: DASH.ref }} />
+            <line x1={0} x2={w} y1={laneBot + 0.5} y2={laneBot + 0.5} className={s.lane0} />
             <path d={laneArea} className={s.laneArea} />
+            {burnedBand && burnedBand.x1 > burnedBand.x0 ? (
+              <g data-part="burned-band">
+                <rect
+                  x={burnedBand.x0}
+                  y={burnedBand.y0}
+                  width={burnedBand.x1 - burnedBand.x0}
+                  height={Math.max(0, burnedBand.y1 - burnedBand.y0)}
+                  className={s.burnedTint}
+                  style={{ fillOpacity: 0.16 + 0.22 * fresh }}
+                />
+                <rect
+                  x={burnedBand.x0}
+                  y={burnedBand.y0}
+                  width={burnedBand.x1 - burnedBand.x0}
+                  height={Math.max(0, burnedBand.y1 - burnedBand.y0)}
+                  fill={`url(#burnHatch${uid})`}
+                  className={s.burnedBand}
+                />
+              </g>
+            ) : null}
             <path d={laneD} data-part="supply-line" className={s.laneLine} />
+            {burnedBand ? (
+              <g data-part="burn-riser">
+                {fresh > 0.01 ? (
+                  <line x1={burnedBand.x0} x2={burnedBand.x0} y1={burnedBand.y0} y2={burnedBand.y1} className={s.riserGlow} opacity={fresh} />
+                ) : null}
+                <line x1={burnedBand.x0} x2={burnedBand.x0} y1={burnedBand.y0} y2={burnedBand.y1} className={s.riser} />
+              </g>
+            ) : null}
             {burnMarks.map((mk) => (
               <circle key={mk.t} cx={mk.x} cy={laneY(burned.find((bn) => bn.t === mk.t)!.supplyAfter)} r={mk.big ? 3.5 : 2.5} className={s.laneDot} />
             ))}
@@ -751,12 +824,16 @@ export function CompactTape({ m, frame, w, h, className = "" }: TapeProps) {
       ) : null}
 
       {supplyNow ? (
-        <g data-part="supply-scale">
-          <text x={compact ? 8 : 14} y={lane100 - 4} className={s.tick}>
-            100%
+        <g data-part="supply-scale" opacity={laneIn}>
+          {/* The lane's name and its 100% tick share the row over the 100% line; 0% sits on the base. */}
+          <text x={compact ? 8 : 14} y={lane100 - 5} className={s.laneName}>
+            {TILE_SUPPLY}
+            <tspan dx={compact ? 6 : 8} className={s.laneTick}>
+              100%
+            </tspan>
           </text>
-          <text x={compact ? 8 : 14} y={laneBot - (compact ? 3 : 5)} className={s.laneName}>
-            Supply
+          <text x={compact ? 8 : 14} y={laneBot - 3} className={s.laneTick}>
+            0%
           </text>
         </g>
       ) : null}
@@ -804,10 +881,14 @@ export function CompactTape({ m, frame, w, h, className = "" }: TapeProps) {
       <path d={`M${playX - 6} ${h - FOOT}h12l-6 -7Z`} className={s.playKnob} />
 
       {/* Value tags ride the playhead on the blank tape. */}
-      {showFloorTag && floorY !== null && tags.floor !== null ? (
+      {showFloorTag && floorNetY !== null && tags.floor !== null ? (
         <g data-part="tag-floor" opacity={reveal}>
-          <circle cx={playX} cy={floorY} r={4.5} className={s.floorDot} />
-          <path d={`M${connFrom(5)} ${floorY}L${connTo} ${tags.floor}`} className={s.connMint} />
+          {/* The net tick: from the step (gross) down to what redeem pays. */}
+          {floorY !== null && floorNetY - floorY > 3 ? (
+            <line data-part="floor-net-tick" x1={playX} x2={playX} y1={floorY} y2={floorNetY} className={s.netTick} />
+          ) : null}
+          <circle data-part="floor-dot" cx={playX} cy={floorNetY} r={4.5} className={s.floorDot} />
+          <path d={`M${connFrom(5)} ${floorNetY}L${connTo} ${tags.floor}`} className={s.connMint} />
           <TagBody x={tagX} cy={tags.floor} w={tagW} h={floorH} compact={compact} tone="floor" label={TILE_FLOOR} value={floor} pct={change.floor} part="floor" />
         </g>
       ) : null}
@@ -822,7 +903,7 @@ export function CompactTape({ m, frame, w, h, className = "" }: TapeProps) {
         <TagBody x={tagX} cy={tags.price} w={tagW} h={priceH} compact={compact} tone="price" label={TILE_NOW} value={now} pct={change.now} part="price" />
       </g>
       {supplyNow && tags.supply !== null ? (
-        <g data-part="tag-supply">
+        <g data-part="tag-supply" opacity={laneIn}>
           <circle cx={playX} cy={supplyY} r={3.5} className={s.laneDot} />
           <path d={`M${connFrom(4)} ${supplyY}L${connTo} ${tags.supply}`} className={s.connSupply} />
           <SupplyTag x={tagX} cy={tags.supply} w={tagW} h={tagHS} compact={compact} share={supplyNow.share} pct={supplyNow.pct} />
@@ -887,23 +968,17 @@ function TagBody({
  */
 function SupplyTag({ x, cy, w, h, compact, share, pct }: { x: number; cy: number; w: number; h: number; compact: boolean; share: number; pct: number }) {
   const y0 = cy - h / 2;
-  const line1 = y0 + (compact ? 13 : 19);
+  const line1 = y0 + (compact ? 14 : 19);
   return (
     <>
-      <rect x={x} y={y0} width={w} height={h} rx={10} className={s.tagSupply} />
-      <text x={x + 10} y={line1} className={s.tagLabel}>
+      <rect x={x} y={y0} width={w} height={h} rx={compact ? 8 : 10} className={s.tagSupply} />
+      <text x={x + (compact ? 8 : 10)} y={line1} className={s.tagLabel}>
         {TILE_SUPPLY}
       </text>
-      <text
-        data-part="supply-value"
-        x={compact ? x + 10 : x + w - 10}
-        y={compact ? y0 + 28 : line1 + 1}
-        textAnchor={compact ? undefined : "end"}
-        className={s.tagSupplyValue}
-      >
+      <text data-part="supply-value" x={x + w - (compact ? 8 : 10)} y={line1 + 1} textAnchor="end" className={s.tagSupplyValue}>
         {`${(share * 100).toFixed(1)}%`}
       </text>
-      <text data-part="pct-supply" x={x + 10} y={y0 + (compact ? 41 : 38)} className={s.tagPct}>
+      <text data-part="pct-supply" x={x + (compact ? 8 : 10)} y={y0 + (compact ? 29 : 38)} className={s.tagPct}>
         {/* No burn yet: the zero reads as a fact, not as news. */}
         <tspan className={formatPctChange(pct) === "0.0%" ? s.pctFlat : s.pctSupply}>{formatPctChange(pct)}</tspan>
         <tspan className={s.tagPctSuffix}> {SINCE_LISTING}</tspan>

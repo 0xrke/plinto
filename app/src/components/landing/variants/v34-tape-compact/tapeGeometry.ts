@@ -3,8 +3,7 @@ import { BEAT_KEYS, formatPctChange, storyFrame, type StoryFrame, type VariantPr
 /*
  * Pure geometry for the fixed tape (copied unchanged from v27-tape-fixed, which took it from v19):
  * where each beat sits in story time, the y-axis ticks and the placement of the two value tags that
- * ride the playhead. The caller decides which tag goes on top, so the tags read in the order of the
- * numbers they show. No React, no DOM.
+ * ride the playhead. The tags keep the order of their dots. No React, no DOM.
  */
 
 type Launch = VariantProps["m"];
@@ -46,10 +45,8 @@ export function niceTicks(min: number, max: number, count: number): number[] {
 
 /**
  * Vertical centres of the price tag and the floor tag (height `h`), each as close to its own line as
- * possible, never overlapping (gap `gap`) and kept inside [top, bottom]. The higher value keeps the
- * upper slot, unless `priceOnTop` says which one should (the floor tag shows the net payout while its
- * dot sits on the gross staircase, so near the floor the lines and the numbers can disagree).
- * `floorY` null: only the price tag.
+ * possible, never overlapping (gap `gap`) and kept inside [top, bottom]. The tags keep the order of
+ * their dots, so the connectors never cross. `floorY` null: only the price tag.
  */
 export function layoutTags(
   priceY: number,
@@ -58,22 +55,15 @@ export function layoutTags(
   top: number,
   bottom: number,
   gap = 6,
-  priceOnTop?: boolean,
 ): { price: number; floor: number | null } {
   const lo = top + h / 2;
   const hi = bottom - h / 2;
   const clamp = (y: number) => Math.min(hi, Math.max(lo, y));
   if (floorY === null) return { price: clamp(priceY), floor: null };
   const need = h + gap;
-  const priceAbove = priceOnTop ?? priceY <= floorY;
+  const priceAbove = priceY <= floorY;
   let a = priceAbove ? priceY : floorY; // upper tag
   let b = priceAbove ? floorY : priceY; // lower tag
-  if (a > b) {
-    // Forced order against the lines: start both from their midpoint.
-    const mid = (a + b) / 2;
-    a = mid;
-    b = mid;
-  }
   if (b - a < need) {
     const mid = (a + b) / 2;
     a = mid - need / 2;
