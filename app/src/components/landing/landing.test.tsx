@@ -13,14 +13,10 @@ import { LiveFloorsView } from "./LiveFloors";
 import { loadLiveFloors, pickLiveFloors } from "./liveFloorsData";
 import { simConstantsFromSdk } from "@/lib/landing/sim/fromSdk";
 import { launchMath } from "@/lib/landing/sim/launch";
-import { FLOW_STOP_COUNT, flowUsdAt } from "@/lib/landing/sim/market";
 import { BEAT_KEYS } from "@/lib/landing/sim/story";
-import { FloorLab } from "./lab/FloorLab";
 import { LabSection } from "./lab/LabSection";
-import { flowLabel, sandboxReadout } from "./lab/SplitSandbox";
 import { ILLUSTRATION, storyChartStrings } from "./lab/storyChartCopy";
 import { STORY_FOOTNOTE, STORY_HONESTY, beatCaption, beatSrText, railLabel } from "./lab/storyCopy";
-import { Rules } from "./Rules";
 import { TopBar } from "./TopBar";
 
 const OVERCLAIM = /guarantee|risk-free|can.?t lose|cannot lose|profit|\bsafe\b|protected/i;
@@ -161,32 +157,16 @@ describe("landing sections", () => {
     expect(screen.getByRole("link", { name: "Open app" }).getAttribute("href")).toBe("/app");
   });
 
-  it("rules: what the code can't do, and what can still hurt", () => {
-    render(<Rules />);
-    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("What the code can't do");
-    for (const t of ["No withdraw", "No unlock", "No pause"]) expect(screen.getByText(t)).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("What can still hurt");
-    expect(screen.getAllByRole("listitem")).toHaveLength(6);
-  });
-
-  it("floor lab: the sandbox defaults come from the SDK math", () => {
-    render(<LabSection />);
-    const sandbox = screen.getByRole("region", { name: "Set the split" });
-    for (const v of ["$156.25", "$34.88", "2.8×", "$1,614"]) expect(within(sandbox).getAllByText(new RegExp(v.replace("$", "\\$"))).length).toBeGreaterThan(0);
-    expect(within(sandbox).getByText(/SPYx/)).toBeTruthy();
-  });
-
   it("floor lab: the server renders the story's finished frame", () => {
     const html = renderToString(<LabSection />);
     expect(html).toContain("Redeem now: $36.87 back, not zero.");
     expect(html).toContain(STORY_HONESTY);
     // Text only: SVG path data is full of numbers.
     expect(html.replace(/<[^>]*>/g, " ")).not.toMatch(/64\.4|65%/);
-    // The story's chip links to the sandbox's floor-share slider.
+    // No sandbox on the page any more: the floor-share chip is a plain label at the default share.
     const { container } = render(<LabSection />);
-    const chip = container.querySelector("#follow-your-100 a[href^='#']");
-    expect(chip).not.toBeNull();
-    expect(container.querySelector(chip!.getAttribute("href")!)?.getAttribute("type")).toBe("range");
+    expect(container.querySelector("#follow-your-100 a[href^='#']")).toBeNull();
+    expect(container.querySelector("#follow-your-100")!.textContent).toContain("Floor share 50%");
   });
 
   it("closing call to action links to the app and to create", () => {
@@ -206,24 +186,15 @@ describe("landing sections", () => {
       const m = launchMath(k, v);
       for (const key of BEAT_KEYS) texts.push(beatCaption(m, key), beatSrText(m, key));
       texts.push(...storyChartStrings(m));
-      for (let i = 0; i < FLOW_STOP_COUNT; i++) {
-        const x = flowUsdAt(m, i);
-        texts.push(flowLabel(x), ...Object.values(sandboxReadout(m, x)).filter((o): o is string => typeof o === "string"));
-      }
     }
     texts.push(ILLUSTRATION, STORY_FOOTNOTE, ...BEAT_KEYS.map((_, i) => railLabel(i)));
     for (const t of texts) expect(t.replace("The floor protects from zero, not from loss.", "")).not.toMatch(OVERCLAIM);
   });
 
-  it("keeps the copy short: at most 230 visible words with the lab rendered", async () => {
+  it("keeps the copy short: at most 220 visible words with the lab rendered", async () => {
     const { container } = render(await Landing({ source: new MockDataSource(0) }));
     const words = visibleWords(container.querySelector("main")!);
-    expect(words).toBeLessThanOrEqual(230);
-  });
-
-  it("names SPYx's moving dollar value once", async () => {
-    const { container } = render(<FloorLab k={simConstantsFromSdk()} />);
-    expect(container.textContent!.match(/S&P 500/g)).toHaveLength(1);
+    expect(words).toBeLessThanOrEqual(220);
   });
 });
 
@@ -234,11 +205,9 @@ describe("<Landing />", () => {
     const main = container.querySelector("main#main");
     expect(main).not.toBeNull();
     const sections = main!.querySelectorAll("section");
-    expect(sections).toHaveLength(6);
+    expect(sections).toHaveLength(4);
     expect([...main!.querySelectorAll("h2")].map((h) => h.textContent)).toEqual([
-      "Set the split",
       "Follow your $100",
-      "What the code can't do",
       "Live on Solana mainnet",
       "See your max loss before you buy.",
     ]);

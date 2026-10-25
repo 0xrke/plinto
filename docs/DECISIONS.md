@@ -665,3 +665,13 @@ Format: **decision** · alternatives · why. These supersede the matching bullet
   local `lab` branch (at `57c3795`) and is gone from `main`. The harness lives in
   `components/landing/story/`, the story in `story/tape/TapeStory.tsx`; the lab-only lead-in and the
   page wrapper are dropped on `main`.
+
+## 2026-10-25 — Landing drops "Set the split" and "What the code can't do" (founder's call)
+- The split sandbox is gone from `/`: buyers have nothing to choose there; the floor share is the
+  creator's choice. The story runs at the default floor share (50%) and its chip is a plain label.
+  The founder wants a split slider in the create form later.
+- The rules section ("What the code can't do" / "What can still hurt") is gone from `/`. The app keeps
+  its own "What the program can't do" block (upgrade key, unaudited, SPYx issuer controls); the
+  landing's "S&P 500" note on the SPYx floor went with the sandbox.
+- Landing order: Hero → Follow your $100 → Live on Solana mainnet → closing CTA. Word budget back
+  to 220.

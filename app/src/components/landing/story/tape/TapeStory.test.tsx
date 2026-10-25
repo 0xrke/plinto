@@ -173,7 +173,7 @@ describe("TapeStory", () => {
     // The current section is lit.
     const { container } = render(<CompactTape m={m} frame={storyFrame(m, 3.5)} w={586} h={556} />);
     expect(container.querySelector('[data-part="section-current"]')).toBeTruthy();
-  });
+  }, 20_000); // renders the strip at every beat: slow under a full parallel run
 
   it("the riding tags show the values, and the change since listing only once trading opens", () => {
     const pct = (c: HTMLElement, part: string) => c.querySelector(`[data-part="pct-${part}"]`);
