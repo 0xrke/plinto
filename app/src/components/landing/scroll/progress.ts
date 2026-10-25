@@ -58,6 +58,12 @@ let resized = true;
 
 const stepsOf = (root: HTMLElement) => Array.from(root.querySelectorAll<HTMLElement>("[data-step]"));
 const stageOf = (root: HTMLElement) => root.querySelector<HTMLElement>("[data-stage]");
+/** Where the pinned stage ends, from the viewport top: its height plus its sticky `top` (a pinned page header). */
+const stageBottom = (root: HTMLElement) => {
+  const stage = stageOf(root);
+  if (!stage) return 0;
+  return stage.offsetHeight + (parseFloat(getComputedStyle(stage).top) || 0);
+};
 /** Where the --qN variables go: the rail that reads them, so the rest of the chapter is not restyled. */
 const varsOf = (root: HTMLElement) => root.querySelector<HTMLElement>("[data-rail]") ?? root;
 
@@ -88,7 +94,7 @@ function onResize() {
 function readLayout() {
   wide = typeof window.matchMedia === "function" ? window.matchMedia(WIDE_QUERY).matches : true;
   for (const [root, e] of entries) {
-    if (e.observed) e.stageH = stageOf(root)?.offsetHeight ?? 0;
+    if (e.observed) e.stageH = stageBottom(root);
   }
   resized = false;
 }
@@ -175,7 +181,7 @@ function lineFor(vh: number, isWide: boolean, stageH: number): number {
 /** The reading line the driver uses for `root`, measured now (for scrolling a step to a given progress). */
 export function readingLine(root: HTMLElement): number {
   const isWide = typeof window.matchMedia === "function" ? window.matchMedia(WIDE_QUERY).matches : true;
-  return lineFor(window.innerHeight, isWide, stageOf(root)?.offsetHeight ?? 0);
+  return lineFor(window.innerHeight, isWide, stageBottom(root));
 }
 
 const fmt = (x: number) => String(Math.round(x * 10000) / 10000);
@@ -241,7 +247,7 @@ export function observeChapter(root: HTMLElement): () => void {
     written: false,
     // Without IntersectionObserver every chapter is live.
     live: io === null,
-    stageH: stageOf(root)?.offsetHeight ?? 0,
+    stageH: stageBottom(root),
     wroteQ: [],
     state: finalFor(root),
   };

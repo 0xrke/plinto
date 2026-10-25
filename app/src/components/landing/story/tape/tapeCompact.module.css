@@ -225,7 +225,7 @@
 .drift {
   --e: calc(var(--bq, 1) * var(--bq, 1) * (3 - 2 * var(--bq, 1)));
   position: sticky;
-  top: calc(var(--stage-h) + var(--gap));
+  top: calc(var(--sticky-top, 0px) + var(--stage-h) + var(--gap));
   transform: translateY(calc(var(--drift-lead) - var(--e) * var(--drift)));
 }
 
@@ -391,7 +391,7 @@
   /* A cloud speech bubble beside the stage (cloud on the white page, no shadow), its tail
      pointing at the card. */
   .drift {
-    top: max(16px, calc(50svh - 64px));
+    top: max(calc(var(--sticky-top, 0px) + 16px), calc(50svh - 64px));
   }
 
   .bubble {

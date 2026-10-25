@@ -14,7 +14,7 @@ function ChainPill() {
 
 export function TopBar() {
   return (
-    <nav aria-label="Site" className="flex min-h-12 items-center justify-between gap-3 pt-5 sm:pt-8">
+    <nav aria-label="Site" className="flex h-full min-h-12 items-center justify-between gap-3">
       <Link href={LANDING_ROUTES.home} className="rounded-xl">
         <Wordmark size="md" />
       </Link>

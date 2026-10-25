@@ -133,7 +133,7 @@ describe("TapeStory", () => {
     expect(drift).toMatch(/transform: translateY\(calc\(var\(--drift-lead\) - var\(--e\) \* var\(--drift\)\)\)/);
     // It sits --drift-lead lower via the transform, so on phones (lead = drift) it never rises under the
     // stage, and `top` stays the plain stick line, so the next step's push starts where it always did.
-    expect(drift).toMatch(/top: calc\(var\(--stage-h\) \+ var\(--gap\)\);/);
+    expect(drift).toMatch(/top: calc\(var\(--sticky-top, 0px\) \+ var\(--stage-h\) \+ var\(--gap\)\);/);
     expect(code).not.toMatch(/top:[^;]*--drift-lead/);
     expect(code).toMatch(/\.root \{[^}]*--drift: 22px;[^}]*--drift-lead: 22px;/);
     expect(code).toMatch(/--drift: 40px;\s*--drift-lead: 20px;/);

@@ -6,6 +6,7 @@ import { LiveFloorsView } from "./LiveFloors";
 import { loadLiveFloors } from "./liveFloorsData";
 import { LabSection } from "./lab/LabSection";
 import { TopBar } from "./TopBar";
+import styles from "./landing.module.css";
 
 const CONTAINER = "mx-auto w-full max-w-[1120px] px-5 sm:px-10 lg:px-12";
 
@@ -18,11 +19,13 @@ const CONTAINER = "mx-auto w-full max-w-[1120px] px-5 sm:px-10 lg:px-12";
 export async function Landing({ source }: { source?: LaunchDataSource } = {}) {
   const live = await loadLiveFloors(source);
   return (
-    <div className="flex min-h-dvh flex-col bg-surface">
+    <div className={`${styles.page} flex min-h-dvh flex-col bg-surface`}>
       <div className="flex-1">
-        <div className={CONTAINER}>
-          <TopBar />
-        </div>
+        <header className={styles.header}>
+          <div className={`${CONTAINER} h-full`}>
+            <TopBar />
+          </div>
+        </header>
         <main id="main" className={`${CONTAINER} pb-12 sm:pb-20`}>
           <Hero />
           <LabSection />

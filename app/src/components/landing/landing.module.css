@@ -18,3 +18,39 @@
     }
   }
 }
+
+/*
+ * The pinned site header. Its height is --sticky-top, which the story reads so its sticky stage and
+ * caption pin below the header instead of under it. Landscape phones (~390px tall) keep the header
+ * in the flow: the story's stage there takes the whole height.
+ */
+.page {
+  --sticky-top: 64px;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: var(--sticky-top);
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+@media (min-width: 640px) {
+  .page {
+    --sticky-top: 76px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .page {
+    --sticky-top: 0px;
+  }
+
+  .header {
+    position: static;
+    height: auto;
+    padding: 12px 0;
+  }
+}
