@@ -84,6 +84,7 @@ describe("v34 tape compact", () => {
       expect(drift.dataset.part).toBe("bubble-drift");
       expect(drift.firstElementChild).toBe(bubble);
       expect(drift.style.getPropertyValue("--bq")).toBe(`var(--q${i}, 1)`);
+      expect(drift.style.getPropertyValue("--pq")).toBe(i > 0 ? `var(--q${i - 1}, 1)` : "1");
       // Badge with the step number, caps label, caption, one muted detail.
       expect(bubble.firstElementChild!.textContent).toBe(String(i + 1));
       expect(within(bubble).getByText(BEAT_LABELS[key]).className).toMatch(/caps/);
@@ -143,6 +144,8 @@ describe("v34 tape compact", () => {
     expect(code).toMatch(/\.step\[data-active="true"\] ~ \.step \.bubble \{[^}]*translateY\(12px\)/);
     expect(code).toMatch(/\.step\[data-active="true"\] ~ \.step \.bubble \{\s*opacity: 0;\s*transform: translateY\(16px\);/);
     expect(code).not.toMatch(/opacity: 0\.6/);
+    // ...except the very next one, which fades in over the end of the current step to push it out.
+    expect(code).toMatch(/\.step\[data-active="true"\] \+ \.step \.bubble \{\s*opacity: clamp\(0, calc\(\(var\(--pq, 1\) - 0\.9\) \* 16\), 0\.75\);/);
     expect(code).not.toMatch(/\.step\[data-active="false"\] \.bubble \{[^}]*transform/);
     // Reduced motion: no drift.
     const reduce = /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/.exec(code)![1]!;

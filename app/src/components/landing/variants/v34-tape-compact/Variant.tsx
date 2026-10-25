@@ -197,8 +197,9 @@ function TapeStage({ m, frame }: { m: LaunchMath; frame: StoryFrame }) {
 /**
  * The drift: the bubble's sticky wrapper reads its own step's progress (the driver's --qN on the
  * root, so no React render on scroll), eases it (smoothstep) and moves up by --drift over the step.
+ * --pq is the previous step's progress: the next bubble fades in as that step ends.
  */
-const driftStyle = (i: number) => ({ "--bq": `var(--q${i}, 1)` }) as CSSProperties;
+const driftStyle = (i: number) => ({ "--bq": `var(--q${i}, 1)`, "--pq": i > 0 ? `var(--q${i - 1}, 1)` : "1" }) as CSSProperties;
 
 /**
  * One beat's bubble: the number badge (filled while its beat plays), the caps beat label, the caption
