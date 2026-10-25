@@ -1,61 +1,15 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { H, TOUCH_F, phaseChartPaths } from "./phaseChartGeometry";
 
 /**
  * Price above a floor, in three phases: a presale where the floor does not exist yet, the moment the
  * market opens, and trading, where the floor climbs on fees and retained exit fees.
  *
- * X positions are fractions of the width and the viewBox is rebuilt from the element's own pixel box,
+ * The viewBox is rebuilt from the element's own pixel box and the paths come from phaseChartPaths,
  * so the drawing fills the card edge to edge at any size without stretching strokes or circles.
  */
-const H = 150;
-const SPLIT = 0.31;
-/** Bleed past both edges: a rounded cap or a rounded-off width can never leave a gap. */
-const BLEED = 4;
-
-const PRESALE_F: [number, number][] = [
-  [0, 94],
-  [0.1, 91],
-  [0.21, 88],
-  [SPLIT, 84],
-];
-const FLOOR_F: [number, number][] = [
-  [SPLIT, 114],
-  [0.45, 110],
-  [0.59, 106],
-  [0.73, 101],
-  [0.87, 97],
-  [1, 92],
-];
-/** `null` means "sit on the floor, wherever it is by then". */
-const PRICE_F: [number, number | null][] = [
-  [SPLIT, 84],
-  [0.36, 60],
-  [0.44, null],
-  [0.52, 72],
-  [0.6, 90],
-  [0.65, 64],
-  [0.72, null],
-  [0.8, 68],
-  [0.86, 82],
-  [0.93, 40],
-  [1, 24],
-];
-const TOUCH_F = [0.44, 0.72];
-
-function smooth(points: [number, number][]): string {
-  return points.reduce((acc, p, i) => {
-    if (i === 0) return `M${p[0]} ${p[1]}`;
-    const p0 = points[i - 2] ?? points[i - 1];
-    const p1 = points[i - 1];
-    const p3 = points[i + 1] ?? p;
-    const c1 = [p1[0] + (p[0] - p0[0]) / 6, p1[1] + (p[1] - p0[1]) / 6];
-    const c2 = [p[0] - (p3[0] - p1[0]) / 6, p[1] - (p3[1] - p1[1]) / 6];
-    return `${acc} C${c1[0].toFixed(1)} ${c1[1].toFixed(1)}, ${c2[0].toFixed(1)} ${c2[1].toFixed(1)}, ${p[0]} ${p[1]}`;
-  }, "");
-}
-
 export function PhaseChart() {
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -78,40 +32,20 @@ export function PhaseChart() {
     let lastWidth = 0;
 
     const render = (width: number) => {
-      const px = (f: number) => +(-BLEED + f * (width + 2 * BLEED)).toFixed(1);
+      const p = phaseChartPaths(width);
       svg.setAttribute("viewBox", `0 0 ${width} ${H}`);
-
-      const floorPoints = FLOOR_F.map(([f, y]) => [px(f), y] as [number, number]);
-      const floorY = (x: number) => {
-        for (let i = 1; i < floorPoints.length; i++) {
-          const [x0, y0] = floorPoints[i - 1];
-          const [x1, y1] = floorPoints[i];
-          if (x <= x1) return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
-        }
-        return floorPoints[floorPoints.length - 1][1];
-      };
-
-      const floorD = smooth(floorPoints);
-      floorLine.setAttribute("d", floorD);
-      floorArea.setAttribute("d", `${floorD} L${px(1)} ${H} L${px(SPLIT)} ${H} Z`);
-      presaleLine.setAttribute("d", smooth(PRESALE_F.map(([f, y]) => [px(f), y] as [number, number])));
-
-      const pricePoints = PRICE_F.map(
-        ([f, y]) => [px(f), y === null ? floorY(px(f)) : y] as [number, number],
-      );
-      const priceD = smooth(pricePoints);
-      priceLine.setAttribute("d", priceD);
-      priceArea.setAttribute("d", `${priceD} L${px(1)} ${H} L${px(SPLIT)} ${H} Z`);
-
+      floorLine.setAttribute("d", p.floorLine);
+      floorArea.setAttribute("d", p.floorArea);
+      presaleLine.setAttribute("d", p.presaleLine);
+      priceLine.setAttribute("d", p.priceLine);
+      priceArea.setAttribute("d", p.priceArea);
       touches.forEach((circle, i) => {
-        const x = px(TOUCH_F[i]);
-        circle.setAttribute("cx", String(x));
-        circle.setAttribute("cy", floorY(x).toFixed(1));
+        circle.setAttribute("cx", String(p.touches[i].x));
+        circle.setAttribute("cy", String(p.touches[i].y));
       });
-
-      split.setAttribute("x1", String(px(SPLIT)));
-      split.setAttribute("x2", String(px(SPLIT)));
-      labelMarket.setAttribute("x", String(px(SPLIT) + 10));
+      split.setAttribute("x1", String(p.splitX));
+      split.setAttribute("x2", String(p.splitX));
+      labelMarket.setAttribute("x", String(p.splitX + 10));
     };
 
     const measure = () => {

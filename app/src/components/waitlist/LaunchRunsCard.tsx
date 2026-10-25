@@ -1,6 +1,7 @@
 import { PhaseChart } from "./PhaseChart";
 
-const PHASES = [
+/** The three phase rows; the Open Graph card repeats them. */
+export const PHASES = [
   {
     n: "01",
     title: "Presale.",
