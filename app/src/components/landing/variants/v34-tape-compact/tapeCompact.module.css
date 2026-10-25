@@ -209,6 +209,15 @@
 }
 
 /*
+ * A lead-in before the first step: the first step starts at the reading line (phones: 40% down the
+ * space under the stage), so the presale starts from $0 even when the story opens at the very top
+ * of the page, and the first bubble enters from below.
+ */
+.step:first-child {
+  margin-top: calc(0.4 * (100svh - var(--stage-h)));
+}
+
+/*
  * The sticky wrapper carries the drift: --bq is its own step's progress (var(--qN, 1), set inline),
  * --e its smoothstep, and it moves up by --drift as the step plays (0 before it, all of it after),
  * so scrolling back plays it backwards. The lead is a transform, not part of `top`, so the sticky
@@ -316,6 +325,10 @@
   .root .stage {
     background: none;
     padding: 0;
+  }
+
+  .step:first-child {
+    margin-top: 50svh;
   }
 
   .stageCol {
