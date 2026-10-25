@@ -80,8 +80,12 @@ export function imageUrlFromUri(uri: string): string | null {
   return isJsonMetadataUri(https) ? null : https;
 }
 
-/** Fetch timeout for a token's metadata JSON. Long enough for a slow gateway, short enough to not stall a page. */
-export const METADATA_FETCH_TIMEOUT_MS = 4_000;
+/**
+ * Fetch timeout for a token's metadata JSON. Pinata's public gateway takes 3.5-7 s for a document
+ * (measured 2026-10-25), so 4 s missed most reads; the server reads each token's document once and
+ * caches the image, so a slow first read costs one page render.
+ */
+export const METADATA_FETCH_TIMEOUT_MS = 10_000;
 
 /**
  * The image of a token URI. A plain image URL is used as is; a metadata JSON URI (the shape wallets
