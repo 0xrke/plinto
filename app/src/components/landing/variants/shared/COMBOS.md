@@ -57,3 +57,44 @@ records the review, so every combo answers it.
 
 Each combo lives in its own folder. Copy code from its sources into the folder and change the
 copy; never edit another variant's folder or `shared/`.
+
+## Round 2 review of 21–27 (2026-10-25)
+
+All seven look decent; the founder picked these points.
+
+| n | Liked | Disliked |
+| --- | --- | --- |
+| 21 | Chart on the left, a ribbon of step captions on the right that changes as you scroll | The "In this story" index block: useful, but big and pointless in this form; make it a horizontal step line like 24, 25, 27. The "Your $100 now" / "Floor pays back" tiles are not prominent; they belong somewhere visible, as in 22 and 25 |
+| 22 | — | Candidate to drop: too many numbers on the right, repeating what the chart shows; the step captions at the top are hard to look at, the chart and the sidebar take all the attention |
+| 23 | — | The dotted step progress (24, 25, 27 do it better with line segments); the tiles are not prominent |
+| 24 | Big, clear chart | The info strip under the frame gets lost against the chart |
+| 25 | **Top-1 candidate.** Layout: title with the step progress bar on top, chart left, step caption right | The boxed panel look (21 without boxes looks better); no caption animation when the step changes, unlike 21 |
+| 26 | Layout and the block chart; the animation looks great | The tiles sit at the bottom and go unnoticed; the "Floor blocks" tile has no point |
+| 27 | Best and most descriptive chart: the step names along the top, the tooltip riding with the price dot | The caption at the bottom gets lost against the chart |
+
+New rule for every variant: **show the change since listing**. Next to "Your $100 now" and "Floor
+pays back", show how far each has moved since trading opened, for example "−61% since listing" and
+"+4.8% since listing". Use `sinceListing(m, frame)` and `formatPctChange` from `shared`; both values
+are null before trading opens, so show no percent then. The floor's change is never negative and
+reads in the floor colour; the price's change is floor-green when up and coral (`risk`) when down,
+never alarm red.
+
+Shared conventions for round 2:
+- **Step progress** is a row of line segments with the beat names under them (as in 24, 25, 27), not dots
+  and not an index card.
+- **Prominent metrics** means the two values are large (about 28–32px numbers on desktop), near the
+  reader's eye line (beside or right above the chart, or riding with the price head as in 27), and
+  never parked under the chart where the eye doesn't go.
+- **Captions** must sit where the eye already is: beside the chart, or as a large heading right above
+  it. Never a small line under a big chart.
+
+| n | Round 2 change |
+| --- | --- |
+| 21 | Horizontal step line instead of the index card; prominent metrics; % since listing |
+| 23 | Line-segment progress instead of dots; prominent metrics; % since listing |
+| 24 | Caption and metrics move out of the bottom strip, to where the eye is; % since listing |
+| 25 | % since listing (the layout stays: 28 is its new take) |
+| 26 | Prominent metrics, "Floor blocks" tile removed; % since listing |
+| 27 | Caption moves out from under the chart; % since listing |
+| 28 | New: 25's layout in 21's unboxed style, with 21's caption animation; % since listing |
+| 22 | Unchanged, candidate to drop |

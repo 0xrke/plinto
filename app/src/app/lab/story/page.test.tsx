@@ -46,7 +46,7 @@ describe("story lab gate", () => {
     expect(await StoryVariantPage(params("11"))).toBeTruthy();
     expect(await StoryVariantPage(params("playful-site"))).toBeTruthy();
     expect(await StoryVariantPage(params("21"))).toBeTruthy();
-    await expect(StoryVariantPage(params("28"))).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(StoryVariantPage(params("29"))).rejects.toThrow("NEXT_NOT_FOUND");
     await expect(StoryVariantPage(params("nope"))).rejects.toThrow("NEXT_NOT_FOUND");
   });
 

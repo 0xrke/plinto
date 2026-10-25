@@ -19,10 +19,10 @@ function sources(folder: string): string[] {
 }
 
 describe("variant registry", () => {
-  it("has twenty-seven variants numbered 1..27 with unique slugs", () => {
-    expect(VARIANTS).toHaveLength(27);
-    expect(VARIANTS.map((v) => v.n)).toEqual(Array.from({ length: 27 }, (_, i) => i + 1));
-    expect(new Set(VARIANTS.map((v) => v.slug)).size).toBe(27);
+  it("has twenty-eight variants numbered 1..28 with unique slugs", () => {
+    expect(VARIANTS).toHaveLength(28);
+    expect(VARIANTS.map((v) => v.n)).toEqual(Array.from({ length: 28 }, (_, i) => i + 1));
+    expect(new Set(VARIANTS.map((v) => v.slug)).size).toBe(28);
     for (const v of VARIANTS) {
       expect(v.slug).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
       expect(v.title.length).toBeGreaterThan(0);
@@ -46,12 +46,12 @@ describe("variant registry", () => {
     }
   });
 
-  it("groups 21..27 as combos that mix earlier variants", () => {
-    expect(COMBOS.map((v) => v.n)).toEqual([21, 22, 23, 24, 25, 26, 27]);
+  it("groups 21..28 as combos that mix earlier variants", () => {
+    expect(COMBOS.map((v) => v.n)).toEqual([21, 22, 23, 24, 25, 26, 27, 28]);
     for (const v of COMBOS) {
       expect(v.basedOn).toBeUndefined();
       expect(v.mixes?.length).toBeGreaterThan(0);
-      for (const n of v.mixes!) expect(n).toBeLessThan(21);
+      for (const n of v.mixes!) expect(n).toBeLessThan(v.n);
       expect(variantDir(v)).toBe(`v${v.n}-${v.slug}`);
     }
   });
@@ -75,10 +75,10 @@ describe("variant registry", () => {
     expect(findVariant("playful-site")?.n).toBe(20);
     expect(findVariant("0")).toBeNull();
     expect(findVariant("21")?.slug).toBe("editorial-plus");
-    expect(findVariant("28")).toBeNull();
+    expect(findVariant("29")).toBeNull();
     expect(findVariant("x")).toBeNull();
-    expect(neighbours(VARIANTS[0]!).prev.n).toBe(27);
-    expect(neighbours(VARIANTS[26]!).next.n).toBe(1);
+    expect(neighbours(VARIANTS[0]!).prev.n).toBe(28);
+    expect(neighbours(VARIANTS[27]!).next.n).toBe(1);
   });
 
   it("variant client code never imports the SDK barrel or lib/format", () => {

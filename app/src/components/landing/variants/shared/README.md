@@ -53,7 +53,7 @@ Variants 11–20 restyle originals 1–10 in the site's own style. They follow `
 | `useStillFrames()` / `stillFrames(m)` | The 8 static frames: `storyFrame(m, i + 1)`. |
 | `useStoryLaunch()` | `m`. |
 | `BEAT_KEYS`, `STORY_POS_END`, `storyFrame`, `BeatKey`, `StoryFrame` | Re-exported from the engine. |
-| Copy | `STORY_TITLE`, `STORY_FOOTNOTE`, `STORY_HONESTY`, `BEAT_LABELS`, `BEAT_RUNWAY_SVH`, `beatCaption(m, key)`, `beatSrText(m, key)`, `railLabel(i)`, `railStatus(i)`, `TILE_NOW` ("Your $100 now"), `TILE_FLOOR` ("Floor pays back"), `TILE_REDEEMED`, `tileValues(frame)`, `ILLUSTRATION`, `CHART_COPY`, `REAL_SCALE_LABEL`, `magnifiedLabel(x)`, `floorSharePct(m)`, `storyNumbers(m)`, and the formatters `formatUsdCents`, `formatUsdWhole`, `formatUsdCompact` and `formatMultiple`. |
+| Copy | `STORY_TITLE`, `STORY_FOOTNOTE`, `STORY_HONESTY`, `BEAT_LABELS`, `BEAT_RUNWAY_SVH`, `beatCaption(m, key)`, `beatSrText(m, key)`, `railLabel(i)`, `railStatus(i)`, `TILE_NOW` ("Your $100 now"), `TILE_FLOOR` ("Floor pays back"), `TILE_REDEEMED`, `tileValues(frame)`, `ILLUSTRATION`, `CHART_COPY`, `REAL_SCALE_LABEL`, `magnifiedLabel(x)`, `floorSharePct(m)`, `storyNumbers(m)`, `sinceListing(m, frame)` (percent change of your $100 and of the floor since trading opened; null before), `listingBaseline(m)`, `formatPctChange(pct)` ("+4.8%", "−61%"), `SINCE_LISTING`, and the formatters `formatUsdCents`, `formatUsdWhole`, `formatUsdCompact` and `formatMultiple`. |
 | `VariantProps` | `{ m: LaunchMath }` |
 
 ### `StoryHarness` props

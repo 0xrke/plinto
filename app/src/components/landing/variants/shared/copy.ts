@@ -43,3 +43,47 @@ export function tileValues(frame: StoryFrame): { now: string; floor: string } {
   const floor = frame.floorNet100 !== null && frame.floorReveal > FLOOR_SHOWN_AT ? formatUsdCents(frame.floorNet100) : "—";
   return { now, floor };
 }
+
+import type { LaunchMath } from "@/lib/landing/sim/launch";
+import { storyFrame } from "@/lib/landing/sim/story";
+
+/** Suffix for the change since the market opened: "+4.8% since listing". */
+export const SINCE_LISTING = "since listing";
+
+/** The story position where trading opens (start of the pump beat): the listing baseline. */
+const LISTING_POS = 2;
+
+const listingCache = new WeakMap<LaunchMath, { now: number; floor: number }>();
+
+/** Your $100 and the net floor per $100 at the moment the market opens. */
+export function listingBaseline(m: LaunchMath): { now: number; floor: number } {
+  let base = listingCache.get(m);
+  if (!base) {
+    const f = storyFrame(m, LISTING_POS);
+    base = { now: f.valueOf100, floor: f.floorNet100 ?? m.floorPer100Usd };
+    listingCache.set(m, base);
+  }
+  return base;
+}
+
+/**
+ * How far the price (your $100) and the floor have moved since listing, in percent. Both are null
+ * before trading opens; the price is null once your $100 is redeemed (the tile then says "Redeemed").
+ */
+export function sinceListing(m: LaunchMath, frame: StoryFrame): { now: number | null; floor: number | null } {
+  if (frame.beatIndex < LISTING_POS || frame.floorNet100 === null) return { now: null, floor: null };
+  const base = listingBaseline(m);
+  const now = frame.redeemProgress >= 1 ? null : (frame.valueOf100 / base.now - 1) * 100;
+  return { now, floor: (frame.floorNet100 / base.floor - 1) * 100 };
+}
+
+/**
+ * A signed percent change: "+4.8%", "−61%", "+300%". One decimal below 10%, whole numbers above;
+ * a true minus sign; "0.0%" when it rounds to zero.
+ */
+export function formatPctChange(pct: number): string {
+  const abs = Math.abs(pct);
+  const text = abs < 10 ? abs.toFixed(1) : Math.round(abs).toFixed(0);
+  if (Number(text) === 0) return "0.0%";
+  return `${pct > 0 ? "+" : "−"}${text}%`;
+}

@@ -2,7 +2,7 @@ import type { ComponentType } from "react";
 import type { VariantProps } from "./types";
 
 /*
- * Lazy client loaders, one per variant slug (originals 1–10, site-style 11–20, combos 21–27) (each variant is its own chunk). Import only from client
+ * Lazy client loaders, one per variant slug (originals 1–10, site-style 11–20, combos 21–28) (each variant is its own chunk). Import only from client
  * code (VariantHost). Keys must match registry.ts (registry.test.ts checks).
  */
 
@@ -36,4 +36,5 @@ export const VARIANT_LOADERS: Readonly<Record<string, Loader>> = {
   "one-panel": () => import("./v25-one-panel/Variant"),
   "blocks-clean": () => import("./v26-blocks-clean/Variant"),
   "tape-fixed": () => import("./v27-tape-fixed/Variant"),
+  "editorial-panel": () => import("./v28-editorial-panel/Variant"),
 };

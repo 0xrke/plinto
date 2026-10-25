@@ -1,8 +1,8 @@
 /**
  * The story-variant lab: alternative visual treatments of "Follow your $100", each in its own
  * folder `v{NN}-{slug}/Variant.tsx` (default export, props `VariantProps`). Variants 1–10 are the
- * originals; 11–20 rebuild each original's idea in the site's own style (shared/BRAND.md); 21–27
- * combine the favourites from the founder's review (shared/COMBOS.md). Plain
+ * originals; 11–20 rebuild each original's idea in the site's own style (shared/BRAND.md); 21–28
+ * combine the favourites from the founder's reviews (shared/COMBOS.md). Plain
  * data, safe to import from server components; the lazy client loaders live in `loaders.ts`
  * (client only).
  */
@@ -14,7 +14,7 @@
 export type VariantGroup = "original" | "site" | "combo";
 
 export interface VariantMeta {
-  /** 1..27, also the URL: /lab/story/{n}. */
+  /** 1..28, also the URL: /lab/story/{n}. */
   n: number;
   slug: string;
   title: string;
@@ -214,6 +214,14 @@ export const VARIANTS: readonly VariantMeta[] = [
     description: "The cleanest of all (19) with its glitches fixed: the tape under a fixed playhead, and the split shown as a vertical column.",
     group: "combo",
     mixes: [19, 9, 3],
+  },
+  {
+    n: 28,
+    slug: "editorial-panel",
+    title: "Panel layout, editorial style",
+    description: "25's layout (title and step bar on top, chart left, caption right) in 21's unboxed style, with 21's caption animation and the change since listing.",
+    group: "combo",
+    mixes: [25, 21],
   },
 ];
 
